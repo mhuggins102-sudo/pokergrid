@@ -11,10 +11,10 @@ interface Props {
 }
 
 const SIZES = {
-  xs: { side: 20, rank: 7, suit: 10, cornerRank: 7 },
-  sm: { side: 32, rank: 11, suit: 15, cornerRank: 8 },
-  md: { side: 56, rank: 17, suit: 22, cornerRank: 10 },
-  lg: { side: 80, rank: 22, suit: 32, cornerRank: 12 },
+  xs: { side: 20, rank: 12, suit: 7 },
+  sm: { side: 32, rank: 18, suit: 9 },
+  md: { side: 56, rank: 28, suit: 12 },
+  lg: { side: 80, rank: 40, suit: 16 },
 };
 
 const SUIT_GLYPH: Record<string, string> = {
@@ -58,13 +58,40 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
           style,
         ]}
       >
-        <Text style={{ fontWeight: '800', fontSize: dim.rank, color: '#8a6d1a' }}>JK</Text>
-        <Text style={{ fontSize: dim.suit * 0.75, color: '#caa44a' }}>★</Text>
+        <Text
+          style={[
+            styles.cornerTL,
+            { color: '#caa44a', fontSize: dim.suit },
+          ]}
+        >
+          ★
+        </Text>
+        <Text
+          style={{
+            fontWeight: '800',
+            fontSize: dim.rank * 0.75,
+            color: '#8a6d1a',
+            lineHeight: dim.rank * 0.85,
+          }}
+        >
+          JK
+        </Text>
+        <Text
+          style={[
+            styles.cornerBR,
+            { color: '#caa44a', fontSize: dim.suit },
+          ]}
+        >
+          ★
+        </Text>
       </View>
     );
   }
 
   const color = isRed(card) ? '#c4252a' : '#1d1d22';
+  // "10" is two characters and needs to be slightly smaller to fit nicely.
+  const isWide = card.rank === '10';
+  const rankSize = isWide ? dim.rank * 0.78 : dim.rank;
 
   return (
     <View
@@ -76,25 +103,20 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         style,
       ]}
     >
-      <Text
-        style={[
-          styles.cornerTL,
-          { color, fontSize: dim.cornerRank },
-        ]}
-      >
-        {card.rank}
-        {SUIT_GLYPH[card.suit]}
-      </Text>
-      <Text style={{ color, fontSize: dim.suit, lineHeight: dim.suit * 1.1 }}>
+      <Text style={[styles.cornerTL, { color, fontSize: dim.suit }]}>
         {SUIT_GLYPH[card.suit]}
       </Text>
       <Text
-        style={[
-          styles.cornerBR,
-          { color, fontSize: dim.cornerRank },
-        ]}
+        style={{
+          color,
+          fontSize: rankSize,
+          fontWeight: '700',
+          lineHeight: rankSize * 1.05,
+        }}
       >
         {card.rank}
+      </Text>
+      <Text style={[styles.cornerBR, { color, fontSize: dim.suit }]}>
         {SUIT_GLYPH[card.suit]}
       </Text>
     </View>
@@ -115,13 +137,13 @@ const styles = StyleSheet.create({
   cornerTL: {
     position: 'absolute',
     top: 2,
-    left: 3,
+    left: 4,
     fontWeight: '700',
   },
   cornerBR: {
     position: 'absolute',
     bottom: 2,
-    right: 3,
+    right: 4,
     fontWeight: '700',
   },
   dimmed: { opacity: 0.35 },

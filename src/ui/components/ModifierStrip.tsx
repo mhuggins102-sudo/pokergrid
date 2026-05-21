@@ -15,8 +15,9 @@ export const ModifierStrip = ({ modifiers }: Props) => (
     >
       {modifiers.map(m => (
         <View key={m.id} style={styles.chip}>
-          <Text style={styles.label} numberOfLines={1}>{m.label}</Text>
-          <Text style={styles.desc} numberOfLines={2}>{m.description}</Text>
+          <Text style={styles.desc} numberOfLines={1}>
+            {m.description}
+          </Text>
         </View>
       ))}
     </ScrollView>
@@ -29,16 +30,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     paddingHorizontal: 10,
+    alignItems: 'center',
   },
   chip: {
     backgroundColor: '#f1efe6',
     borderColor: '#d6cfa7',
     borderWidth: 1,
     borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    width: 110,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  label: { fontSize: 11, fontWeight: '700', color: '#5d4f1a' },
-  desc: { fontSize: 10, color: '#776230' },
+  desc: { fontSize: 12, color: '#5d4f1a', fontWeight: '600' },
 });

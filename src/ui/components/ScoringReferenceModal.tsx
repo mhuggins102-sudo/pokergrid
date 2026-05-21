@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { HandRank } from '../../game/hands';
-import { Modifier } from '../../game/modifiers';
+import { Modifier, universalEffectFor, universalEffectSum } from '../../game/modifiers';
 import { ClubBonus, HAND_BASE_VALUE, clubMultiplier } from '../../game/scoring';
 
 interface Props {
@@ -39,56 +39,99 @@ const HAND_ORDER: HandRank[] = [
   'ROYAL_FLUSH',
 ];
 
-export const ScoringReferenceModal = ({ visible, onClose, clubs, modifiers }: Props) => (
-  <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-    <Pressable style={styles.backdrop} onPress={onClose}>
-      <Pressable style={styles.sheet} onPress={() => {}}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>Scoring Reference</Text>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={styles.closeBtn}>×</Text>
-          </Pressable>
-        </View>
+const fmt = (n: number): string => {
+  const s = n.toFixed(2);
+  return s.replace(/\.?0+$/, '') || '0';
+};
 
-        <View style={styles.tableHeader}>
-          <Text style={[styles.colHand, styles.headerText]}>Hand</Text>
-          <Text style={[styles.colBase, styles.headerText]}>Base</Text>
-          <Text style={[styles.colClub, styles.headerText]}>♣ Boost</Text>
-          <Text style={[styles.colAfter, styles.headerText]}>= Value</Text>
-        </View>
+interface RowProps {
+  hand: HandRank;
+  clubs: ClubBonus;
+  modifiers: Modifier[];
+}
 
-        <ScrollView style={styles.table}>
-          {HAND_ORDER.map(h => {
-            const base = HAND_BASE_VALUE[h];
-            const pip = clubs[h];
-            const mult = clubMultiplier(h, clubs);
-            const after = Math.ceil(base * mult);
-            return (
-              <View key={h} style={styles.row}>
-                <Text style={styles.colHand} numberOfLines={1}>{HAND_LABEL[h]}</Text>
-                <Text style={styles.colBase}>{base}</Text>
-                <Text style={styles.colClub}>{pip ? `+${pip * 2}%` : '—'}</Text>
-                <Text style={[styles.colAfter, pip ? styles.boosted : null]}>{after}</Text>
-              </View>
-            );
-          })}
-        </ScrollView>
+const HandRow = ({ hand, clubs, modifiers }: RowProps) => {
+  const base = HAND_BASE_VALUE[hand];
+  const clubPip = clubs[hand];
+  const cMult = clubMultiplier(hand, clubs);
+  const { multiplier: modMult, flat: modFlat } = universalEffectSum(modifiers, hand);
+  const finalValue = Math.ceil(base * cMult * modMult) + modFlat;
+  const isModified = clubPip !== undefined || modMult !== 1 || modFlat !== 0;
 
-        <View style={styles.divider} />
-        <Text style={styles.sectionLabel}>Active Run Modifiers ({modifiers.length})</Text>
-        {modifiers.map(m => (
-          <Text key={m.id} style={styles.modLine}>
-            • {m.description}
-          </Text>
-        ))}
+  const parts: string[] = [];
+  if (clubPip !== undefined) parts.push(`♣ +${clubPip * 2}%`);
+  if (modMult !== 1) parts.push(`mod ×${fmt(modMult)}`);
+  if (modFlat !== 0) parts.push(`mod +${modFlat}`);
 
-        <Text style={styles.footnote}>
-          Each line's total = ⌈base × club × modifier multiplier⌉ + flat bonus.
+  return (
+    <View style={styles.row}>
+      <View style={styles.handCol}>
+        <Text style={styles.handName} numberOfLines={1}>
+          {HAND_LABEL[hand]}
         </Text>
+        {isModified && (
+          <Text style={styles.bonusSub} numberOfLines={1}>
+            {parts.join(' · ')}
+          </Text>
+        )}
+      </View>
+      {isModified ? (
+        <>
+          <Text style={styles.baseStrike}>{base}</Text>
+          <Text style={styles.arrow}>→</Text>
+          <Text style={styles.valueBoosted}>{finalValue}</Text>
+        </>
+      ) : (
+        <Text style={styles.value}>{base}</Text>
+      )}
+    </View>
+  );
+};
+
+export const ScoringReferenceModal = ({ visible, onClose, clubs, modifiers }: Props) => {
+  // Modifiers that aren't universally applicable (suit / position conditional).
+  const conditionalMods = modifiers.filter(m =>
+    HAND_ORDER.every(h => universalEffectFor(m, h) === null)
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={() => {}}>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Scoring Reference</Text>
+            <Pressable onPress={onClose} hitSlop={12}>
+              <Text style={styles.closeBtn}>×</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.table}>
+            {HAND_ORDER.map(h => (
+              <HandRow key={h} hand={h} clubs={clubs} modifiers={modifiers} />
+            ))}
+          </ScrollView>
+
+          {conditionalMods.length > 0 && (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.sectionLabel}>Conditional modifiers</Text>
+              {conditionalMods.map(m => (
+                <Text key={m.id} style={styles.modLine}>
+                  • {m.description}
+                </Text>
+              ))}
+            </>
+          )}
+
+          <Text style={styles.footnote}>
+            Values shown assume the hand actually forms. Conditional modifiers only fire when their
+            condition (suit / position) is met.
+          </Text>
+        </Pressable>
       </Pressable>
-    </Pressable>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -114,31 +157,32 @@ const styles = StyleSheet.create({
   },
   title: { color: '#f4f5f9', fontSize: 16, fontWeight: '800' },
   closeBtn: { color: '#9aa0b2', fontSize: 24, fontWeight: '700', paddingHorizontal: 4 },
-  tableHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderColor: '#3c4456',
-    paddingVertical: 6,
-  },
-  headerText: {
-    color: '#9aa0b2',
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    fontWeight: '700',
-  },
-  table: { maxHeight: 280 },
+  table: { maxHeight: 380 },
   row: {
     flexDirection: 'row',
-    paddingVertical: 5,
+    alignItems: 'center',
+    paddingVertical: 7,
     borderBottomWidth: 1,
     borderColor: '#2c3344',
   },
-  colHand: { color: '#cfd2dd', fontSize: 12, flex: 2 },
-  colBase: { color: '#cfd2dd', fontSize: 12, flex: 0.8, textAlign: 'center' },
-  colClub: { color: '#cfd2dd', fontSize: 12, flex: 1, textAlign: 'center' },
-  colAfter: { color: '#f4f5f9', fontSize: 12, flex: 1, textAlign: 'right', fontWeight: '600' },
-  boosted: { color: '#7cdca0' },
+  handCol: { flex: 1 },
+  handName: { color: '#cfd2dd', fontSize: 13 },
+  bonusSub: { color: '#9aa0b2', fontSize: 10, marginTop: 1 },
+  value: { color: '#cfd2dd', fontSize: 14, fontWeight: '600', minWidth: 40, textAlign: 'right' },
+  baseStrike: {
+    color: '#6a6f7d',
+    fontSize: 12,
+    textDecorationLine: 'line-through',
+    marginRight: 4,
+  },
+  arrow: { color: '#9aa0b2', fontSize: 12, marginRight: 4 },
+  valueBoosted: {
+    color: '#7cdca0',
+    fontSize: 16,
+    fontWeight: '800',
+    minWidth: 40,
+    textAlign: 'right',
+  },
   divider: { height: 1, backgroundColor: '#3c4456', marginVertical: 10 },
   sectionLabel: {
     color: '#9aa0b2',

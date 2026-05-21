@@ -4,6 +4,8 @@ import {
   LineContext,
   lineSuit,
   STARTER_MODIFIERS,
+  universalEffectFor,
+  universalEffectSum,
 } from '../src/game/modifiers';
 
 const C = (rank: Rank, suit: Suit): StandardCard => ({ kind: 'standard', rank, suit });
@@ -65,6 +67,41 @@ describe('modifiers', () => {
     expect(m.effect(lineCtx({ kind: 'row', index: 0 }))).toEqual({});
     expect(m.effect(lineCtx({ kind: 'row', index: 2, hand: null }))).toEqual({});
     expect(m.effect(lineCtx({ kind: 'col', index: 2 }))).toEqual({});
+  });
+
+  test('universalEffectFor: hand-type-only modifiers return their effect', () => {
+    const pair2x = STARTER_MODIFIERS.find(m => m.id === 'pair-2x')!;
+    expect(universalEffectFor(pair2x, 'PAIR')).toEqual({ multiplierBoost: 1.0 });
+    expect(universalEffectFor(pair2x, 'FLUSH')).toBeNull();
+
+    const straight50 = STARTER_MODIFIERS.find(m => m.id === 'straight-plus-50')!;
+    expect(universalEffectFor(straight50, 'STRAIGHT')).toEqual({ flatAdd: 50 });
+    expect(universalEffectFor(straight50, 'PAIR')).toBeNull();
+  });
+
+  test('universalEffectFor: suit-conditional modifiers return null', () => {
+    const hearts = STARTER_MODIFIERS.find(m => m.id === 'h-1_5x')!;
+    expect(universalEffectFor(hearts, 'FLUSH')).toBeNull();
+    expect(universalEffectFor(hearts, 'PAIR')).toBeNull();
+  });
+
+  test('universalEffectFor: position-conditional modifiers return null', () => {
+    const row3 = STARTER_MODIFIERS.find(m => m.id === 'row-3-2x')!;
+    expect(universalEffectFor(row3, 'PAIR')).toBeNull();
+    expect(universalEffectFor(row3, 'FLUSH')).toBeNull();
+  });
+
+  test('universalEffectSum aggregates universal effects per hand', () => {
+    const sum = universalEffectSum(STARTER_MODIFIERS, 'STRAIGHT');
+    // Only "straight-plus-50" applies universally to STRAIGHT.
+    expect(sum.multiplier).toBe(1);
+    expect(sum.flat).toBe(50);
+  });
+
+  test('universalEffectSum: PAIR gets the 2× multiplier modifier', () => {
+    const sum = universalEffectSum(STARTER_MODIFIERS, 'PAIR');
+    expect(sum.multiplier).toBe(2);
+    expect(sum.flat).toBe(0);
   });
 
   test('applyModifiers sums boosts and flat adds across all modifiers', () => {
