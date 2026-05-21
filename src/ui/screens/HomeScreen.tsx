@@ -7,9 +7,9 @@ interface Props {
 }
 
 const DIFFICULTIES: { id: Difficulty; label: string; blurb: string }[] = [
-  { id: 'easy', label: 'Easy', blurb: 'Target 150' },
-  { id: 'medium', label: 'Medium', blurb: 'Target 225' },
-  { id: 'hard', label: 'Hard', blurb: 'Target 300' },
+  { id: 'easy', label: 'Easy', blurb: 'Target 200' },
+  { id: 'medium', label: 'Medium', blurb: 'Target 300' },
+  { id: 'hard', label: 'Hard', blurb: 'Target 400' },
 ];
 
 export const HomeScreen = ({ onStart }: Props) => {
@@ -48,9 +48,10 @@ export const HomeScreen = ({ onStart }: Props) => {
         <Text style={styles.rulesText}>
           Draw a card. Place it in the lowest-numbered empty slot, or discard it for a suit-themed
           action. ♥ swap any two cards within the heart's pip distance (wraps). ♠ slide a card
-          forward by the spade's pip. ♣ boost a hand type's payout. ♦ reshuffle the discard and
-          re-draw. The joker is always placed and acts as a wild in whichever row/column it sits
-          in. Each row and column scores a poker hand at the end — beat your target.
+          forward or backward by the spade's pip (wraps). ♣ boost a hand type's payout. ♦ pull a
+          card from the shuffled discard pile and play it as a new drawn card. The joker is always
+          placed and acts as a wild in whichever row/column it sits in. Each row and column scores
+          a poker hand at the end — beat your target.
         </Text>
       </View>
     </View>

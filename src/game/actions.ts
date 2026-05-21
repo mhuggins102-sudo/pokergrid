@@ -60,13 +60,19 @@ export const heartsReachable = (
 };
 
 // ---------- Spades ----------
+// Spade slides a card either forward or backward by movementPip on the
+// circular 25-slot ring. Destination must be empty.
 
-export const spadeDestination = (from: number, pip: number): number =>
+export const spadeForward = (from: number, pip: number): number =>
   (from + pip) % GRID_SLOTS;
+
+export const spadeBackward = (from: number, pip: number): number =>
+  (from - pip + GRID_SLOTS) % GRID_SLOTS;
 
 export interface SpadeMove {
   from: number;
   to: number;
+  direction: 'forward' | 'backward';
 }
 
 export const validSpadeMoves = (grid: Grid, spade: StandardCard): SpadeMove[] => {
@@ -74,10 +80,16 @@ export const validSpadeMoves = (grid: Grid, spade: StandardCard): SpadeMove[] =>
   const pip = movementPip(spade);
   for (let from = 0; from < GRID_SLOTS; from++) {
     if (!grid[from]) continue;
-    const to = spadeDestination(from, pip);
-    if (to === from) continue;
-    if (grid[to] !== null) continue;
-    out.push({ from, to });
+    const candidates: Array<{ to: number; direction: 'forward' | 'backward' }> = [
+      { to: spadeForward(from, pip), direction: 'forward' },
+      { to: spadeBackward(from, pip), direction: 'backward' },
+    ];
+    for (const { to, direction } of candidates) {
+      if (to === from) continue;
+      if (grid[to] !== null) continue;
+      if (out.some(m => m.from === from && m.to === to)) continue;
+      out.push({ from, to, direction });
+    }
   }
   return out;
 };

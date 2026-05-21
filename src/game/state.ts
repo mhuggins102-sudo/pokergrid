@@ -158,11 +158,15 @@ const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
     case 'D': {
       if (!canExecuteDiamonds(s.discard.length)) return s;
       if (s.discard.length === 1) {
-        // Forced placement of the lone discarded card.
-        const card = s.discard[0];
-        const grid = placeAtLowest(s.grid, card);
-        const withDrawn = pushDiscard({ ...s, grid, discard: [] }, drawn);
-        return drawNext(log(withDrawn, 'Diamond forced-place'));
+        // Only one card in discard: it auto-becomes the new drawn card and
+        // the player chooses what to do with it (place / discard / suit
+        // action). The discarded diamond joins the discard pile.
+        const sole = s.discard[0];
+        const afterDiamond = pushDiscard({ ...s, discard: [] }, drawn);
+        return log(
+          { ...afterDiamond, drawn: sole, phase: { kind: 'awaiting-action' } },
+          'Diamond auto-redraw'
+        );
       }
       const shuffled = shuffle(s.discard, rng);
       const a = shuffled[0];
@@ -216,10 +220,15 @@ const handleChooseDiamond = (s: GameState, idx: 0 | 1): GameState => {
   const [a, b] = s.phase.choices;
   const chosen = idx === 0 ? a : b;
   const other = idx === 0 ? b : a;
-  const grid = placeAtLowest(s.grid, chosen);
-  const afterReturn = pushDiscard({ ...s, grid }, other);
-  const afterDrawn = pushDiscard(afterReturn, s.drawn);
-  return drawNext(log(afterDrawn, `Diamond place choice ${idx}`));
+  // The un-chosen card goes back to discard; the diamond card itself joins
+  // discard too. The chosen card becomes the new drawn card, so the player
+  // gets the full place / discard / suit-action menu for it next.
+  const afterReturn = pushDiscard(s, other);
+  const afterDiamond = pushDiscard(afterReturn, s.drawn);
+  return log(
+    { ...afterDiamond, drawn: chosen, phase: { kind: 'awaiting-action' } },
+    `Diamond redraw choice ${idx}`
+  );
 };
 
 const handleCancelAction = (s: GameState): GameState => {

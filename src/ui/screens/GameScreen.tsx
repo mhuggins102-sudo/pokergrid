@@ -245,7 +245,9 @@ const renderBottom = (
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap a card, then its destination ({pip} forward, wraps).</Text>
+          <Text style={styles.hint}>
+            Tap a card, then its destination ({pip} forward or backward, wraps).
+          </Text>
           <PrimaryButton
             label="Cancel"
             tint="#4d525f"
@@ -284,7 +286,10 @@ const renderBottom = (
   if (p.kind === 'diamond-choosing') {
     return (
       <View style={styles.actionCol}>
-        <Text style={styles.hint}>Pick one to place. The other returns to discard.</Text>
+        <Text style={styles.hint}>
+          Pick one to play next (you can then place, discard, or use its suit action). The other
+          returns to discard.
+        </Text>
         <View style={styles.diamondRow}>
           {p.choices.map((c, i) => (
             <Pressable

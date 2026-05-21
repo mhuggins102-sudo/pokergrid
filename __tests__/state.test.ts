@@ -8,7 +8,7 @@ describe('GameState — initial state', () => {
   test('newGame seeds a complete state', () => {
     const s = newGame('easy', seededRng(1));
     expect(s.difficulty).toBe('easy');
-    expect(s.target).toBe(150);
+    expect(s.target).toBe(200);
     expect(s.grid[0]).not.toBeNull();
     expect(s.modifiers).toHaveLength(3);
     expect(new Set(s.modifiers.map(m => m.id)).size).toBe(3);
@@ -110,6 +110,61 @@ describe('GameState — CANCEL_ACTION', () => {
     expect(s.phase.kind).toBe('awaiting-target-clubs');
     s = step(s, { type: 'CANCEL_ACTION' });
     expect(s.phase.kind).toBe('awaiting-action');
+  });
+});
+
+describe('GameState — Diamonds new-drawn flow', () => {
+  test('CHOOSE_DIAMOND makes the picked card the new drawn (does not auto-place)', () => {
+    // Build a minimal hand-crafted state with a diamond drawn and 2 discards.
+    const drawn = { kind: 'standard' as const, rank: '7' as const, suit: 'D' as const };
+    const cardA = { kind: 'standard' as const, rank: 'A' as const, suit: 'H' as const };
+    const cardB = { kind: 'standard' as const, rank: '5' as const, suit: 'S' as const };
+    const state: GameState = {
+      deck: [],
+      discard: [cardA, cardB],
+      grid: Array.from({ length: 25 }, () => null),
+      drawn,
+      clubs: {},
+      modifiers: [],
+      difficulty: 'easy',
+      target: 200,
+      phase: { kind: 'awaiting-action' },
+      history: [],
+    };
+    const afterBegin = step(state, { type: 'BEGIN_SUIT_ACTION' }, seededRng(1));
+    expect(afterBegin.phase.kind).toBe('diamond-choosing');
+
+    const afterChoose = step(afterBegin, { type: 'CHOOSE_DIAMOND', idx: 0 }, seededRng(1));
+    expect(afterChoose.phase.kind).toBe('awaiting-action');
+    // Grid is unchanged (chosen card was NOT placed).
+    expect(afterChoose.grid.every(c => c === null)).toBe(true);
+    // Drawn is the chosen card (one of the 2 discards from before).
+    expect([cardA, cardB]).toContainEqual(afterChoose.drawn);
+    // Discard now contains the un-chosen card AND the original diamond drawn.
+    expect(afterChoose.discard).toHaveLength(2);
+    expect(afterChoose.discard).toContainEqual(drawn);
+  });
+
+  test('BEGIN_SUIT_ACTION on diamond with 1 discard auto-redraws it as the new drawn', () => {
+    const drawn = { kind: 'standard' as const, rank: '4' as const, suit: 'D' as const };
+    const lone = { kind: 'standard' as const, rank: 'Q' as const, suit: 'C' as const };
+    const state: GameState = {
+      deck: [],
+      discard: [lone],
+      grid: Array.from({ length: 25 }, () => null),
+      drawn,
+      clubs: {},
+      modifiers: [],
+      difficulty: 'easy',
+      target: 200,
+      phase: { kind: 'awaiting-action' },
+      history: [],
+    };
+    const result = step(state, { type: 'BEGIN_SUIT_ACTION' }, seededRng(1));
+    expect(result.phase.kind).toBe('awaiting-action');
+    expect(result.drawn).toEqual(lone);
+    expect(result.discard).toEqual([drawn]);
+    expect(result.grid.every(c => c === null)).toBe(true);
   });
 });
 
