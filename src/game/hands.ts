@@ -1,0 +1,97 @@
+import {
+  Card,
+  Rank,
+  RANKS,
+  Suit,
+  SUITS,
+  StandardCard,
+  isJoker,
+  rankIndex,
+} from './cards';
+
+export type HandRank =
+  | 'HIGH_CARD'
+  | 'PAIR'
+  | 'TWO_PAIR'
+  | 'THREE_OF_A_KIND'
+  | 'STRAIGHT'
+  | 'FLUSH'
+  | 'FULL_HOUSE'
+  | 'FOUR_OF_A_KIND'
+  | 'STRAIGHT_FLUSH'
+  | 'FIVE_OF_A_KIND'
+  | 'ROYAL_FLUSH';
+
+export const HAND_TIER: Record<HandRank, number> = {
+  HIGH_CARD: 0,
+  PAIR: 1,
+  TWO_PAIR: 2,
+  THREE_OF_A_KIND: 3,
+  STRAIGHT: 4,
+  FLUSH: 5,
+  FULL_HOUSE: 6,
+  FOUR_OF_A_KIND: 7,
+  STRAIGHT_FLUSH: 8,
+  FIVE_OF_A_KIND: 9,
+  ROYAL_FLUSH: 10,
+};
+
+const evalStandardFive = (cards: StandardCard[]): HandRank => {
+  if (cards.length !== 5) throw new Error('Expected 5 cards');
+
+  const suits = cards.map(c => c.suit);
+  const ranks = cards.map(c => rankIndex(c.rank)).sort((a, b) => a - b);
+
+  const isFlush = suits.every(s => s === suits[0]);
+  const uniq = [...new Set(ranks)];
+
+  let isStraight = false;
+  if (uniq.length === 5) {
+    if (uniq[4] - uniq[0] === 4) isStraight = true;
+    // wheel: A-2-3-4-5 -> indices [2,3,4,5,14]
+    if (uniq.join(',') === '2,3,4,5,14') isStraight = true;
+  }
+
+  const counts = new Map<number, number>();
+  ranks.forEach(r => counts.set(r, (counts.get(r) ?? 0) + 1));
+  const multiset = [...counts.values()].sort((a, b) => b - a);
+
+  // 5-of-a-kind is only reachable via a joker substitution
+  if (multiset[0] === 5) return 'FIVE_OF_A_KIND';
+
+  if (isStraight && isFlush) {
+    if (uniq.join(',') === '10,11,12,13,14') return 'ROYAL_FLUSH';
+    return 'STRAIGHT_FLUSH';
+  }
+  if (multiset[0] === 4) return 'FOUR_OF_A_KIND';
+  if (multiset[0] === 3 && multiset[1] === 2) return 'FULL_HOUSE';
+  if (isFlush) return 'FLUSH';
+  if (isStraight) return 'STRAIGHT';
+  if (multiset[0] === 3) return 'THREE_OF_A_KIND';
+  if (multiset[0] === 2 && multiset[1] === 2) return 'TWO_PAIR';
+  if (multiset[0] === 2) return 'PAIR';
+  return 'HIGH_CARD';
+};
+
+// Evaluate any 5-card line. Returns null if any slot is empty.
+// At most one joker is in the deck, so a line has at most one joker.
+export const evaluateLine = (line: (Card | null)[]): HandRank | null => {
+  if (line.length !== 5) throw new Error('Line must have exactly 5 slots');
+  if (line.some(c => c === null)) return null;
+  const cards = line as Card[];
+  const jokers = cards.filter(isJoker).length;
+  if (jokers === 0) return evalStandardFive(cards as StandardCard[]);
+  if (jokers > 1) throw new Error('Only one joker exists in PokerGrid');
+
+  const standards = cards.filter(c => !isJoker(c)) as StandardCard[];
+
+  let best: HandRank = 'HIGH_CARD';
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      const sub: StandardCard = { kind: 'standard', rank, suit };
+      const result = evalStandardFive([...standards, sub]);
+      if (HAND_TIER[result] > HAND_TIER[best]) best = result;
+    }
+  }
+  return best;
+};
