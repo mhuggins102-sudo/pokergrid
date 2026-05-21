@@ -33,6 +33,13 @@ export const isFull = (g: Grid): boolean => g.every(c => c !== null);
 export const rowOf = (idx: number): number => Math.floor(idx / GRID_SIZE);
 export const colOf = (idx: number): number => idx % GRID_SIZE;
 
+// Minimum step distance between two slots, treating the 25-slot sequence as a
+// ring (1-25 wraps back to 1). Used by Hearts swap radius.
+export const circularDistance = (a: number, b: number): number => {
+  const d = Math.abs(a - b);
+  return Math.min(d, GRID_SLOTS - d);
+};
+
 export const rows = (g: Grid): (Card | null)[][] => {
   const out: (Card | null)[][] = [];
   for (let r = 0; r < GRID_SIZE; r++) {

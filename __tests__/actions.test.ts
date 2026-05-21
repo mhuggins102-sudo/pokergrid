@@ -23,49 +23,92 @@ const fillSlots = (slots: Array<[number, Card]>): Grid => {
   return g;
 };
 
-describe('Hearts action', () => {
-  test('canExecuteHearts: false when no same-suit pair', () => {
+describe('Hearts action (distance-based)', () => {
+  test('canExecuteHearts: false when only one card on grid', () => {
+    const g = fillSlots([[0, C('A', 'H')]]);
+    expect(canExecuteHearts(g, C('5', 'H'))).toBe(false);
+  });
+
+  test('canExecuteHearts ignores suit — any two cards work if within pip', () => {
     const g = fillSlots([
       [0, C('A', 'H')],
       [1, C('2', 'C')],
-      [2, C('3', 'D')],
     ]);
-    expect(canExecuteHearts(g)).toBe(false);
+    expect(canExecuteHearts(g, C('A', 'H'))).toBe(true);
+    expect(validHeartsSwaps(g, C('A', 'H'))).toEqual([[0, 1]]);
   });
 
-  test('canExecuteHearts: true when 2 same-suit cards exist', () => {
-    const g = fillSlots([
-      [0, C('A', 'H')],
-      [1, C('2', 'H')],
-    ]);
-    expect(canExecuteHearts(g)).toBe(true);
-    expect(validHeartsSwaps(g)).toEqual([[0, 1]]);
-  });
-
-  test('canExecuteHearts ignores joker', () => {
+  test('joker can be involved in a hearts swap', () => {
     const g = fillSlots([
       [0, JK],
       [1, C('2', 'H')],
     ]);
-    expect(canExecuteHearts(g)).toBe(false);
+    expect(canExecuteHearts(g, C('5', 'H'))).toBe(true);
+    expect(validHeartsSwaps(g, C('5', 'H'))).toEqual([[0, 1]]);
   });
 
-  test('executeHearts swaps cards', () => {
-    const g = fillSlots([
-      [0, C('A', 'H')],
-      [1, C('2', 'H')],
-    ]);
-    const next = executeHearts(g, 0, 1);
-    expect(next[0]).toEqual(C('2', 'H'));
-    expect(next[1]).toEqual(C('A', 'H'));
+  test('pip bounds reach: 5♥ from slot 2 reaches slots 3-7 forward and 0-1 backward', () => {
+    // Slot 2 = position 3 in user-facing 1-indexed numbering.
+    // 5♥: reachable positions 1, 2, 4-8 → slot indices 0, 1, 3, 4, 5, 6, 7
+    let g = emptyGrid();
+    g = placeAt(g, 2, C('K', 'C')); // anchor card
+    for (const idx of [0, 1, 3, 4, 5, 6, 7]) g = placeAt(g, idx, C('2', 'D'));
+    const pairs = validHeartsSwaps(g, C('5', 'H'));
+    const partnersOf2 = pairs
+      .filter(([a, b]) => a === 2 || b === 2)
+      .map(([a, b]) => (a === 2 ? b : a))
+      .sort((x, y) => x - y);
+    expect(partnersOf2).toEqual([0, 1, 3, 4, 5, 6, 7]);
   });
 
-  test('executeHearts throws on different suits', () => {
+  test('pip wraps backward: 5♥ from slot 2 also reaches slots 22, 23, 24', () => {
+    // Position 3 minus 3, 4, 5 wraps to positions 25, 24, 23 → slot indices 24, 23, 22.
+    let g = emptyGrid();
+    g = placeAt(g, 2, C('K', 'C'));
+    for (const idx of [22, 23, 24]) g = placeAt(g, idx, C('2', 'D'));
+    const pairs = validHeartsSwaps(g, C('5', 'H'));
+    const partnersOf2 = pairs
+      .filter(([a, b]) => a === 2 || b === 2)
+      .map(([a, b]) => (a === 2 ? b : a))
+      .sort((x, y) => x - y);
+    expect(partnersOf2).toEqual([22, 23, 24]);
+  });
+
+  test('cards just outside the pip radius are unreachable', () => {
+    // 5♥ from slot 2: distance 6 (slot 8 or slot 21) is NOT reachable.
+    let g = emptyGrid();
+    g = placeAt(g, 2, C('K', 'C'));
+    g = placeAt(g, 8, C('2', 'D'));
+    g = placeAt(g, 21, C('3', 'D'));
+    const pairs = validHeartsSwaps(g, C('5', 'H'));
+    const partnersOf2 = pairs
+      .filter(([a, b]) => a === 2 || b === 2)
+      .map(([a, b]) => (a === 2 ? b : a));
+    expect(partnersOf2).toEqual([]);
+  });
+
+  test('A♥ (pip 1) only reaches immediate neighbors', () => {
+    let g = emptyGrid();
+    g = placeAt(g, 2, C('K', 'C'));
+    g = placeAt(g, 1, C('2', 'D'));
+    g = placeAt(g, 3, C('3', 'D'));
+    g = placeAt(g, 4, C('4', 'D'));
+    const pairs = validHeartsSwaps(g, C('A', 'H'));
+    const partnersOf2 = pairs
+      .filter(([a, b]) => a === 2 || b === 2)
+      .map(([a, b]) => (a === 2 ? b : a))
+      .sort((x, y) => x - y);
+    expect(partnersOf2).toEqual([1, 3]);
+  });
+
+  test('executeHearts swaps any two cards regardless of suit', () => {
     const g = fillSlots([
       [0, C('A', 'H')],
-      [1, C('2', 'C')],
+      [4, C('2', 'C')],
     ]);
-    expect(() => executeHearts(g, 0, 1)).toThrow();
+    const next = executeHearts(g, 0, 4);
+    expect(next[0]).toEqual(C('2', 'C'));
+    expect(next[4]).toEqual(C('A', 'H'));
   });
 });
 

@@ -135,10 +135,10 @@ const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
   const drawn = s.drawn;
   switch (drawn.suit) {
     case 'H': {
-      if (!canExecuteHearts(s.grid)) return s;
+      if (!canExecuteHearts(s.grid, drawn)) return s;
       return {
         ...s,
-        phase: { kind: 'awaiting-target-hearts', pairs: validHeartsSwaps(s.grid) },
+        phase: { kind: 'awaiting-target-hearts', pairs: validHeartsSwaps(s.grid, drawn) },
       };
     }
     case 'S': {

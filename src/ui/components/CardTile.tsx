@@ -1,19 +1,20 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { Card, cardLabel, isJoker } from '../../game/cards';
+import { Card, isJoker } from '../../game/cards';
 
 interface Props {
   card: Card | null;
   highlighted?: boolean;
   dimmed?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   style?: ViewStyle;
 }
 
 const SIZES = {
-  sm: { width: 36, height: 50, font: 12 },
-  md: { width: 52, height: 72, font: 18 },
-  lg: { width: 80, height: 110, font: 28 },
+  xs: { side: 20, rank: 7, suit: 10, cornerRank: 7 },
+  sm: { side: 32, rank: 11, suit: 15, cornerRank: 8 },
+  md: { side: 56, rank: 17, suit: 22, cornerRank: 10 },
+  lg: { side: 80, rank: 22, suit: 32, cornerRank: 12 },
 };
 
 const SUIT_GLYPH: Record<string, string> = {
@@ -28,12 +29,15 @@ const isRed = (card: Card): boolean =>
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
   const dim = SIZES[size];
+  const square: ViewStyle = { width: dim.side, height: dim.side };
+
   if (!card) {
     return (
       <View
         style={[
           styles.tile,
-          { width: dim.width, height: dim.height, backgroundColor: '#e7e7ec', borderColor: '#cfd0d6' },
+          square,
+          { backgroundColor: '#e7e7ec', borderColor: '#cfd0d6' },
           dimmed && styles.dimmed,
           highlighted && styles.highlighted,
           style,
@@ -41,42 +45,57 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
       />
     );
   }
+
   if (isJoker(card)) {
     return (
       <View
         style={[
           styles.tile,
-          {
-            width: dim.width,
-            height: dim.height,
-            backgroundColor: '#fff7d6',
-            borderColor: '#caa44a',
-          },
+          square,
+          { backgroundColor: '#fff7d6', borderColor: '#caa44a' },
           dimmed && styles.dimmed,
           highlighted && styles.highlighted,
           style,
         ]}
       >
-        <Text style={{ fontWeight: '700', fontSize: dim.font * 0.6, color: '#8a6d1a' }}>JK</Text>
-        <Text style={{ fontSize: dim.font, color: '#caa44a' }}>★</Text>
+        <Text style={{ fontWeight: '800', fontSize: dim.rank, color: '#8a6d1a' }}>JK</Text>
+        <Text style={{ fontSize: dim.suit * 0.75, color: '#caa44a' }}>★</Text>
       </View>
     );
   }
+
   const color = isRed(card) ? '#c4252a' : '#1d1d22';
+
   return (
     <View
       style={[
         styles.tile,
-        { width: dim.width, height: dim.height },
+        square,
         dimmed && styles.dimmed,
         highlighted && styles.highlighted,
         style,
       ]}
     >
-      <Text style={{ color, fontWeight: '700', fontSize: dim.font }}>{card.rank}</Text>
-      <Text style={{ color, fontSize: dim.font }}>{SUIT_GLYPH[card.suit]}</Text>
-      <Text style={{ position: 'absolute', bottom: 4, right: 6, color, fontSize: dim.font * 0.6 }}>
-        {cardLabel(card)}
+      <Text
+        style={[
+          styles.cornerTL,
+          { color, fontSize: dim.cornerRank },
+        ]}
+      >
+        {card.rank}
+        {SUIT_GLYPH[card.suit]}
+      </Text>
+      <Text style={{ color, fontSize: dim.suit, lineHeight: dim.suit * 1.1 }}>
+        {SUIT_GLYPH[card.suit]}
+      </Text>
+      <Text
+        style={[
+          styles.cornerBR,
+          { color, fontSize: dim.cornerRank },
+        ]}
+      >
+        {card.rank}
+        {SUIT_GLYPH[card.suit]}
       </Text>
     </View>
   );
@@ -90,14 +109,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cornerTL: {
+    position: 'absolute',
+    top: 2,
+    left: 3,
+    fontWeight: '700',
+  },
+  cornerBR: {
+    position: 'absolute',
+    bottom: 2,
+    right: 3,
+    fontWeight: '700',
   },
   dimmed: { opacity: 0.35 },
   highlighted: {
     borderColor: '#3680ff',
     borderWidth: 2,
-    shadowColor: '#3680ff',
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 6,
   },
 });

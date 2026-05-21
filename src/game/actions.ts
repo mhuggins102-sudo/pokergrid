@@ -1,44 +1,62 @@
 import {
   Card,
   StandardCard,
-  Suit,
   clubPip,
   isJoker,
-  spadePip,
+  movementPip,
 } from './cards';
-import { Grid, GRID_SLOTS } from './grid';
+import { circularDistance, Grid, GRID_SLOTS } from './grid';
 import { HandRank } from './hands';
 import { ClubBonus, HAND_BASE_VALUE } from './scoring';
 
 // ---------- Hearts ----------
+// New rule: swap any two cards on the grid whose slot positions are within
+// the heart card's movementPip (A=1, 2-10=face, J=11, Q=12, K=13) on the
+// circular 25-slot ring. The joker is treated like any other card.
 
-export const validHeartsSwaps = (grid: Grid): [number, number][] => {
+export const validHeartsSwaps = (
+  grid: Grid,
+  heart: StandardCard
+): [number, number][] => {
+  const pip = movementPip(heart);
   const out: [number, number][] = [];
   for (let i = 0; i < GRID_SLOTS; i++) {
-    const a = grid[i];
-    if (!a || isJoker(a)) continue;
+    if (!grid[i]) continue;
     for (let j = i + 1; j < GRID_SLOTS; j++) {
-      const b = grid[j];
-      if (!b || isJoker(b)) continue;
-      if (a.suit === b.suit) out.push([i, j]);
+      if (!grid[j]) continue;
+      if (circularDistance(i, j) <= pip) out.push([i, j]);
     }
   }
   return out;
 };
 
-export const canExecuteHearts = (grid: Grid): boolean =>
-  validHeartsSwaps(grid).length > 0;
+export const canExecuteHearts = (grid: Grid, heart: StandardCard): boolean =>
+  validHeartsSwaps(grid, heart).length > 0;
 
 export const executeHearts = (grid: Grid, i: number, j: number): Grid => {
   const a = grid[i];
   const b = grid[j];
   if (!a || !b) throw new Error('Hearts: both slots must be filled');
-  if (isJoker(a) || isJoker(b)) throw new Error('Hearts: cannot swap a joker');
-  if (a.suit !== b.suit) throw new Error('Hearts: cards must share a suit');
   const next = grid.slice();
   next[i] = b;
   next[j] = a;
   return next;
+};
+
+// Slots reachable by a hearts swap from a given anchor slot — useful for the
+// "highlight valid partners" UI.
+export const heartsReachable = (
+  grid: Grid,
+  heart: StandardCard,
+  from: number
+): number[] => {
+  const pip = movementPip(heart);
+  const out: number[] = [];
+  for (let j = 0; j < GRID_SLOTS; j++) {
+    if (j === from || !grid[j]) continue;
+    if (circularDistance(from, j) <= pip) out.push(j);
+  }
+  return out;
 };
 
 // ---------- Spades ----------
@@ -53,7 +71,7 @@ export interface SpadeMove {
 
 export const validSpadeMoves = (grid: Grid, spade: StandardCard): SpadeMove[] => {
   const out: SpadeMove[] = [];
-  const pip = spadePip(spade);
+  const pip = movementPip(spade);
   for (let from = 0; from < GRID_SLOTS; from++) {
     if (!grid[from]) continue;
     const to = spadeDestination(from, pip);
@@ -112,7 +130,7 @@ export const suitActionAvailable = (
   if (!drawn || isJoker(drawn)) return false;
   switch (drawn.suit) {
     case 'H':
-      return canExecuteHearts(grid);
+      return canExecuteHearts(grid, drawn);
     case 'S':
       return canExecuteSpades(grid, drawn);
     case 'C':

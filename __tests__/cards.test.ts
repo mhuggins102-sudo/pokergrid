@@ -2,8 +2,8 @@ import {
   clubPip,
   fullDeck,
   isJoker,
+  movementPip,
   rankIndex,
-  spadePip,
   StandardCard,
 } from '../src/game/cards';
 
@@ -19,13 +19,13 @@ describe('cards', () => {
     expect(new Set(labels).size).toBe(52);
   });
 
-  test('spadePip: A=1, J=11, Q=12, K=13, others face value', () => {
-    expect(spadePip({ kind: 'standard', rank: 'A', suit: 'S' })).toBe(1);
-    expect(spadePip({ kind: 'standard', rank: '7', suit: 'S' })).toBe(7);
-    expect(spadePip({ kind: 'standard', rank: '10', suit: 'S' })).toBe(10);
-    expect(spadePip({ kind: 'standard', rank: 'J', suit: 'S' })).toBe(11);
-    expect(spadePip({ kind: 'standard', rank: 'Q', suit: 'S' })).toBe(12);
-    expect(spadePip({ kind: 'standard', rank: 'K', suit: 'S' })).toBe(13);
+  test('movementPip: A=1, J=11, Q=12, K=13, others face value', () => {
+    expect(movementPip({ kind: 'standard', rank: 'A', suit: 'S' })).toBe(1);
+    expect(movementPip({ kind: 'standard', rank: '7', suit: 'S' })).toBe(7);
+    expect(movementPip({ kind: 'standard', rank: '10', suit: 'S' })).toBe(10);
+    expect(movementPip({ kind: 'standard', rank: 'J', suit: 'S' })).toBe(11);
+    expect(movementPip({ kind: 'standard', rank: 'Q', suit: 'H' })).toBe(12);
+    expect(movementPip({ kind: 'standard', rank: 'K', suit: 'H' })).toBe(13);
   });
 
   test('clubPip: A=14, K=13, others face value', () => {

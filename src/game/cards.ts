@@ -48,8 +48,9 @@ export const fullDeck = (): Card[] => {
   return deck;
 };
 
-// Spade movement uses pip with A=1
-export const spadePip = (c: StandardCard): number => {
+// Movement pip (used by Spades to slide and Hearts to bound swap distance):
+// A=1, 2-10=face value, J=11, Q=12, K=13.
+export const movementPip = (c: StandardCard): number => {
   switch (c.rank) {
     case 'A':
       return 1;

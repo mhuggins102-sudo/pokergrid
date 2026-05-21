@@ -47,10 +47,10 @@ export const HomeScreen = ({ onStart }: Props) => {
         <Text style={styles.rulesTitle}>How it works</Text>
         <Text style={styles.rulesText}>
           Draw a card. Place it in the lowest-numbered empty slot, or discard it for a suit-themed
-          action. ♥ swap two same-suit cards. ♠ slide a card forward. ♣ boost a hand type's payout.
-          ♦ reshuffle the discard and re-draw. The joker is always placed and acts as a wild in
-          whichever row/column it sits in. Each row and column scores a poker hand at the end —
-          beat your target.
+          action. ♥ swap any two cards within the heart's pip distance (wraps). ♠ slide a card
+          forward by the spade's pip. ♣ boost a hand type's payout. ♦ reshuffle the discard and
+          re-draw. The joker is always placed and acts as a wild in whichever row/column it sits
+          in. Each row and column scores a poker hand at the end — beat your target.
         </Text>
       </View>
     </View>
