@@ -45,7 +45,9 @@ export const GameScreen = ({ state, dispatch }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
 
   useEffect(() => {
-    if (state.phase.kind === 'awaiting-action') setSelectedSlot(null);
+    if (state.phase.kind === 'awaiting-action' || state.phase.kind === 'diamond-resolving') {
+      setSelectedSlot(null);
+    }
   }, [state.phase.kind]);
 
   const liveScore = useMemo(
@@ -56,9 +58,15 @@ export const GameScreen = ({ state, dispatch }: Props) => {
   const nextSlot = useMemo(() => lowestEmptySlot(state.grid), [state.grid]);
 
   const drawn = state.drawn;
+  const inDiamondResolving = state.phase.kind === 'diamond-resolving';
   const suitActOK =
-    state.phase.kind === 'awaiting-action' &&
-    suitActionAvailable(drawn, state.grid, state.clubs, state.discard.length);
+    (state.phase.kind === 'awaiting-action' || inDiamondResolving) &&
+    suitActionAvailable(drawn, state.grid, state.clubs, state.discard.length, inDiamondResolving);
+
+  const swapTargetsExist = useMemo(
+    () => state.grid.some(c => c !== null && !isJoker(c)),
+    [state.grid]
+  );
 
   const handleSlotPress = (idx: number) => {
     const p = state.phase;
@@ -88,6 +96,11 @@ export const GameScreen = ({ state, dispatch }: Props) => {
           setSelectedSlot(null);
         }
       }
+    } else if (p.kind === 'diamond-place-swap') {
+      const target = state.grid[idx];
+      if (target && !isJoker(target)) {
+        dispatch({ type: 'RESOLVE_DIAMOND_SWAP', slot: idx });
+      }
     }
   };
 
@@ -116,9 +129,14 @@ export const GameScreen = ({ state, dispatch }: Props) => {
       } else {
         for (const m of p.moves) if (m.from === selectedSlot) out.add(m.to);
       }
+    } else if (p.kind === 'diamond-place-swap') {
+      for (let i = 0; i < state.grid.length; i++) {
+        const c = state.grid[i];
+        if (c && !isJoker(c)) out.add(i);
+      }
     }
     return out;
-  }, [state.phase, selectedSlot]);
+  }, [state.phase, selectedSlot, state.grid]);
 
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
@@ -135,6 +153,7 @@ export const GameScreen = ({ state, dispatch }: Props) => {
       <ScoreBar
         deckCount={state.deck.length}
         discardCount={state.discard.length}
+        trashCount={state.trash.length}
         target={state.target}
         difficulty={state.difficulty}
         liveScore={liveScore}
@@ -153,7 +172,9 @@ export const GameScreen = ({ state, dispatch }: Props) => {
         />
       </View>
 
-      <View style={styles.bottom}>{renderBottom(state, dispatch, suitActOK)}</View>
+      <View style={styles.bottom}>
+        {renderBottom(state, dispatch, suitActOK, swapTargetsExist)}
+      </View>
 
       <ScoringReferenceModal
         visible={scoringOpen}
@@ -179,7 +200,8 @@ export const GameScreen = ({ state, dispatch }: Props) => {
 const renderBottom = (
   state: GameState,
   dispatch: (a: Action) => void,
-  suitActOK: boolean
+  suitActOK: boolean,
+  swapTargetsExist: boolean
 ) => {
   const p = state.phase;
 
@@ -209,6 +231,66 @@ const renderBottom = (
             />
           )}
           {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'diamond-resolving') {
+    if (!state.drawn || isJoker(state.drawn)) return null;
+    const isDiamond = state.drawn.suit === 'D';
+    return (
+      <View style={styles.actionRow}>
+        <View style={styles.drawnBlock}>
+          <Text style={styles.drawnLabel}>♦ Pick</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </View>
+        <View style={styles.btnCol}>
+          <PrimaryButton label="Place" onPress={() => dispatch({ type: 'PLACE' })} />
+          {swapTargetsExist && (
+            <PrimaryButton
+              label="Swap onto grid"
+              tint="#1b6fc7"
+              onPress={() => dispatch({ type: 'BEGIN_DIAMOND_SWAP' })}
+            />
+          )}
+          {!isDiamond && suitActOK && (
+            <PrimaryButton
+              label={`Use ${SUIT_ACTION_LABEL[state.drawn.suit]}`}
+              tint="#ffb547"
+              onPress={() => dispatch({ type: 'BEGIN_SUIT_ACTION' })}
+            />
+          )}
+          <PrimaryButton
+            label="Trash"
+            tint="#7a4040"
+            onPress={() => dispatch({ type: 'DISCARD_NONE' })}
+          />
+          {isDiamond && (
+            <Text style={styles.lockedNote}>♦ chain blocked — no perk on this pick.</Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'diamond-place-swap') {
+    return (
+      <View style={styles.actionRow}>
+        <View style={styles.drawnBlock}>
+          <Text style={styles.drawnLabel}>♦ Pick</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </View>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap a grid card to swap it out. The displaced card goes to discard. Jokers can't be
+            displaced.
+          </Text>
+          <PrimaryButton
+            label="Cancel"
+            tint="#4d525f"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
         </View>
       </View>
     );
@@ -246,7 +328,7 @@ const renderBottom = (
         </View>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>
-            Tap a card, then its destination ({pip} forward or backward, wraps).
+            Tap a card, then a destination up to {pip} slot{pip === 1 ? '' : 's'} forward (wraps).
           </Text>
           <PrimaryButton
             label="Cancel"
@@ -287,8 +369,8 @@ const renderBottom = (
     return (
       <View style={styles.actionCol}>
         <Text style={styles.hint}>
-          Pick one to play next (you can then place, discard, or use its suit action). The other
-          returns to discard.
+          Pick one to play next. The other returns to discard. You can place it, swap it onto the
+          grid, use its perk (except ♦), or trash it.
         </Text>
         <View style={styles.diamondRow}>
           {p.choices.map((c, i) => (
@@ -337,7 +419,7 @@ const styles = StyleSheet.create({
   drawnLabel: { color: '#9aa0b2', fontSize: 10, textTransform: 'uppercase', fontWeight: '700' },
   btnCol: { flex: 1, gap: 6, justifyContent: 'center' },
   btn: {
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',

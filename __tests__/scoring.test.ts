@@ -31,23 +31,23 @@ describe('scoring', () => {
     expect(total).toBe(0);
   });
 
-  test('clubMultiplier: K (pip 13) is 1.26', () => {
-    expect(clubMultiplier('PAIR', { PAIR: 13 })).toBeCloseTo(1.26);
+  test('clubMultiplier: K (pip 13) is 1.52 with pip*4 formula', () => {
+    expect(clubMultiplier('PAIR', { PAIR: 13 })).toBeCloseTo(1.52);
     expect(clubMultiplier('PAIR', {})).toBe(1);
   });
 
-  test('clubMultiplier: A (pip 14) is 1.28', () => {
-    expect(clubMultiplier('FLUSH', { FLUSH: 14 })).toBeCloseTo(1.28);
+  test('clubMultiplier: A (pip 14) is 1.56', () => {
+    expect(clubMultiplier('FLUSH', { FLUSH: 14 })).toBeCloseTo(1.56);
   });
 
   test('club bonus rounds UP at the per-hand level', () => {
-    // Pair base = 5. K♣ bonus = ×1.26 → 6.3 → round up to 7
+    // Pair base = 5. K♣ bonus = ×1.52 → 7.6 → round up to 8
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), { PAIR: 13 }, []);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
     expect(row0.hand).toBe('PAIR');
     expect(row0.base).toBe(HAND_BASE_VALUE.PAIR);
-    expect(row0.total).toBe(7); // ceil(5 * 1.26) = 7
+    expect(row0.total).toBe(8); // ceil(5 * 1.52) = 8
   });
 
   test('multiplier and flat bonus stack additively / additively respectively', () => {
@@ -74,8 +74,8 @@ describe('scoring', () => {
   });
 
   test('club + modifier multiplier compose: ceil(base * club * mult) + flat', () => {
-    // PAIR base 5, club K♣ → 1.26, modifier pair2x → +1.0 mult
-    // total: ceil(5 * 1.26 * 2) = ceil(12.6) = 13
+    // PAIR base 5, club K♣ → 1.52, modifier pair2x → +1.0 mult
+    // total: ceil(5 * 1.52 * 2) = ceil(15.2) = 16
     const pair2x: Modifier = {
       id: 't.pair2x',
       label: '',
@@ -85,6 +85,6 @@ describe('scoring', () => {
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), { PAIR: 13 }, [pair2x]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.total).toBe(13);
+    expect(row0.total).toBe(16);
   });
 });

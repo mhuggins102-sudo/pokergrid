@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { HandRank } from '../../game/hands';
 import { Modifier, universalEffectFor, universalEffectSum } from '../../game/modifiers';
-import { ClubBonus, HAND_BASE_VALUE, clubMultiplier } from '../../game/scoring';
+import { CLUB_PIP_MULTIPLIER, ClubBonus, HAND_BASE_VALUE, clubMultiplier } from '../../game/scoring';
 
 interface Props {
   visible: boolean;
@@ -59,7 +59,7 @@ const HandRow = ({ hand, clubs, modifiers }: RowProps) => {
   const isModified = clubPip !== undefined || modMult !== 1 || modFlat !== 0;
 
   const parts: string[] = [];
-  if (clubPip !== undefined) parts.push(`♣ +${clubPip * 2}%`);
+  if (clubPip !== undefined) parts.push(`♣ +${clubPip * CLUB_PIP_MULTIPLIER}%`);
   if (modMult !== 1) parts.push(`mod ×${fmt(modMult)}`);
   if (modFlat !== 0) parts.push(`mod +${modFlat}`);
 

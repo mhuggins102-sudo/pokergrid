@@ -9,8 +9,6 @@ import {
   executeClubs,
   executeHearts,
   executeSpades,
-  spadeBackward,
-  spadeForward,
   validHeartsSwaps,
   validSpadeMoves,
 } from '../src/game/actions';
@@ -113,48 +111,46 @@ describe('Hearts action (distance-based)', () => {
   });
 });
 
-describe('Spades action (both directions)', () => {
-  test('spadeForward wraps slot 20 + pip 11 to slot 5 (0-indexed)', () => {
-    expect(spadeForward(19, 11)).toBe(5);
-  });
-
-  test('spadeForward simple forward', () => {
-    expect(spadeForward(2, 11)).toBe(13);
-  });
-
-  test('spadeBackward wraps slot 2 minus 11 to slot 16', () => {
-    // 2 - 11 = -9, +25 = 16
-    expect(spadeBackward(2, 11)).toBe(16);
-  });
-
-  test('spadeBackward simple backward (no wrap)', () => {
-    expect(spadeBackward(13, 5)).toBe(8);
-  });
-
-  test('validSpadeMoves includes both forward AND backward destinations', () => {
-    // One card at slot 2. Pip 5: forward → 7, backward → 22. Both empty.
+describe('Spades action (forward 1..pip)', () => {
+  test('validSpadeMoves enumerates 1..pip forward destinations only', () => {
+    // One card at slot 2. Pip 5: reaches slots 3, 4, 5, 6, 7 (forward only).
     let g = emptyGrid();
     g = placeAt(g, 2, C('A', 'H'));
     const moves = validSpadeMoves(g, C('5', 'S'));
-    expect(moves).toContainEqual({ from: 2, to: 7, direction: 'forward' });
-    expect(moves).toContainEqual({ from: 2, to: 22, direction: 'backward' });
-    expect(moves).toHaveLength(2);
+    const tos = moves.map(m => m.to).sort((a, b) => a - b);
+    expect(tos).toEqual([3, 4, 5, 6, 7]);
+    expect(moves.every(m => m.from === 2)).toBe(true);
+    expect(moves.every(m => m.distance >= 1 && m.distance <= 5)).toBe(true);
+    // No backward moves anywhere
+    expect(moves.find(m => m.to === 22)).toBeUndefined();
+    expect(moves.find(m => m.to === 1)).toBeUndefined();
   });
 
-  test('validSpadeMoves blocks occupied destinations in either direction', () => {
-    // Card at slot 5 and slot 0. Pip 5.
-    // - From slot 0: forward → 5 (occupied), backward → 20 (empty) ✓
-    // - From slot 5: forward → 10 (empty) ✓, backward → 0 (occupied)
+  test('validSpadeMoves wraps forward correctly', () => {
+    // Card at slot 23, pip 5: reaches 24, 0, 1, 2, 3 (wrap from 23+1..23+5 % 25).
+    let g = emptyGrid();
+    g = placeAt(g, 23, C('K', 'C'));
+    const moves = validSpadeMoves(g, C('5', 'S'));
+    const tos = moves.map(m => m.to).sort((a, b) => a - b);
+    expect(tos).toEqual([0, 1, 2, 3, 24]);
+  });
+
+  test('validSpadeMoves skips occupied destinations along the path', () => {
+    // Card at slot 2, blocker at slot 4. Pip 5: reaches 3, 5, 6, 7 (slot 4 blocked).
     const g = fillSlots([
-      [0, C('A', 'H')],
-      [5, C('K', 'H')],
+      [2, C('A', 'H')],
+      [4, C('K', 'H')],
     ]);
     const moves = validSpadeMoves(g, C('5', 'S'));
-    expect(moves).toContainEqual({ from: 0, to: 20, direction: 'backward' });
-    expect(moves).toContainEqual({ from: 5, to: 10, direction: 'forward' });
-    expect(moves.find(m => m.from === 0 && m.to === 5)).toBeUndefined();
-    expect(moves.find(m => m.from === 5 && m.to === 0)).toBeUndefined();
-    expect(moves).toHaveLength(2);
+    const fromTwo = moves.filter(m => m.from === 2).map(m => m.to).sort((a, b) => a - b);
+    expect(fromTwo).toEqual([3, 5, 6, 7]);
+  });
+
+  test('A♠ (pip 1) only reaches the immediately-next slot', () => {
+    let g = emptyGrid();
+    g = placeAt(g, 7, C('A', 'H'));
+    const moves = validSpadeMoves(g, C('A', 'S'));
+    expect(moves).toEqual([{ from: 7, to: 8, distance: 1 }]);
   });
 
   test('canExecuteSpades is true with at least one open destination', () => {

@@ -1,6 +1,14 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { Card, isJoker } from '../../game/cards';
+import { Card, isJoker, Suit } from '../../game/cards';
+
+// Standard 4-color deck: spades black, hearts red, diamonds blue, clubs green.
+const SUIT_COLOR: Record<Suit, string> = {
+  S: '#1d1d22',
+  H: '#c4252a',
+  D: '#1b6fc7',
+  C: '#1f8a3d',
+};
 
 interface Props {
   card: Card | null;
@@ -24,8 +32,8 @@ const SUIT_GLYPH: Record<string, string> = {
   C: '♣',
 };
 
-const isRed = (card: Card): boolean =>
-  !isJoker(card) && (card.suit === 'H' || card.suit === 'D');
+const cardColor = (card: Card): string =>
+  isJoker(card) ? '#8a6d1a' : SUIT_COLOR[card.suit];
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
   const dim = SIZES[size];
@@ -88,7 +96,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
     );
   }
 
-  const color = isRed(card) ? '#c4252a' : '#1d1d22';
+  const color = cardColor(card);
   // "10" is two characters and needs to be slightly smaller to fit nicely.
   const isWide = card.rank === '10';
   const rankSize = isWide ? dim.rank * 0.78 : dim.rank;

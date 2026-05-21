@@ -49,9 +49,9 @@ describe('modifiers', () => {
     expect(hearts.effect(ctx)).toEqual({});
   });
 
-  test('pair-2x triggers on PAIR only', () => {
-    const m = STARTER_MODIFIERS.find(m => m.id === 'pair-2x')!;
-    expect(m.effect(lineCtx({ hand: 'PAIR' }))).toEqual({ multiplierBoost: 1.0 });
+  test('pair-4x triggers on PAIR only with +3.0 multiplier', () => {
+    const m = STARTER_MODIFIERS.find(m => m.id === 'pair-4x')!;
+    expect(m.effect(lineCtx({ hand: 'PAIR' }))).toEqual({ multiplierBoost: 3.0 });
     expect(m.effect(lineCtx({ hand: 'FLUSH' }))).toEqual({});
   });
 
@@ -70,9 +70,9 @@ describe('modifiers', () => {
   });
 
   test('universalEffectFor: hand-type-only modifiers return their effect', () => {
-    const pair2x = STARTER_MODIFIERS.find(m => m.id === 'pair-2x')!;
-    expect(universalEffectFor(pair2x, 'PAIR')).toEqual({ multiplierBoost: 1.0 });
-    expect(universalEffectFor(pair2x, 'FLUSH')).toBeNull();
+    const pair4x = STARTER_MODIFIERS.find(m => m.id === 'pair-4x')!;
+    expect(universalEffectFor(pair4x, 'PAIR')).toEqual({ multiplierBoost: 3.0 });
+    expect(universalEffectFor(pair4x, 'FLUSH')).toBeNull();
 
     const straight50 = STARTER_MODIFIERS.find(m => m.id === 'straight-plus-50')!;
     expect(universalEffectFor(straight50, 'STRAIGHT')).toEqual({ flatAdd: 50 });
@@ -98,9 +98,9 @@ describe('modifiers', () => {
     expect(sum.flat).toBe(50);
   });
 
-  test('universalEffectSum: PAIR gets the 2× multiplier modifier', () => {
+  test('universalEffectSum: PAIR gets the 4× multiplier modifier', () => {
     const sum = universalEffectSum(STARTER_MODIFIERS, 'PAIR');
-    expect(sum.multiplier).toBe(2);
+    expect(sum.multiplier).toBe(4);
     expect(sum.flat).toBe(0);
   });
 

@@ -59,10 +59,10 @@ export const STARTER_MODIFIERS: Modifier[] = [
   suitBonus('C'),
   suitBonus('D'),
   {
-    id: 'pair-2x',
+    id: 'pair-4x',
     label: 'Pair Power',
-    description: 'Pair ×2',
-    effect: line => (line.hand === 'PAIR' ? { multiplierBoost: 1.0 } : {}),
+    description: 'Pair ×4',
+    effect: line => (line.hand === 'PAIR' ? { multiplierBoost: 3.0 } : {}),
   },
   {
     id: 'straight-plus-50',

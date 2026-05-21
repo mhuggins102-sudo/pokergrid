@@ -17,13 +17,15 @@ export const HAND_BASE_VALUE: Record<HandRank, number> = {
 };
 
 // One club bonus per hand type. The stored value is the pip used by the club
-// card (with A=14), and the bonus multiplier is 1 + pip * 2 / 100.
+// card (with A=14), and the bonus multiplier is 1 + pip * 4 / 100.
 export type ClubBonus = Partial<Record<HandRank, number>>;
+
+export const CLUB_PIP_MULTIPLIER = 4;
 
 export const clubMultiplier = (hand: HandRank, clubs: ClubBonus): number => {
   const pip = clubs[hand];
   if (!pip) return 1;
-  return 1 + (pip * 2) / 100;
+  return 1 + (pip * CLUB_PIP_MULTIPLIER) / 100;
 };
 
 export interface ScoredLine extends LineContext {

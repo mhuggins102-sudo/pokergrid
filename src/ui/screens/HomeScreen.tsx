@@ -46,12 +46,13 @@ export const HomeScreen = ({ onStart }: Props) => {
       <View style={styles.rulesBlock}>
         <Text style={styles.rulesTitle}>How it works</Text>
         <Text style={styles.rulesText}>
-          Draw a card. Place it in the lowest-numbered empty slot, or discard it for a suit-themed
-          action. ♥ swap any two cards within the heart's pip distance (wraps). ♠ slide a card
-          forward or backward by the spade's pip (wraps). ♣ boost a hand type's payout. ♦ pull a
-          card from the shuffled discard pile and play it as a new drawn card. The joker is always
-          placed and acts as a wild in whichever row/column it sits in. Each row and column scores
-          a poker hand at the end — beat your target.
+          Draw a card. Place it, discard it, or use its suit perk. ♥ swap any two cards within the
+          heart's pip distance (wraps). ♠ slide a card up to the spade's pip forward (wraps).
+          ♣ boost a hand type's payout by 4% per pip (one boost per hand type). ♦ pull a card from
+          the shuffled discard pile; you can place it (in the lowest empty slot or by swapping with
+          a grid card), trash it, or use its perk (no ♦ chaining). Cards used for a suit perk are
+          trashed — out of the game. The joker is always placed and acts as a wild in its row and
+          column. Score the 5 rows + 5 columns as poker hands at the end and beat your target.
         </Text>
       </View>
     </View>

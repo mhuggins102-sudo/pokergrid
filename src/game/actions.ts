@@ -60,19 +60,14 @@ export const heartsReachable = (
 };
 
 // ---------- Spades ----------
-// Spade slides a card either forward or backward by movementPip on the
-// circular 25-slot ring. Destination must be empty.
-
-export const spadeForward = (from: number, pip: number): number =>
-  (from + pip) % GRID_SLOTS;
-
-export const spadeBackward = (from: number, pip: number): number =>
-  (from - pip + GRID_SLOTS) % GRID_SLOTS;
+// Spade slides a card up to `movementPip` slots forward (1..pip) on the
+// circular 25-slot ring. Forward only (not backward). Destination must be
+// empty.
 
 export interface SpadeMove {
   from: number;
   to: number;
-  direction: 'forward' | 'backward';
+  distance: number; // 1..pip
 }
 
 export const validSpadeMoves = (grid: Grid, spade: StandardCard): SpadeMove[] => {
@@ -80,15 +75,11 @@ export const validSpadeMoves = (grid: Grid, spade: StandardCard): SpadeMove[] =>
   const pip = movementPip(spade);
   for (let from = 0; from < GRID_SLOTS; from++) {
     if (!grid[from]) continue;
-    const candidates: Array<{ to: number; direction: 'forward' | 'backward' }> = [
-      { to: spadeForward(from, pip), direction: 'forward' },
-      { to: spadeBackward(from, pip), direction: 'backward' },
-    ];
-    for (const { to, direction } of candidates) {
+    for (let d = 1; d <= pip; d++) {
+      const to = (from + d) % GRID_SLOTS;
       if (to === from) continue;
       if (grid[to] !== null) continue;
-      if (out.some(m => m.from === from && m.to === to)) continue;
-      out.push({ from, to, direction });
+      out.push({ from, to, distance: d });
     }
   }
   return out;
@@ -137,9 +128,12 @@ export const suitActionAvailable = (
   drawn: Card | null,
   grid: Grid,
   clubs: ClubBonus,
-  discardSize: number
+  discardSize: number,
+  inDiamondResolving = false
 ): boolean => {
   if (!drawn || isJoker(drawn)) return false;
+  // Diamond chain is forbidden when resolving a diamond-drawn pick.
+  if (inDiamondResolving && drawn.suit === 'D') return false;
   switch (drawn.suit) {
     case 'H':
       return canExecuteHearts(grid, drawn);
