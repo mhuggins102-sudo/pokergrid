@@ -1,14 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Card, isJoker, Suit } from '../../game/cards';
-
-// Standard 4-color deck: spades black, hearts red, diamonds blue, clubs green.
-const SUIT_COLOR: Record<Suit, string> = {
-  S: '#1d1d22',
-  H: '#c4252a',
-  D: '#1b6fc7',
-  C: '#1f8a3d',
-};
+import { cardSize, colors, fonts, glow, radius, suitColor } from '../theme';
 
 interface Props {
   card: Card | null;
@@ -19,48 +12,64 @@ interface Props {
 }
 
 const SIZES = {
-  xs: { side: 20, rank: 12, suit: 7 },
-  sm: { side: 32, rank: 18, suit: 9 },
-  md: { side: 56, rank: 28, suit: 12 },
-  lg: { side: 80, rank: 40, suit: 16 },
-};
+  xs: { side: 24, rank: 13, pip: 7, padding: 2 },
+  sm: { side: cardSize.sm, rank: 18, pip: 9, padding: 3 },
+  md: { side: cardSize.md, rank: 28, pip: 11, padding: 4 },
+  lg: { side: cardSize.lg, rank: 44, pip: 16, padding: 6 },
+} as const;
 
-const SUIT_GLYPH: Record<string, string> = {
+const SUIT_GLYPH: Record<Suit, string> = {
   H: '♥',
   D: '♦',
   S: '♠',
   C: '♣',
 };
 
-const cardColor = (card: Card): string =>
-  isJoker(card) ? '#8a6d1a' : SUIT_COLOR[card.suit];
+const cardGlowColor = (card: Card): string =>
+  isJoker(card) ? colors.joker : suitColor(card.suit);
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
   const dim = SIZES[size];
   const square: ViewStyle = { width: dim.side, height: dim.side };
 
+  // Empty slot — extremely subtle: just a thin rounded outline.
   if (!card) {
     return (
       <View
         style={[
           styles.tile,
           square,
-          { backgroundColor: '#e7e7ec', borderColor: '#cfd0d6' },
+          {
+            backgroundColor: 'transparent',
+            borderColor: colors.outlineSoft,
+            borderWidth: 1,
+            borderStyle: 'dashed',
+          },
           dimmed && styles.dimmed,
-          highlighted && styles.highlighted,
+          highlighted && styles.emptyHighlighted,
           style,
         ]}
       />
     );
   }
 
+  const glowColor = cardGlowColor(card);
+  // The card body itself is a near-black glass panel with a thin neon border
+  // and an outer glow tinted by the suit.
+  const baseTile: ViewStyle = {
+    ...styles.tile,
+    ...square,
+    backgroundColor: colors.bgGlass,
+    borderColor: glowColor,
+    borderWidth: 1.5,
+    ...(highlighted ? glow(glowColor, 18, 0.95) : glow(glowColor, 8, 0.5)),
+  };
+
   if (isJoker(card)) {
     return (
       <View
         style={[
-          styles.tile,
-          square,
-          { backgroundColor: '#fff7d6', borderColor: '#caa44a' },
+          baseTile,
           dimmed && styles.dimmed,
           highlighted && styles.highlighted,
           style,
@@ -69,17 +78,20 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         <Text
           style={[
             styles.cornerTL,
-            { color: '#caa44a', fontSize: dim.suit },
+            { color: glowColor, fontSize: dim.pip, top: dim.padding, left: dim.padding + 1 },
           ]}
         >
-          ★
+          ✦
         </Text>
         <Text
           style={{
+            fontFamily: fonts.mono,
             fontWeight: '800',
-            fontSize: dim.rank * 0.75,
-            color: '#8a6d1a',
-            lineHeight: dim.rank * 0.85,
+            fontSize: dim.rank * 0.72,
+            color: glowColor,
+            letterSpacing: 1,
+            textShadowColor: glowColor,
+            textShadowRadius: 6,
           }}
         >
           JK
@@ -87,44 +99,57 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         <Text
           style={[
             styles.cornerBR,
-            { color: '#caa44a', fontSize: dim.suit },
+            { color: glowColor, fontSize: dim.pip, bottom: dim.padding, right: dim.padding + 1 },
           ]}
         >
-          ★
+          ✦
         </Text>
       </View>
     );
   }
 
-  const color = cardColor(card);
+  // Standard card.
   // "10" is two characters and needs to be slightly smaller to fit nicely.
   const isWide = card.rank === '10';
-  const rankSize = isWide ? dim.rank * 0.78 : dim.rank;
+  const rankSize = isWide ? dim.rank * 0.74 : dim.rank;
 
   return (
     <View
       style={[
-        styles.tile,
-        square,
+        baseTile,
         dimmed && styles.dimmed,
         highlighted && styles.highlighted,
         style,
       ]}
     >
-      <Text style={[styles.cornerTL, { color, fontSize: dim.suit }]}>
+      <Text
+        style={[
+          styles.cornerTL,
+          { color: glowColor, fontSize: dim.pip, top: dim.padding, left: dim.padding + 1 },
+        ]}
+      >
         {SUIT_GLYPH[card.suit]}
       </Text>
       <Text
         style={{
-          color,
+          fontFamily: fonts.mono,
+          color: glowColor,
           fontSize: rankSize,
-          fontWeight: '700',
+          fontWeight: '800',
+          letterSpacing: -1,
           lineHeight: rankSize * 1.05,
+          textShadowColor: glowColor,
+          textShadowRadius: 5,
         }}
       >
         {card.rank}
       </Text>
-      <Text style={[styles.cornerBR, { color, fontSize: dim.suit }]}>
+      <Text
+        style={[
+          styles.cornerBR,
+          { color: glowColor, fontSize: dim.pip, bottom: dim.padding, right: dim.padding + 1 },
+        ]}
+      >
         {SUIT_GLYPH[card.suit]}
       </Text>
     </View>
@@ -133,10 +158,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
 
 const styles = StyleSheet.create({
   tile: {
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#d4d6df',
-    backgroundColor: '#ffffff',
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -144,19 +166,19 @@ const styles = StyleSheet.create({
   },
   cornerTL: {
     position: 'absolute',
-    top: 2,
-    left: 4,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   cornerBR: {
     position: 'absolute',
-    bottom: 2,
-    right: 4,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  dimmed: { opacity: 0.35 },
+  dimmed: { opacity: 0.4 },
   highlighted: {
-    borderColor: '#3680ff',
     borderWidth: 2,
+  },
+  emptyHighlighted: {
+    borderColor: colors.selectGlow,
+    borderStyle: 'solid',
+    borderWidth: 1.5,
   },
 });

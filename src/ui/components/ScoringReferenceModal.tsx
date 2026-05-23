@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { BonusCard, universalEffectFor, universalEffectSum } from '../../game/bonusCards';
 import { HandRank } from '../../game/hands';
 import { HAND_BASE_VALUE } from '../../game/scoring';
+import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -75,7 +76,7 @@ export const ScoringReferenceModal = ({ visible, onClose, bonusCards }: Props) =
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.headerRow}>
-            <Text style={styles.title}>Scoring Reference</Text>
+            <Text style={styles.title}>Scoring</Text>
             <Pressable onPress={onClose} hitSlop={12}>
               <Text style={styles.closeBtn}>×</Text>
             </Pressable>
@@ -89,9 +90,9 @@ export const ScoringReferenceModal = ({ visible, onClose, bonusCards }: Props) =
             {conditional.length > 0 && (
               <>
                 <View style={styles.divider} />
-                <Text style={styles.sectionLabel}>Conditional bonus cards</Text>
+                <Text style={styles.sectionLabel}>Conditional Bonuses</Text>
                 {conditional.map(b => (
-                  <Text key={b.id} style={styles.modLine}>• {b.description}</Text>
+                  <Text key={b.id} style={styles.modLine}>· {b.description}</Text>
                 ))}
               </>
             )}
@@ -99,17 +100,16 @@ export const ScoringReferenceModal = ({ visible, onClose, bonusCards }: Props) =
             {gridLevel.length > 0 && (
               <>
                 <View style={styles.divider} />
-                <Text style={styles.sectionLabel}>Grid achievements (multiply final total)</Text>
+                <Text style={styles.sectionLabel}>Grid Achievements</Text>
                 {gridLevel.map(b => (
-                  <Text key={b.id} style={styles.modLine}>• {b.description}</Text>
+                  <Text key={b.id} style={styles.modLine}>· {b.description}</Text>
                 ))}
               </>
             )}
 
             <Text style={styles.footnote}>
-              Bonus multipliers compose multiplicatively: total per line = ⌈base × Π multipliers⌉
-              + flats. Grid achievements multiply the summed total. Incomplete lines (fewer than
-              5 cards) cost 25 points each.
+              Multipliers compose multiplicatively per line. Grid achievements multiply the
+              summed total. Incomplete lines (under 5 cards) cost 25 each at game end.
             </Text>
           </ScrollView>
         </Pressable>
@@ -121,62 +121,108 @@ export const ScoringReferenceModal = ({ visible, onClose, bonusCards }: Props) =
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(2, 4, 12, 0.78)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 18,
+    padding: spacing.lg,
   },
   sheet: {
     width: '100%',
     maxWidth: 360,
     maxHeight: '88%',
-    backgroundColor: '#262c3a',
-    borderRadius: 10,
-    padding: 14,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.outline,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.accent, 24, 0.25),
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  title: { color: '#f4f5f9', fontSize: 16, fontWeight: '800' },
-  closeBtn: { color: '#9aa0b2', fontSize: 24, fontWeight: '700', paddingHorizontal: 4 },
+  title: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+  },
+  closeBtn: {
+    color: colors.textMid,
+    fontSize: 24,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+  },
   scroll: { maxHeight: 480 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderColor: '#2c3344',
+    borderColor: colors.outlineSoft,
   },
   handCol: { flex: 1 },
-  handName: { color: '#cfd2dd', fontSize: 13 },
-  bonusSub: { color: '#9aa0b2', fontSize: 10, marginTop: 1 },
-  value: { color: '#cfd2dd', fontSize: 14, fontWeight: '600', minWidth: 40, textAlign: 'right' },
+  handName: { color: colors.textMid, fontFamily: fonts.sans, fontSize: 13 },
+  bonusSub: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    marginTop: 1,
+    letterSpacing: 0.5,
+  },
+  value: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 40,
+    textAlign: 'right',
+  },
   baseStrike: {
-    color: '#6a6f7d',
+    color: colors.textLow,
+    fontFamily: fonts.mono,
     fontSize: 12,
     textDecorationLine: 'line-through',
     marginRight: 4,
   },
-  arrow: { color: '#9aa0b2', fontSize: 12, marginRight: 4 },
+  arrow: { color: colors.textLow, fontSize: 12, marginRight: 4 },
   valueBoosted: {
-    color: '#7cdca0',
+    color: colors.success,
+    fontFamily: fonts.mono,
     fontSize: 16,
     fontWeight: '800',
     minWidth: 40,
     textAlign: 'right',
+    textShadowColor: colors.success,
+    textShadowRadius: 6,
   },
-  divider: { height: 1, backgroundColor: '#3c4456', marginVertical: 10 },
+  divider: { height: 1, backgroundColor: colors.outline, marginVertical: spacing.md },
   sectionLabel: {
-    color: '#9aa0b2',
-    fontSize: 11,
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 2,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
-  modLine: { color: '#cfd2dd', fontSize: 12, marginBottom: 2 },
-  footnote: { color: '#9aa0b2', fontSize: 10, marginTop: 10, fontStyle: 'italic' },
+  modLine: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    marginBottom: 2,
+    lineHeight: 16,
+  },
+  footnote: {
+    color: colors.textLow,
+    fontFamily: fonts.sans,
+    fontSize: 10,
+    marginTop: spacing.md,
+    fontStyle: 'italic',
+    lineHeight: 14,
+  },
 });

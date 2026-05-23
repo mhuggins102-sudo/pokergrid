@@ -1,5 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withDelay,
+} from 'react-native-reanimated';
 import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { scoreGrid } from '../../game/scoring';
@@ -7,6 +14,11 @@ import { GameState } from '../../game/state';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
+import { NeonButton } from '../components/NeonButton';
+import { useHaptic } from '../haptics';
+import { useSettings } from '../settings';
+import { useStats } from '../stats';
+import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   state: GameState;
@@ -28,8 +40,59 @@ const HAND_LABEL: Record<HandRank, string> = {
   ROYAL_FLUSH: 'Royal Flush',
 };
 
+const BannerHero = ({ won, score, target }: { won: boolean; score: number; target: number }) => {
+  const { settings } = useSettings();
+  const haptic = useHaptic();
+  const fade = useSharedValue(0);
+  const scale = useSharedValue(0.8);
+  const fired = useRef(false);
+
+  useEffect(() => {
+    if (settings.reduceMotion) {
+      fade.value = 1;
+      scale.value = 1;
+      if (!fired.current) {
+        haptic(won ? 'success' : 'warning' as any);
+        fired.current = true;
+      }
+      return;
+    }
+    fade.value = withTiming(1, { duration: 280 });
+    scale.value = withSequence(
+      withTiming(1.08, { duration: 280 }),
+      withTiming(1, { duration: 220 })
+    );
+    if (!fired.current) {
+      haptic(won ? 'success' : 'warning' as any);
+      fired.current = true;
+    }
+  }, [won, fade, scale, settings.reduceMotion, haptic]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  const accent = won ? colors.success : colors.danger;
+
+  return (
+    <Animated.View style={[styles.banner, { borderColor: accent }, glow(accent, 18, 0.55), animStyle]}>
+      <Text style={[styles.bannerKicker, { color: accent, textShadowColor: accent }]}>
+        {won ? '· WIN ·' : '· DEFEAT ·'}
+      </Text>
+      <Text style={[styles.bannerScore, { color: accent, textShadowColor: accent }]}>
+        {score}
+      </Text>
+      <Text style={styles.bannerTarget}>target {target}</Text>
+    </Animated.View>
+  );
+};
+
 export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
+  const { record } = useStats();
+  const recorded = useRef(false);
+
   const report = useMemo(
     () => scoreGrid(state.grid, state.bonusCards, { deckRemaining: state.deck.length }),
     [state.grid, state.bonusCards, state.deck.length]
@@ -44,6 +107,19 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
   } = report;
   const won = total >= state.target;
 
+  // Record the run exactly once on mount.
+  useEffect(() => {
+    if (recorded.current) return;
+    recorded.current = true;
+    record({
+      ts: Date.now(),
+      difficulty: state.difficulty,
+      score: total,
+      target: state.target,
+      won,
+    });
+  }, [record, state.difficulty, state.target, total, won]);
+
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
     if (inspectLine.kind === 'row') {
@@ -56,21 +132,18 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={[styles.banner, won ? styles.bannerWon : styles.bannerLost]}>
-        <Text style={styles.bannerTitle}>{won ? 'You won!' : 'Run complete'}</Text>
-        <Text style={styles.bannerScore}>
-          {total} / {state.target}
-        </Text>
-      </View>
+      <BannerHero won={won} score={total} target={state.target} />
 
       <BonusCardStrip cards={state.bonusCards} />
-      <GridView
-        grid={state.grid}
-        onLinePress={(kind, index) => setInspectLine({ kind, index })}
-      />
+      <View style={styles.gridArea}>
+        <GridView
+          grid={state.grid}
+          onLinePress={(kind, index) => setInspectLine({ kind, index })}
+        />
+      </View>
 
       <View style={styles.breakdownBlock}>
-        <Text style={styles.sectionLabel}>Per-line breakdown</Text>
+        <Text style={styles.sectionLabel}>Per-line</Text>
         {scoredLines.map(line => (
           <Pressable
             key={`${line.kind}-${line.index}`}
@@ -82,7 +155,7 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
             ]}
           >
             <Text style={styles.lineLabel}>
-              {line.kind === 'row' ? `Row ${line.index + 1}` : `Col ${line.index + 1}`}
+              {line.kind === 'row' ? `R${line.index + 1}` : `C${line.index + 1}`}
             </Text>
             <Text style={styles.lineHand}>
               {line.hand ? HAND_LABEL[line.hand] : line.incomplete ? 'Incomplete' : '—'}
@@ -91,6 +164,7 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
               style={[
                 styles.lineScore,
                 line.total < 0 && styles.lineScorePenalty,
+                line.total > 0 && styles.lineScoreActive,
               ]}
             >
               {line.total}
@@ -103,7 +177,7 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
         </View>
         {incompletePenalty < 0 && (
           <View style={styles.subtotalRow}>
-            <Text style={styles.totalLabel}>Incomplete penalty (in subtotal)</Text>
+            <Text style={styles.totalLabel}>Incomplete (in subtotal)</Text>
             <Text style={styles.penaltyValue}>{incompletePenalty}</Text>
           </View>
         )}
@@ -118,8 +192,24 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
         )}
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalScore}>{total}</Text>
+          <Text style={[styles.totalScore, won && styles.totalScoreWon]}>{total}</Text>
         </View>
+      </View>
+
+      <View style={styles.btnRow}>
+        <NeonButton
+          label={`Replay · ${state.difficulty}`}
+          variant="primary"
+          size="lg"
+          onPress={onReplay}
+          style={{ flex: 1 }}
+        />
+        <NeonButton
+          label="Home"
+          variant="secondary"
+          size="lg"
+          onPress={onHome}
+        />
       </View>
 
       {inspectLine && (
@@ -132,71 +222,160 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
           bonusCards={state.bonusCards}
         />
       )}
-
-      <View style={styles.btnRow}>
-        <Pressable style={[styles.btn, { backgroundColor: '#3680ff' }]} onPress={onReplay}>
-          <Text style={styles.btnLabel}>Play Again ({state.difficulty})</Text>
-        </Pressable>
-        <Pressable style={[styles.btn, { backgroundColor: '#4d525f' }]} onPress={onHome}>
-          <Text style={styles.btnLabel}>Home</Text>
-        </Pressable>
-      </View>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#262c3a' },
-  content: { paddingBottom: 40 },
-  banner: { paddingVertical: 18, alignItems: 'center', backgroundColor: '#1d2331' },
-  bannerWon: { backgroundColor: '#1c4a30' },
-  bannerLost: { backgroundColor: '#1d2331' },
-  bannerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  bannerScore: { color: '#cfd2dd', fontSize: 16, marginTop: 4 },
+  root: { flex: 1, backgroundColor: colors.bgBase },
+  content: { paddingBottom: spacing.xxl, paddingHorizontal: spacing.md },
+  banner: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    backgroundColor: colors.bgPanel,
+    borderWidth: 2,
+    borderRadius: radius.lg,
+  },
+  bannerKicker: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 4,
+    textShadowRadius: 8,
+    marginBottom: spacing.xs,
+  },
+  bannerScore: {
+    fontFamily: fonts.mono,
+    fontSize: 48,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textShadowRadius: 18,
+  },
+  bannerTarget: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    color: colors.textLow,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginTop: spacing.xs,
+  },
+  gridArea: { paddingVertical: spacing.xs },
   sectionLabel: {
-    color: '#9aa0b2',
+    color: colors.textMid,
+    fontFamily: fonts.mono,
     fontSize: 11,
     textTransform: 'uppercase',
-    marginBottom: 8,
-    letterSpacing: 0.6,
+    marginBottom: spacing.sm,
+    letterSpacing: 2,
+    fontWeight: '800',
   },
-  breakdownBlock: { paddingHorizontal: 14, marginTop: 16 },
+  breakdownBlock: { marginTop: spacing.md },
   lineRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    backgroundColor: '#1d2331',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgPanel,
     marginBottom: 3,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
   },
-  lineRowActive: { backgroundColor: '#27314a' },
-  lineRowPenalty: { backgroundColor: '#4a2727' },
-  lineScorePenalty: { color: '#f08585' },
-  penaltyValue: { color: '#f08585', fontSize: 13, fontWeight: '700' },
-  lineLabel: { color: '#cfd2dd', fontSize: 12, width: 60 },
-  lineHand: { color: '#cfd2dd', fontSize: 12, flex: 1 },
-  lineScore: { color: '#f4f5f9', fontSize: 13, fontWeight: '700', width: 40, textAlign: 'right' },
+  lineRowActive: {
+    backgroundColor: 'rgba(92, 255, 154, 0.06)',
+    borderColor: 'rgba(92, 255, 154, 0.4)',
+  },
+  lineRowPenalty: {
+    backgroundColor: 'rgba(255, 100, 100, 0.07)',
+    borderColor: 'rgba(255, 100, 100, 0.4)',
+  },
+  lineLabel: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    width: 32,
+    letterSpacing: 1,
+  },
+  lineHand: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  lineScore: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    width: 50,
+    textAlign: 'right',
+  },
+  lineScoreActive: {
+    color: colors.success,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
+  },
+  lineScorePenalty: {
+    color: colors.danger,
+    textShadowColor: colors.danger,
+    textShadowRadius: 4,
+  },
   subtotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
     marginTop: 2,
   },
-  subtotalValue: { color: '#cfd2dd', fontSize: 13, fontWeight: '700' },
+  subtotalValue: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderTopColor: '#3c4456',
+    alignItems: 'baseline',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderTopColor: colors.outline,
     borderTopWidth: 1,
-    marginTop: 6,
+    marginTop: spacing.xs,
   },
-  totalLabel: { color: '#9aa0b2', fontSize: 13 },
-  totalScore: { color: '#7cdca0', fontSize: 18, fontWeight: '800' },
-  btnRow: { flexDirection: 'row', gap: 10, padding: 16, justifyContent: 'center' },
-  btn: { paddingVertical: 12, paddingHorizontal: 18, borderRadius: 8 },
-  btnLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  totalLabel: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  totalScore: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  totalScoreWon: {
+    color: colors.success,
+    textShadowColor: colors.success,
+    textShadowRadius: 10,
+  },
+  penaltyValue: {
+    color: colors.danger,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
 });

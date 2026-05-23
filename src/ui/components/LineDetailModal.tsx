@@ -5,6 +5,7 @@ import { applyLineEffects, BonusCard, LineContext } from '../../game/bonusCards'
 import { LineKind } from '../../game/grid';
 import { HandRank, evaluateLine } from '../../game/hands';
 import { HAND_BASE_VALUE, INCOMPLETE_LINE_PENALTY } from '../../game/scoring';
+import { colors, fonts, glow, radius, spacing } from '../theme';
 import { CardTile } from './CardTile';
 
 interface Props {
@@ -75,8 +76,8 @@ export const LineDetailModal = ({
           {!hand ? (
             <>
               <Text style={styles.incomplete}>
-                {filledCount} / 5 placed — incomplete lines cost {INCOMPLETE_LINE_PENALTY * -1}
-                {' '}points at game end.
+                {filledCount} / 5 placed — incomplete lines cost
+                {' '}{INCOMPLETE_LINE_PENALTY * -1} points at game end.
               </Text>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>End-of-game</Text>
@@ -86,7 +87,7 @@ export const LineDetailModal = ({
           ) : (
             <>
               <View style={styles.handBlock}>
-                <Text style={styles.handLabel}>Hand</Text>
+                <Text style={styles.handLabel}>HAND</Text>
                 <Text style={styles.handValue}>{HAND_LABEL[hand]}</Text>
               </View>
 
@@ -125,58 +126,116 @@ const Row = ({ label, value, active }: { label: string; value: string; active?: 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(2, 4, 12, 0.78)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 18,
+    padding: spacing.lg,
   },
   sheet: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#262c3a',
-    borderRadius: 10,
-    padding: 14,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.outline,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.accent, 24, 0.25),
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  title: { color: '#f4f5f9', fontSize: 16, fontWeight: '800' },
-  closeBtn: { color: '#9aa0b2', fontSize: 24, fontWeight: '700', paddingHorizontal: 4 },
-  miniRow: { flexDirection: 'row', gap: 4, justifyContent: 'center', marginVertical: 10 },
+  title: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  closeBtn: {
+    color: colors.textMid,
+    fontSize: 24,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+  },
+  miniRow: {
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'center',
+    marginVertical: spacing.md,
+  },
   incomplete: {
-    color: '#caa44a',
+    color: colors.warn,
+    fontFamily: fonts.sans,
     textAlign: 'center',
     fontSize: 12,
     fontStyle: 'italic',
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   handBlock: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderColor: '#3c4456',
-    marginBottom: 6,
+    borderColor: colors.outlineSoft,
+    marginBottom: spacing.xs,
   },
-  handLabel: { color: '#9aa0b2', fontSize: 12 },
-  handValue: { color: '#f4f5f9', fontSize: 14, fontWeight: '700' },
+  handLabel: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 2,
+    fontWeight: '700',
+  },
+  handValue: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   breakdown: { gap: 2 },
-  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  breakdownLabel: { color: '#cfd2dd', fontSize: 12 },
-  breakdownValue: { color: '#9aa0b2', fontSize: 12 },
-  breakdownActive: { color: '#7cdca0' },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  breakdownLabel: { color: colors.textMid, fontFamily: fonts.sans, fontSize: 12 },
+  breakdownValue: { color: colors.textLow, fontFamily: fonts.mono, fontSize: 12 },
+  breakdownActive: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 4 },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: spacing.sm,
     borderTopWidth: 1,
-    borderColor: '#3c4456',
-    marginTop: 4,
+    borderColor: colors.outlineSoft,
+    marginTop: spacing.xs,
   },
-  totalLabel: { color: '#9aa0b2', fontSize: 13 },
-  totalValue: { color: '#7cdca0', fontSize: 18, fontWeight: '800' },
-  penaltyValue: { color: '#f08585', fontSize: 18, fontWeight: '800' },
+  totalLabel: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  totalValue: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 20,
+    fontWeight: '800',
+    textShadowColor: colors.success,
+    textShadowRadius: 6,
+  },
+  penaltyValue: {
+    color: colors.danger,
+    fontFamily: fonts.mono,
+    fontSize: 20,
+    fontWeight: '800',
+    textShadowColor: colors.danger,
+    textShadowRadius: 6,
+  },
 });

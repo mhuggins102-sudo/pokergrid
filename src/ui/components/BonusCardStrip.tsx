@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BonusCard, BONUS_HAND_LIMIT } from '../../game/bonusCards';
+import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   cards: BonusCard[];
@@ -25,8 +26,13 @@ export const BonusCardStrip = ({ cards, selectedIdx, onCardPress }: Props) => (
         return (
           <Pressable
             key={i}
-            style={[styles.chip, !filled && styles.empty, isSelected && styles.selected]}
-            onPress={pressable ? () => onCardPress(i) : undefined}
+            style={[
+              styles.chip,
+              !filled && styles.empty,
+              filled && glow(colors.warn, 6, 0.35),
+              isSelected && styles.selected,
+            ]}
+            onPress={pressable ? () => onCardPress!(i) : undefined}
           >
             {filled ? (
               <>
@@ -34,7 +40,7 @@ export const BonusCardStrip = ({ cards, selectedIdx, onCardPress }: Props) => (
                 <Text style={styles.desc} numberOfLines={2}>{c.description}</Text>
               </>
             ) : (
-              <Text style={styles.emptyText}>empty</Text>
+              <Text style={styles.emptyText}>· empty ·</Text>
             )}
           </Pressable>
         );
@@ -44,38 +50,54 @@ export const BonusCardStrip = ({ cards, selectedIdx, onCardPress }: Props) => (
 );
 
 const styles = StyleSheet.create({
-  wrap: { paddingVertical: 4 },
+  wrap: { paddingVertical: spacing.xs },
   strip: {
     flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
     alignItems: 'stretch',
   },
   chip: {
-    backgroundColor: '#f1efe6',
-    borderColor: '#d6cfa7',
+    borderColor: colors.warn,
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    width: 118,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    width: 124,
+    backgroundColor: colors.bgGlass,
     justifyContent: 'center',
   },
   empty: {
     backgroundColor: 'transparent',
     borderStyle: 'dashed',
-    borderColor: '#4d525f',
+    borderColor: colors.outline,
   },
   emptyText: {
-    color: '#6c707d',
+    color: colors.textLow,
+    fontFamily: fonts.mono,
     fontSize: 10,
-    fontStyle: 'italic',
     textAlign: 'center',
+    letterSpacing: 1,
   },
   selected: {
-    borderColor: '#3680ff',
+    borderColor: colors.accent,
     borderWidth: 2,
+    ...glow(colors.accent, 10, 0.7),
   },
-  name: { fontSize: 11, fontWeight: '700', color: '#5d4f1a' },
-  desc: { fontSize: 9, color: '#776230', marginTop: 1 },
+  name: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.warn,
+    letterSpacing: 0.5,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+  },
+  desc: {
+    fontFamily: fonts.sans,
+    fontSize: 9,
+    color: colors.textMid,
+    marginTop: 2,
+    lineHeight: 12,
+  },
 });

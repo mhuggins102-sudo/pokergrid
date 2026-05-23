@@ -1,97 +1,274 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  cancelAnimation,
+} from 'react-native-reanimated';
 import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
+import { NeonButton } from '../components/NeonButton';
+import { useSettings } from '../settings';
+import { useStats } from '../stats';
+import { colors, fonts, glow, radius, spacing, text } from '../theme';
 
 interface Props {
-  onStart: (difficulty: Difficulty) => void;
+  onStart: (d: Difficulty) => void;
+  onOpenStats: () => void;
+  onOpenSettings: () => void;
+  onOpenTutorial: () => void;
 }
 
-const DIFFICULTIES: { id: Difficulty; label: string; blurb: string }[] = [
-  { id: 'easy', label: 'Easy', blurb: 'Target 200' },
-  { id: 'medium', label: 'Medium', blurb: 'Target 300' },
-  { id: 'hard', label: 'Hard', blurb: 'Target 400' },
-];
+const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
 
-export const HomeScreen = ({ onStart }: Props) => {
-  const [picked, setPicked] = useState<Difficulty>('medium');
+const NeonTitle = () => {
+  const { settings } = useSettings();
+  const pulse = useSharedValue(0.7);
+  useEffect(() => {
+    if (settings.reduceMotion) return;
+    pulse.value = withRepeat(withTiming(1, { duration: 1600 }), -1, true);
+    return () => cancelAnimation(pulse);
+  }, [settings.reduceMotion, pulse]);
+  const style = useAnimatedStyle(() => ({
+    textShadowRadius: 4 + pulse.value * 14,
+    opacity: 0.85 + pulse.value * 0.15,
+  }));
   return (
-    <View style={styles.root}>
-      <Text style={styles.title}>PokerGrid</Text>
-      <Text style={styles.subtitle}>5×5 poker solitaire</Text>
-
-      <View style={styles.diffBlock}>
-        <Text style={styles.sectionLabel}>Difficulty</Text>
-        <View style={styles.diffRow}>
-          {DIFFICULTIES.map(d => (
-            <Pressable
-              key={d.id}
-              onPress={() => setPicked(d.id)}
-              style={[styles.diffBtn, picked === d.id && styles.diffPicked]}
-            >
-              <Text style={[styles.diffLabel, picked === d.id && styles.diffPickedText]}>
-                {d.label}
-              </Text>
-              <Text style={[styles.diffBlurb, picked === d.id && styles.diffPickedText]}>
-                {d.blurb}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <Pressable style={styles.startBtn} onPress={() => onStart(picked)}>
-        <Text style={styles.startText}>Start (target {TARGET_BY_DIFFICULTY[picked]})</Text>
-      </Pressable>
-
-      <View style={styles.rulesBlock}>
-        <Text style={styles.rulesTitle}>How it works</Text>
-        <Text style={styles.rulesText}>
-          Cards fill a spiral starting at the center (R3C3). Each turn, place the drawn card,
-          discard it to trash, or use its suit perk.{'\n\n'}
-          ♥ Swap: swap any two cards that share a row or column.{'\n'}
-          ♠ Slide: pick a card; the whole connected chain in its row or column slides together,
-          any distance up to a wall or blocker.{'\n'}
-          ♦ Destroy: trash any card on the grid.{'\n'}
-          ♣ Bonus: draw 2 from the bonus deck and keep one (hold up to 3; at the cap you must swap
-          one out).{'\n\n'}
-          Bonus multipliers stack multiplicatively. Cards used for a suit perk are trashed. The
-          joker is auto-placed and is a wild in its row and column. At the end, score the 5 rows
-          + 5 columns — each incomplete line costs 25 points. Beat your target to win.
-        </Text>
-      </View>
-    </View>
+    <Animated.Text style={[styles.title, style]}>POKERGRID</Animated.Text>
   );
 };
 
+export const HomeScreen = ({
+  onStart,
+  onOpenStats,
+  onOpenSettings,
+  onOpenTutorial,
+}: Props) => {
+  const [diff, setDiff] = React.useState<Difficulty>('medium');
+  const { stats } = useStats();
+
+  return (
+    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+      <View style={styles.hero}>
+        <Text style={styles.subtitle}>5×5 poker solitaire</Text>
+        <NeonTitle />
+      </View>
+
+      <Text style={styles.sectionLabel}>Difficulty</Text>
+      <View style={styles.diffRow}>
+        {DIFFS.map(d => {
+          const selected = d === diff;
+          return (
+            <Pressable
+              key={d}
+              style={[styles.diffCell, selected && styles.diffCellSel]}
+              onPress={() => setDiff(d)}
+            >
+              <Text style={[styles.diffName, selected && styles.diffNameSel]}>{d}</Text>
+              <Text style={[styles.diffTarget, selected && styles.diffTargetSel]}>
+                target {TARGET_BY_DIFFICULTY[d]}
+              </Text>
+              {stats.best[d] !== null && (
+                <Text style={[styles.diffBest, selected && styles.diffBestSel]}>
+                  best {stats.best[d]}
+                </Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.startWrap}>
+        <NeonButton
+          label={`Start · target ${TARGET_BY_DIFFICULTY[diff]}`}
+          size="lg"
+          onPress={() => onStart(diff)}
+        />
+      </View>
+
+      <View style={styles.streakRow}>
+        {stats.wins > 0 && (
+          <Text style={styles.streakText}>
+            {stats.wins} win{stats.wins !== 1 ? 's' : ''}
+            {stats.streak > 1 ? ` · streak ${stats.streak}` : ''}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.navRow}>
+        <NeonButton label="Stats" variant="secondary" size="sm" onPress={onOpenStats} />
+        <NeonButton label="Settings" variant="secondary" size="sm" onPress={onOpenSettings} />
+        <NeonButton label="How to play" variant="secondary" size="sm" onPress={onOpenTutorial} />
+      </View>
+
+      <View style={styles.divider} />
+
+      <Text style={styles.sectionLabel}>The Game</Text>
+      <Text style={styles.copy}>
+        Drawn cards fill the grid in a spiral starting at the center. Each turn, place the card,
+        trash it, or use its suit perk.
+      </Text>
+
+      <View style={styles.perksBlock}>
+        <Perk symbol="♥" color={colors.suitH} name="Swap"
+              desc="Swap any two cards that share a row or column." />
+        <Perk symbol="♠" color={colors.suitS} name="Slide"
+              desc="Push a card; the connected chain in front of it slides any distance up to a wall or blocker." />
+        <Perk symbol="♦" color={colors.suitD} name="Destroy"
+              desc="Trash any one card on the grid (even the joker)." />
+        <Perk symbol="♣" color={colors.suitC} name="Bonus"
+              desc="Draw two bonus cards and keep one. Hold up to 3; at the cap you must swap one out." />
+      </View>
+
+      <Text style={styles.copy}>
+        Bonus multipliers stack multiplicatively. Cards spent on a perk go to trash. The joker is
+        auto-placed and is a wild in its row and column. At game end, score the 5 rows + 5 columns
+        and beat your target. Incomplete lines cost 25 points each.
+      </Text>
+    </ScrollView>
+  );
+};
+
+const Perk = ({
+  symbol,
+  color,
+  name,
+  desc,
+}: {
+  symbol: string;
+  color: string;
+  name: string;
+  desc: string;
+}) => (
+  <View style={styles.perkRow}>
+    <Text style={[styles.perkSymbol, { color, textShadowColor: color }]}>{symbol}</Text>
+    <View style={styles.perkText}>
+      <Text style={[styles.perkName, { color }]}>{name}</Text>
+      <Text style={styles.perkDesc}>{desc}</Text>
+    </View>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#1d2331' },
-  title: { color: '#f4f5f9', fontSize: 42, fontWeight: '800', letterSpacing: 1 },
-  subtitle: { color: '#9aa0b2', marginTop: 6, fontSize: 14, marginBottom: 24 },
-  sectionLabel: { color: '#9aa0b2', textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.8, marginBottom: 8 },
-  diffBlock: { width: '100%', alignItems: 'center', marginBottom: 18 },
-  diffRow: { flexDirection: 'row', gap: 10 },
-  diffBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-    borderColor: '#3c4456',
-    borderWidth: 1,
+  root: { flex: 1, backgroundColor: colors.bgBase },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  hero: {
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xl,
     alignItems: 'center',
-    minWidth: 88,
   },
-  diffPicked: { backgroundColor: '#3680ff', borderColor: '#3680ff' },
-  diffLabel: { color: '#cfd2dd', fontWeight: '700', fontSize: 16 },
-  diffBlurb: { color: '#9aa0b2', fontSize: 11, marginTop: 2 },
-  diffPickedText: { color: '#ffffff' },
-  startBtn: {
-    marginTop: 16,
-    backgroundColor: '#7cdca0',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 8,
+  subtitle: {
+    ...text.label,
+    color: colors.suitH,
+    fontSize: 11,
+    letterSpacing: 4,
+    marginBottom: spacing.sm,
+    textShadowColor: colors.suitH,
+    textShadowRadius: 6,
   },
-  startText: { color: '#0e1a18', fontSize: 16, fontWeight: '800' },
-  rulesBlock: { marginTop: 32, maxWidth: 360 },
-  rulesTitle: { color: '#cfd2dd', fontWeight: '700', marginBottom: 6, fontSize: 13 },
-  rulesText: { color: '#9aa0b2', fontSize: 12, lineHeight: 18 },
+  title: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 38,
+    fontWeight: '900',
+    letterSpacing: 5,
+    textShadowColor: colors.accent,
+  },
+  sectionLabel: {
+    ...text.section,
+    marginBottom: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  diffRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  diffCell: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: colors.bgPanel,
+  },
+  diffCellSel: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+    ...glow(colors.accent, 12, 0.6),
+  },
+  diffName: {
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textMid,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  diffNameSel: {
+    color: colors.accent,
+    textShadowColor: colors.accent,
+    textShadowRadius: 4,
+  },
+  diffTarget: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    color: colors.textLow,
+    marginTop: 4,
+  },
+  diffTargetSel: { color: colors.textMid },
+  diffBest: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    color: colors.textLow,
+    marginTop: 2,
+    letterSpacing: 1,
+  },
+  diffBestSel: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 3 },
+  startWrap: { marginTop: spacing.lg, alignItems: 'stretch' },
+  streakRow: { alignItems: 'center', marginTop: spacing.md, height: 18 },
+  streakText: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    color: colors.warn,
+    letterSpacing: 1.5,
+  },
+  navRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+  },
+  divider: { height: 1, backgroundColor: colors.outlineSoft, marginVertical: spacing.xl },
+  copy: { ...text.body, marginBottom: spacing.md },
+  perksBlock: { marginBottom: spacing.md, gap: spacing.sm },
+  perkRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  perkSymbol: {
+    fontFamily: fonts.mono,
+    fontSize: 26,
+    fontWeight: '900',
+    width: 28,
+    textAlign: 'center',
+    textShadowRadius: 6,
+  },
+  perkText: { flex: 1 },
+  perkName: {
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  perkDesc: {
+    ...text.body,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 1,
+  },
 });
