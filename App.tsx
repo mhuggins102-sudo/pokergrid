@@ -8,26 +8,33 @@ import { useGame } from './src/ui/hooks/useGame';
 import { GameScreen } from './src/ui/screens/GameScreen';
 import { HomeScreen } from './src/ui/screens/HomeScreen';
 import { ResultScreen } from './src/ui/screens/ResultScreen';
+import { RulesScreen } from './src/ui/screens/RulesScreen';
 import { SettingsScreen } from './src/ui/screens/SettingsScreen';
 import { StatsScreen } from './src/ui/screens/StatsScreen';
-import { TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
+import { markTutorialSeen, TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
 import { SettingsProvider } from './src/ui/settings';
 import { StatsProvider } from './src/ui/stats';
 import { colors } from './src/ui/theme';
 
-type Screen = 'home' | 'game' | 'settings' | 'stats' | 'tutorial';
+type Screen = 'home' | 'game' | 'settings' | 'stats' | 'rules' | 'tutorial';
 
 const AppShell = () => {
   const [screen, setScreen] = useState<Screen>('home');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [nonce, setNonce] = useState(0);
 
-  // First-run tutorial.
+  // First-run: pop up the single-page Rules. Mark seen on dismiss so we
+  // don't show it again. The user can re-open from Home → How to Play.
   useEffect(() => {
     tutorialSeen().then(seen => {
-      if (!seen) setScreen('tutorial');
+      if (!seen) setScreen('rules');
     });
   }, []);
+
+  const dismissRules = () => {
+    markTutorialSeen();
+    setScreen('home');
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
@@ -40,7 +47,7 @@ const AppShell = () => {
           }}
           onOpenStats={() => setScreen('stats')}
           onOpenSettings={() => setScreen('settings')}
-          onOpenTutorial={() => setScreen('tutorial')}
+          onOpenRules={() => setScreen('rules')}
         />
       )}
       {screen === 'game' && (
@@ -53,7 +60,15 @@ const AppShell = () => {
       )}
       {screen === 'stats' && <StatsScreen onBack={() => setScreen('home')} />}
       {screen === 'settings' && <SettingsScreen onBack={() => setScreen('home')} />}
-      {screen === 'tutorial' && <TutorialScreen onDone={() => setScreen('home')} />}
+      {screen === 'rules' && (
+        <RulesScreen
+          onBack={dismissRules}
+          onOpenTutorial={() => setScreen('tutorial')}
+        />
+      )}
+      {screen === 'tutorial' && (
+        <TutorialScreen onDone={() => setScreen('rules')} />
+      )}
     </SafeAreaView>
   );
 };

@@ -17,7 +17,7 @@ interface Props {
   onStart: (d: Difficulty) => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
-  onOpenTutorial: () => void;
+  onOpenRules: () => void;
 }
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -43,7 +43,7 @@ export const HomeScreen = ({
   onStart,
   onOpenStats,
   onOpenSettings,
-  onOpenTutorial,
+  onOpenRules,
 }: Props) => {
   const [diff, setDiff] = React.useState<Difficulty>('medium');
   const { stats } = useStats();
@@ -97,7 +97,7 @@ export const HomeScreen = ({
       </View>
 
       <View style={styles.navRow}>
-        <NeonButton label="How to Play" variant="primary" size="sm" onPress={onOpenTutorial} />
+        <NeonButton label="How to Play" variant="primary" size="sm" onPress={onOpenRules} />
         <NeonButton label="Stats" variant="secondary" size="sm" onPress={onOpenStats} />
         <NeonButton label="Settings" variant="secondary" size="sm" onPress={onOpenSettings} />
       </View>
