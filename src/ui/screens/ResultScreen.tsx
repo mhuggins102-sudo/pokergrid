@@ -31,8 +31,8 @@ const HAND_LABEL: Record<HandRank, string> = {
 export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const report = useMemo(
-    () => scoreGrid(state.grid, state.bonusCards),
-    [state.grid, state.bonusCards]
+    () => scoreGrid(state.grid, state.bonusCards, { deckRemaining: state.deck.length }),
+    [state.grid, state.bonusCards, state.deck.length]
   );
   const {
     lines: scoredLines,

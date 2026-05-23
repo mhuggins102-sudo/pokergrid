@@ -3,6 +3,7 @@ import {
   BonusCard,
   BONUS_DECK_POOL,
   LineContext,
+  universalEffectFor,
 } from '../src/game/bonusCards';
 import { emptyGrid, Grid, GRID_SLOTS } from '../src/game/grid';
 import { HAND_BASE_VALUE, scoreGrid } from '../src/game/scoring';
@@ -135,6 +136,54 @@ describe('incomplete-line penalty', () => {
     expect(row0.total).toBe(-25);
     expect(col0.total).toBe(-25);
     expect(report.incompletePenalty).toBe(-50);
+  });
+});
+
+describe('universal-effect detection (scoring chart)', () => {
+  test('suit-density cards are NOT classified as universal', () => {
+    const sd = ['suit-density-h', 'suit-density-s', 'suit-density-d', 'suit-density-c'];
+    for (const id of sd) {
+      const bc = findCard(id);
+      // Across all hand types, suit-density should always come back as conditional.
+      const hands = ['PAIR', 'FLUSH', 'STRAIGHT', 'FULL_HOUSE'] as const;
+      for (const h of hands) {
+        expect(universalEffectFor(bc, h)).toBeNull();
+      }
+    }
+  });
+
+  test('hand-type bonus cards ARE universal for their matching hand', () => {
+    const pair4 = findCard('hand-pair-x4');
+    const eff = universalEffectFor(pair4, 'PAIR');
+    expect(eff?.multiplier).toBe(4);
+    expect(universalEffectFor(pair4, 'FLUSH')).toBeNull();
+  });
+});
+
+describe('deck-bank +10/card bonus', () => {
+  test('adds 10 × deckRemaining flat to the final score', () => {
+    const deckBank = findCard('deck-bank-plus10');
+    // Use a fully-filled grid scoring exactly 0 lines → subtotal 0.
+    const g = emptyGrid();
+    for (let i = 0; i < 25; i++) {
+      // High-card-only lines (varied ranks/suits, no pairs).
+      const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+      const suits: Suit[] = ['H', 'S', 'D', 'C'];
+      g[i] = C(ranks[i % ranks.length], suits[i % suits.length]);
+    }
+    const noDeck = scoreGrid(g, [deckBank], { deckRemaining: 0 }).total;
+    const withDeck = scoreGrid(g, [deckBank], { deckRemaining: 7 }).total;
+    expect(withDeck - noDeck).toBe(70);
+  });
+});
+
+describe('live-score ignore-penalty option', () => {
+  test('with ignoreIncompletePenalty, incomplete lines score 0', () => {
+    const empty = emptyGrid();
+    const live = scoreGrid(empty, [], { ignoreIncompletePenalty: true });
+    expect(live.total).toBe(0);
+    const final = scoreGrid(empty, []);
+    expect(final.total).toBe(-250);
   });
 });
 

@@ -159,6 +159,40 @@ describe('♠ Slide (spade) — free destination in path', () => {
     expect(next[18]).toBeNull();
   });
 
+  test('clicking the back of a chain slides the entire chain (R5 of an R2-R5 column)', () => {
+    // Column 3 (C4 in user-facing labels): R2..R5 filled, R1 empty.
+    let g = emptyGrid();
+    const cards = [C('A', 'H'), C('K', 'C'), C('Q', 'D'), C('J', 'S')];
+    g = placeAt(g, 8, cards[0]);  // R2
+    g = placeAt(g, 13, cards[1]); // R3
+    g = placeAt(g, 18, cards[2]); // R4
+    g = placeAt(g, 23, cards[3]); // R5
+    const next = executeSlide(g, 23, 'up', 1);
+    // All four shift up by 1 row; R5 becomes empty.
+    expect(next[3]).toEqual(cards[0]);
+    expect(next[8]).toEqual(cards[1]);
+    expect(next[13]).toEqual(cards[2]);
+    expect(next[18]).toEqual(cards[3]);
+    expect(next[23]).toBeNull();
+  });
+
+  test('clicking the middle of a chain only slides cards from that point forward', () => {
+    // Same column, R2-R5 filled. Click R4 (slot 18), slide up by 1.
+    // Only R2/R3/R4 should move; R5 stays put.
+    let g = emptyGrid();
+    const cards = [C('A', 'H'), C('K', 'C'), C('Q', 'D'), C('J', 'S')];
+    g = placeAt(g, 8, cards[0]);
+    g = placeAt(g, 13, cards[1]);
+    g = placeAt(g, 18, cards[2]);
+    g = placeAt(g, 23, cards[3]);
+    const next = executeSlide(g, 18, 'up', 1);
+    expect(next[3]).toEqual(cards[0]);  // R2's card moved to R1
+    expect(next[8]).toEqual(cards[1]);  // R3's card moved to R2
+    expect(next[13]).toEqual(cards[2]); // R4's card moved to R3
+    expect(next[18]).toBeNull();        // R4 now empty
+    expect(next[23]).toEqual(cards[3]); // R5 untouched
+  });
+
   test('group slide max distance respects walls and blockers', () => {
     let g = emptyGrid();
     // Vertical chain at C2 R2-R3 (slots 6, 11). R1=1, R4=16, R5=21 are empty.

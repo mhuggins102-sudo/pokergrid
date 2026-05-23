@@ -120,45 +120,32 @@ const STEP: Record<Direction, [number, number]> = {
   right: [0, 1],
 };
 
-// Maximal contiguous filled run in `slot`'s column that includes `slot`.
-// Returned as slot indices ordered top → bottom. Returns empty when slot empty.
-export const columnChain = (g: Grid, slot: number): number[] => {
-  if (g[slot] === null) return [];
-  const c = colOf(slot);
-  const startR = rowOf(slot);
-  let top = startR;
-  while (top - 1 >= 0 && g[(top - 1) * GRID_SIZE + c] !== null) top--;
-  let bottom = startR;
-  while (bottom + 1 < GRID_SIZE && g[(bottom + 1) * GRID_SIZE + c] !== null) bottom++;
-  const out: number[] = [];
-  for (let r = top; r <= bottom; r++) out.push(r * GRID_SIZE + c);
-  return out;
-};
-
-// Maximal contiguous filled run in `slot`'s row that includes `slot`.
-// Returned as slot indices ordered left → right.
-export const rowChain = (g: Grid, slot: number): number[] => {
-  if (g[slot] === null) return [];
-  const r = rowOf(slot);
-  const startC = colOf(slot);
-  let left = startC;
-  while (left - 1 >= 0 && g[r * GRID_SIZE + (left - 1)] !== null) left--;
-  let right = startC;
-  while (right + 1 < GRID_SIZE && g[r * GRID_SIZE + (right + 1)] !== null) right++;
-  const out: number[] = [];
-  for (let c = left; c <= right; c++) out.push(r * GRID_SIZE + c);
-  return out;
-};
-
-// The chain that participates in a slide of `slot` in `direction`.
-// up/down → columnChain; left/right → rowChain.
+// The chain that participates in a slide starting at `slot` in `direction`:
+// the selected card plus the contiguous filled cards in front of it (in the
+// direction of motion). The card BEHIND the selected card stays put.
+//
+// Examples (column with R2/R3/R4/R5 filled, R1 empty):
+//   slideChain(slot=R5, 'up')   → {R5, R4, R3, R2}   (all four slide)
+//   slideChain(slot=R4, 'up')   → {R4, R3, R2}       (R5 stays put)
+//   slideChain(slot=R3, 'down') → {R3, R4, R5}       (R2 stays put)
 export const slideChain = (g: Grid, slot: number, direction: Direction): number[] => {
-  if (direction === 'up' || direction === 'down') return columnChain(g, slot);
-  return rowChain(g, slot);
+  if (g[slot] === null) return [];
+  const [dr, dc] = STEP[direction];
+  const out: number[] = [slot];
+  let r = rowOf(slot);
+  let c = colOf(slot);
+  while (true) {
+    r += dr;
+    c += dc;
+    if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) break;
+    const idx = r * GRID_SIZE + c;
+    if (g[idx] === null) break;
+    out.push(idx);
+  }
+  return out;
 };
 
-// How far the chain containing `slot` can slide in `direction`.
-// Returns the max integer step count (0 = can't slide).
+// How far the chain at `slot` can slide in `direction`. 0 = blocked.
 export const slideChainMaxDistance = (
   g: Grid,
   slot: number,
@@ -167,13 +154,8 @@ export const slideChainMaxDistance = (
   const chain = slideChain(g, slot, direction);
   if (chain.length === 0) return 0;
   const [dr, dc] = STEP[direction];
-  // Leading edge is the chain endpoint in the direction of motion.
-  let leadIdx: number;
-  if (direction === 'up') leadIdx = chain[0];
-  else if (direction === 'down') leadIdx = chain[chain.length - 1];
-  else if (direction === 'left') leadIdx = chain[0];
-  else leadIdx = chain[chain.length - 1];
-
+  // Leading edge is always the last element of the chain.
+  const leadIdx = chain[chain.length - 1];
   let r = rowOf(leadIdx);
   let c = colOf(leadIdx);
   let dist = 0;
@@ -193,8 +175,7 @@ export const slideTargets = (g: Grid, slot: number, direction: Direction): numbe
   if (max === 0) return [];
   const chain = slideChain(g, slot, direction);
   const [dr, dc] = STEP[direction];
-  const leadIdx =
-    direction === 'up' || direction === 'left' ? chain[0] : chain[chain.length - 1];
+  const leadIdx = chain[chain.length - 1];
   const out: number[] = [];
   let r = rowOf(leadIdx);
   let c = colOf(leadIdx);

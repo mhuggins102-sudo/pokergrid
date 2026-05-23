@@ -40,10 +40,22 @@ export interface ScoreReport {
   total: number; // final score: ceil(subtotal * gridMultiplier) + gridFlat
 }
 
+export interface ScoreOptions {
+  // Cards remaining in the playing-card deck — used by grid-level bonus cards
+  // (e.g. "+10 per deck card").
+  deckRemaining?: number;
+  // For mid-game live previews: treat incomplete lines as 0 (not -25). The
+  // penalty only matters at game end; showing it live can be misleading.
+  ignoreIncompletePenalty?: boolean;
+}
+
 export const scoreGrid = (
   grid: Grid,
-  bonusCards: readonly BonusCard[]
+  bonusCards: readonly BonusCard[],
+  options: ScoreOptions = {}
 ): ScoreReport => {
+  const deckRemaining = options.deckRemaining ?? 0;
+  const ignorePenalty = options.ignoreIncompletePenalty ?? false;
   const scored: ScoredLine[] = lines(grid).map(l => {
     const filled = l.cards.filter(c => c !== null).length;
     const incomplete = filled < 5;
@@ -54,14 +66,8 @@ export const scoreGrid = (
       hand: evaluateLine(l.cards),
     };
     if (!ctx.hand) {
-      return {
-        ...ctx,
-        base: 0,
-        multiplier: 1,
-        flat: 0,
-        total: incomplete ? INCOMPLETE_LINE_PENALTY : 0,
-        incomplete,
-      };
+      const total = incomplete && !ignorePenalty ? INCOMPLETE_LINE_PENALTY : 0;
+      return { ...ctx, base: 0, multiplier: 1, flat: 0, total, incomplete };
     }
     const base = HAND_BASE_VALUE[ctx.hand];
     const { multiplier, flat } = applyLineEffects(ctx, bonusCards);
@@ -73,7 +79,7 @@ export const scoreGrid = (
     .filter(s => s.incomplete)
     .reduce((sum, s) => sum + s.total, 0);
   const { multiplier: gridMultiplier, flat: gridFlat } = applyGridEffects(
-    { grid },
+    { grid, deckRemaining },
     bonusCards
   );
   const total = Math.ceil(subtotal * gridMultiplier) + gridFlat;

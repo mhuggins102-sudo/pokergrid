@@ -35,8 +35,12 @@ export const GameScreen = ({ state, dispatch }: Props) => {
   }, [state.phase.kind]);
 
   const liveScore = useMemo(
-    () => scoreGrid(state.grid, state.bonusCards).total,
-    [state.grid, state.bonusCards]
+    () =>
+      scoreGrid(state.grid, state.bonusCards, {
+        deckRemaining: state.deck.length,
+        ignoreIncompletePenalty: true,
+      }).total,
+    [state.grid, state.bonusCards, state.deck.length]
   );
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);

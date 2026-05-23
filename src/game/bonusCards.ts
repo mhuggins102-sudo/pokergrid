@@ -24,6 +24,8 @@ export interface LineEffect {
 
 export interface GridSnapshot {
   grid: Grid;
+  // Cards remaining in the playing-card deck at scoring time.
+  deckRemaining: number;
 }
 
 export interface GridEffect {
@@ -227,6 +229,13 @@ const cozyJoker: BonusCard = {
   },
 };
 
+const deckBank: BonusCard = {
+  id: 'deck-bank-plus10',
+  name: '+10 / deck card',
+  description: '+10 flat to the final score for every playing card remaining in the deck at game end.',
+  gridEffect: ({ deckRemaining }) => ({ totalFlatAdd: deckRemaining * 10 }),
+};
+
 // ---------- The 30-card pool ----------
 
 export const BONUS_DECK_POOL: BonusCard[] = [
@@ -264,11 +273,12 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   royalTouch,
   spiralCore,
 
-  // Grid-level (4)
+  // Grid-level (5)
   cleanBorder,
   monochromeBorder,
   rainbowCorners,
   cozyJoker,
+  deckBank,
 ];
 
 export const BONUS_HAND_LIMIT = 3;
@@ -307,19 +317,27 @@ export const applyGridEffects = (
 
 // ---------- Universal-effect detection (for scoring reference) ----------
 
+// Probe cards used to detect "universal" line effects (cards whose effect is
+// the same on every line). Chosen so that every suit appears a different
+// number of times between A and B — that way per-suit-density cards yield
+// different multipliers across probes and are correctly classified as
+// conditional (not universal).
+//
+//        A: 2H 3H 5D 7S JC  → H:2 D:1 S:1 C:1
+//        B: 4H 5H 6H 7C 8C  → H:3 D:0 S:0 C:2
 const PROBE_CARDS_A: Card[] = [
-  { kind: 'standard', rank: '2', suit: 'C' },
+  { kind: 'standard', rank: '2', suit: 'H' },
+  { kind: 'standard', rank: '3', suit: 'H' },
   { kind: 'standard', rank: '5', suit: 'D' },
-  { kind: 'standard', rank: '8', suit: 'S' },
+  { kind: 'standard', rank: '7', suit: 'S' },
   { kind: 'standard', rank: 'J', suit: 'C' },
-  { kind: 'standard', rank: 'K', suit: 'D' },
 ];
 const PROBE_CARDS_B: Card[] = [
-  { kind: 'standard', rank: '3', suit: 'S' },
+  { kind: 'standard', rank: '4', suit: 'H' },
+  { kind: 'standard', rank: '5', suit: 'H' },
+  { kind: 'standard', rank: '6', suit: 'H' },
   { kind: 'standard', rank: '7', suit: 'C' },
-  { kind: 'standard', rank: '9', suit: 'D' },
-  { kind: 'standard', rank: '10', suit: 'S' },
-  { kind: 'standard', rank: 'Q', suit: 'C' },
+  { kind: 'standard', rank: '8', suit: 'C' },
 ];
 
 export const universalEffectFor = (
