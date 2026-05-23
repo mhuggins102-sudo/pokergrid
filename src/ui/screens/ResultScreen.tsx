@@ -93,8 +93,11 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
   const recorded = useRef(false);
 
   const report = useMemo(
-    () => scoreGrid(state.grid, state.bonusCards, { deckRemaining: state.deck.length }),
-    [state.grid, state.bonusCards, state.deck.length]
+    () => scoreGrid(state.grid, state.bonusCards, {
+      deckRemaining: state.deck.length,
+      trash: state.trash,
+    }),
+    [state.grid, state.bonusCards, state.deck.length, state.trash]
   );
   const {
     lines: scoredLines,

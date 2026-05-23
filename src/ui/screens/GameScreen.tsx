@@ -102,8 +102,9 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
       scoreGrid(state.grid, state.bonusCards, {
         deckRemaining: state.deck.length,
         ignoreIncompletePenalty: true,
+        trash: state.trash,
       }).total,
-    [state.grid, state.bonusCards, state.deck.length]
+    [state.grid, state.bonusCards, state.deck.length, state.trash]
   );
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);

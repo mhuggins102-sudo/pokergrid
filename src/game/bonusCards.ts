@@ -26,6 +26,13 @@ export interface GridSnapshot {
   grid: Grid;
   // Cards remaining in the playing-card deck at scoring time.
   deckRemaining: number;
+  // The trash pile — playing cards that were either spent on a suit perk,
+  // discarded, or destroyed. Used by cards like "Trash Joker".
+  trash: readonly Card[];
+  // Per-line summaries (kind, index, hand). Computed once by the scorer and
+  // passed in so grid-effect cards (e.g. "No Flushes") can inspect what
+  // hands appeared on the board without re-evaluating.
+  lines: readonly LineContext[];
 }
 
 export interface GridEffect {
@@ -138,13 +145,26 @@ const rainbowLine: BonusCard = {
 };
 
 const jokerLine: BonusCard = {
-  id: 'joker-line-x2',
-  name: 'Joker line ×2',
-  description: 'The joker\'s row and column each score ×2.',
+  id: 'joker-line-x1_5',
+  name: 'Joker line ×1.5',
+  description: 'The joker\'s row and column each score ×1.5.',
   lineEffect: line => {
     if (!line.hand) return {};
     const hasJoker = line.cards.some(c => c !== null && isJoker(c));
-    return hasJoker ? { multiplier: 2 } : {};
+    return hasJoker ? { multiplier: 1.5 } : {};
+  },
+};
+
+const outerEdge: BonusCard = {
+  id: 'outer-edge-x1_25',
+  name: 'Outer Edge ×1.25',
+  description: 'Row 1, Row 5, Col 1, and Col 5 each score ×1.25.',
+  lineEffect: line => {
+    if (!line.hand) return {};
+    const onEdge =
+      (line.kind === 'row' && (line.index === 0 || line.index === 4)) ||
+      (line.kind === 'col' && (line.index === 0 || line.index === 4));
+    return onEdge ? { multiplier: 1.25 } : {};
   },
 };
 
@@ -178,41 +198,41 @@ const isFace = (c: Card): boolean =>
   !isJoker(c) && (c.rank === 'J' || c.rank === 'Q' || c.rank === 'K');
 
 const cleanBorder: BonusCard = {
-  id: 'clean-border-x1_2',
-  name: 'Clean border ×1.2',
-  description: 'No face cards on the 16 border slots: final score ×1.2.',
+  id: 'clean-border-x1_5',
+  name: 'Clean border ×1.5',
+  description: 'No face cards on the 16 border slots: final score ×1.5.',
   gridEffect: ({ grid }) => {
     const anyFace = BORDER_SLOTS.some(i => {
       const c = grid[i];
       return c !== null && isFace(c);
     });
-    return anyFace ? {} : { totalMultiplier: 1.2 };
+    return anyFace ? {} : { totalMultiplier: 1.5 };
   },
 };
 
 const monochromeBorder: BonusCard = {
-  id: 'monochrome-border-x1_25',
-  name: 'Monochrome border ×1.25',
-  description: 'All border cards share a color (all red or all black): final score ×1.25.',
+  id: 'monochrome-border-x1_5',
+  name: 'Monochrome border ×1.5',
+  description: 'All border cards share a color (all red or all black): final score ×1.5.',
   gridEffect: ({ grid }) => {
     const cards = BORDER_SLOTS.map(i => grid[i]).filter((c): c is Card => c !== null && !isJoker(c));
     if (cards.length === 0) return {};
     const isRed = (c: Card) => !isJoker(c) && (c.suit === 'H' || c.suit === 'D');
     const allRed = cards.every(isRed);
     const allBlack = cards.every(c => !isRed(c));
-    return allRed || allBlack ? { totalMultiplier: 1.25 } : {};
+    return allRed || allBlack ? { totalMultiplier: 1.5 } : {};
   },
 };
 
 const rainbowCorners: BonusCard = {
-  id: 'rainbow-corners-x1_2',
-  name: 'Rainbow corners ×1.2',
-  description: 'The 4 corner slots are 4 distinct suits: final score ×1.2.',
+  id: 'rainbow-corners-x1_25',
+  name: 'Rainbow corners ×1.25',
+  description: 'The 4 corner slots are 4 distinct suits: final score ×1.25.',
   gridEffect: ({ grid }) => {
     const cards = CORNER_SLOTS.map(i => grid[i]);
     if (cards.some(c => !c || isJoker(c))) return {};
     const suits = new Set(cards.map(c => (c as any).suit as Suit));
-    return suits.size === 4 ? { totalMultiplier: 1.2 } : {};
+    return suits.size === 4 ? { totalMultiplier: 1.25 } : {};
   },
 };
 
@@ -229,26 +249,64 @@ const cozyJoker: BonusCard = {
   },
 };
 
+// Compounds 1.05 per playing card remaining in the deck at game end. Effective
+// multiplier is 1.05^deckRemaining, so 10 left ≈ 1.63×, 20 ≈ 2.65×.
 const deckBank: BonusCard = {
-  id: 'deck-bank-plus10',
-  name: '+10 / deck card',
-  description: '+10 flat to the final score for every playing card remaining in the deck at game end.',
-  gridEffect: ({ deckRemaining }) => ({ totalFlatAdd: deckRemaining * 10 }),
+  id: 'deck-bank-x1_05',
+  name: '×1.05 / deck card',
+  description: 'Each playing card remaining in the deck at game end multiplies the final score by 1.05.',
+  gridEffect: ({ deckRemaining }) => ({
+    totalMultiplier: deckRemaining > 0 ? Math.pow(1.05, deckRemaining) : 1,
+  }),
 };
 
-// ---------- The 30-card pool ----------
+const noFlushes: BonusCard = {
+  id: 'no-flushes-x1_25',
+  name: 'No Flushes ×1.25',
+  description: 'No line scores Flush, Straight Flush, or Royal Flush: final score ×1.25.',
+  gridEffect: ({ lines }) => {
+    const anyFlush = lines.some(l =>
+      l.hand === 'FLUSH' || l.hand === 'STRAIGHT_FLUSH' || l.hand === 'ROYAL_FLUSH'
+    );
+    return anyFlush ? {} : { totalMultiplier: 1.25 };
+  },
+};
+
+const noStraights: BonusCard = {
+  id: 'no-straights-x1_25',
+  name: 'No Straights ×1.25',
+  description: 'No line scores Straight, Straight Flush, or Royal Flush: final score ×1.25.',
+  gridEffect: ({ lines }) => {
+    const anyStraight = lines.some(l =>
+      l.hand === 'STRAIGHT' || l.hand === 'STRAIGHT_FLUSH' || l.hand === 'ROYAL_FLUSH'
+    );
+    return anyStraight ? {} : { totalMultiplier: 1.25 };
+  },
+};
+
+const trashJoker: BonusCard = {
+  id: 'trash-joker-x1_25',
+  name: 'Trash Joker ×1.25',
+  description: 'The joker was trashed during the game: final score ×1.25.',
+  gridEffect: ({ trash }) => {
+    const jokerTrashed = trash.some(c => isJoker(c));
+    return jokerTrashed ? { totalMultiplier: 1.25 } : {};
+  },
+};
+
+// ---------- The 35-card pool ----------
 
 export const BONUS_DECK_POOL: BonusCard[] = [
-  // Hand-type (8) — literal multipliers. Straight+ are capped at 1.5 so the
-  // big hands aren't trivially doubled.
+  // Hand-type (8) — Pair-through-Three of a Kind are big multipliers; the
+  // higher-ranked hands are capped at ×1.5 so they don't trivially explode.
   handBoost('PAIR', 4),
   handBoost('TWO_PAIR', 3),
   handBoost('THREE_OF_A_KIND', 3),
-  handBoost('STRAIGHT', 1.5),
+  handBoost('STRAIGHT', 2),
   handBoost('FLUSH', 1.5),
   handBoost('FULL_HOUSE', 1.5),
   handBoost('FOUR_OF_A_KIND', 1.5),
-  handBoost('FIVE_OF_A_KIND', 1.5),
+  handBoost('STRAIGHT_FLUSH', 1.5),
 
   // Rows + Cols (10) — literal ×2
   rowBoost(0, 2),
@@ -268,18 +326,22 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   suitDensity('D'),
   suitDensity('C'),
 
-  // Novel per-line (4)
+  // Per-line conditional (5)
   rainbowLine,
   jokerLine,
   royalTouch,
   spiralCore,
+  outerEdge,
 
-  // Grid-level (5)
+  // Grid-wide (8)
   cleanBorder,
   monochromeBorder,
   rainbowCorners,
   cozyJoker,
   deckBank,
+  noFlushes,
+  noStraights,
+  trashJoker,
 ];
 
 export const BONUS_HAND_LIMIT = 3;
@@ -346,9 +408,12 @@ export const universalEffectFor = (
   hand: HandRank
 ): LineEffect | null => {
   if (!bc.lineEffect) return null;
+  // Variants cover edge AND non-edge line indices so cards keyed on
+  // outer-edge position (Outer Edge, Spiral core, Row N, Col N) are
+  // correctly classified as conditional rather than universal.
   const variants: LineContext[] = [
     { kind: 'row', index: 0, cards: PROBE_CARDS_A, hand },
-    { kind: 'row', index: 4, cards: PROBE_CARDS_B, hand },
+    { kind: 'row', index: 2, cards: PROBE_CARDS_B, hand },
     { kind: 'col', index: 0, cards: PROBE_CARDS_B, hand },
     { kind: 'col', index: 4, cards: PROBE_CARDS_A, hand },
   ];

@@ -1,3 +1,4 @@
+import { Card } from './cards';
 import {
   applyGridEffects,
   applyLineEffects,
@@ -42,11 +43,14 @@ export interface ScoreReport {
 
 export interface ScoreOptions {
   // Cards remaining in the playing-card deck — used by grid-level bonus cards
-  // (e.g. "+10 per deck card").
+  // (e.g. "×1.05 per deck card").
   deckRemaining?: number;
   // For mid-game live previews: treat incomplete lines as 0 (not -25). The
   // penalty only matters at game end; showing it live can be misleading.
   ignoreIncompletePenalty?: boolean;
+  // Cards in the trash pile — used by cards like "Trash Joker" that activate
+  // based on what's been thrown away.
+  trash?: readonly Card[];
 }
 
 export const scoreGrid = (
@@ -56,6 +60,7 @@ export const scoreGrid = (
 ): ScoreReport => {
   const deckRemaining = options.deckRemaining ?? 0;
   const ignorePenalty = options.ignoreIncompletePenalty ?? false;
+  const trash = options.trash ?? [];
   const scored: ScoredLine[] = lines(grid).map(l => {
     const filled = l.cards.filter(c => c !== null).length;
     const incomplete = filled < 5;
@@ -79,7 +84,7 @@ export const scoreGrid = (
     .filter(s => s.incomplete)
     .reduce((sum, s) => sum + s.total, 0);
   const { multiplier: gridMultiplier, flat: gridFlat } = applyGridEffects(
-    { grid, deckRemaining },
+    { grid, deckRemaining, trash, lines: scored },
     bonusCards
   );
   const total = Math.ceil(subtotal * gridMultiplier) + gridFlat;

@@ -160,20 +160,97 @@ describe('universal-effect detection (scoring chart)', () => {
   });
 });
 
-describe('deck-bank +10/card bonus', () => {
-  test('adds 10 × deckRemaining flat to the final score', () => {
-    const deckBank = findCard('deck-bank-plus10');
-    // Use a fully-filled grid scoring exactly 0 lines → subtotal 0.
+describe('deck-bank ×1.05/card bonus', () => {
+  test('multiplies the final total by 1.05^deckRemaining', () => {
+    const deckBank = findCard('deck-bank-x1_05');
+    // Grid with row 0 = Pair, rest filled with non-pairing cards.
     const g = emptyGrid();
+    const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const suitCycle: Suit[] = ['H', 'C', 'D', 'S'];
     for (let i = 0; i < 25; i++) {
-      // High-card-only lines (varied ranks/suits, no pairs).
-      const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-      const suits: Suit[] = ['H', 'S', 'D', 'C'];
-      g[i] = C(ranks[i % ranks.length], suits[i % suits.length]);
+      g[i] = C(ranks2to10[i % ranks2to10.length], suitCycle[i % suitCycle.length]);
     }
-    const noDeck = scoreGrid(g, [deckBank], { deckRemaining: 0 }).total;
-    const withDeck = scoreGrid(g, [deckBank], { deckRemaining: 7 }).total;
-    expect(withDeck - noDeck).toBe(70);
+    // Pair on row 0 — well-defined subtotal.
+    g[0] = C('2', 'H');
+    g[1] = C('2', 'C');
+    g[2] = C('5', 'D');
+    g[3] = C('8', 'S');
+    g[4] = C('10', 'H');
+
+    const baseline = scoreGrid(g, [deckBank], { deckRemaining: 0 }).total;
+    const ten = scoreGrid(g, [deckBank], { deckRemaining: 10 }).total;
+    // ceil(baseline × 1.05^10), since the card contributes only the multiplier.
+    expect(ten).toBe(Math.ceil(baseline * Math.pow(1.05, 10)));
+    // Zero deck cards = no effect.
+    const zero = scoreGrid(g, [deckBank], { deckRemaining: 0 }).total;
+    expect(zero).toBe(baseline);
+  });
+});
+
+describe('new grid-wide bonuses', () => {
+  const filledNonPair = (): Grid => {
+    const g = emptyGrid();
+    const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const suitCycle: Suit[] = ['H', 'C', 'D', 'S'];
+    for (let i = 0; i < 25; i++) {
+      g[i] = C(ranks2to10[i % ranks2to10.length], suitCycle[i % suitCycle.length]);
+    }
+    // Ensure row 0 is a Pair so subtotal > 0.
+    g[0] = C('2', 'H');
+    g[1] = C('2', 'C');
+    g[2] = C('5', 'D');
+    g[3] = C('8', 'S');
+    g[4] = C('10', 'H');
+    return g;
+  };
+
+  test('Trash Joker activates only when the joker is in the trash', () => {
+    const card = findCard('trash-joker-x1_25');
+    const g = filledNonPair();
+    const baseline = scoreGrid(g, [card]).total;
+    const withJoker = scoreGrid(g, [card], { trash: [{ kind: 'joker' }] }).total;
+    expect(withJoker).toBe(Math.ceil(baseline * 1.25));
+  });
+
+  test('No Flushes activates only when no flush of any kind appears', () => {
+    const card = findCard('no-flushes-x1_25');
+    // First grid: contains a flush in row 0 → bonus should NOT activate.
+    const flushGrid = emptyGrid();
+    flushGrid[0] = C('2', 'H');
+    flushGrid[1] = C('5', 'H');
+    flushGrid[2] = C('8', 'H');
+    flushGrid[3] = C('10', 'H');
+    flushGrid[4] = C('K', 'H');
+    // Fill rest non-flush
+    const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const suits: Suit[] = ['C', 'D', 'S'];
+    for (let i = 5; i < 25; i++) {
+      flushGrid[i] = C(ranks[i % ranks.length], suits[i % suits.length]);
+    }
+    const flushBase = scoreGrid(flushGrid, []).total;
+    const flushWith = scoreGrid(flushGrid, [card]).total;
+    expect(flushWith).toBe(flushBase); // unchanged
+
+    // Second grid: row 0 is a Pair (no flush anywhere) → bonus DOES activate.
+    const noFlushGrid = filledNonPair();
+    const baseNoFlush = scoreGrid(noFlushGrid, []).total;
+    const withCard = scoreGrid(noFlushGrid, [card]).total;
+    expect(withCard).toBe(Math.ceil(baseNoFlush * 1.25));
+  });
+
+  test('Outer Edge multiplies only edge lines (R1/R5/C1/C5)', () => {
+    const card = findCard('outer-edge-x1_25');
+    const g = emptyGrid();
+    // Row 0 = Pair, Row 2 = Pair (both 5-card lines so scoring is comparable).
+    const r0 = [C('2','H'), C('2','C'), C('5','D'), C('8','S'), C('K','H')];
+    const r2 = [C('3','H'), C('3','C'), C('5','D'), C('8','S'), C('K','H')];
+    for (let i = 0; i < 5; i++) g[i] = r0[i];
+    for (let i = 0; i < 5; i++) g[10 + i] = r2[i];
+    const report = scoreGrid(g, [card]);
+    const row0 = report.lines.find(l => l.kind === 'row' && l.index === 0)!;
+    const row2 = report.lines.find(l => l.kind === 'row' && l.index === 2)!;
+    expect(row0.multiplier).toBe(1.25);
+    expect(row2.multiplier).toBe(1);
   });
 });
 
@@ -188,8 +265,8 @@ describe('live-score ignore-penalty option', () => {
 });
 
 describe('grid-level achievements', () => {
-  test('Clean border ×1.2 applies only when no face cards on the border', () => {
-    const clean = findCard('clean-border-x1_2');
+  test('Clean border ×1.5 applies only when no face cards on the border', () => {
+    const clean = findCard('clean-border-x1_5');
     // Fill the grid completely with non-face cards so only the border test matters.
     const g: Grid = emptyGrid();
     const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
@@ -206,7 +283,7 @@ describe('grid-level achievements', () => {
 
     const noBonus = scoreGrid(g, []).total;
     const withClean = scoreGrid(g, [clean]).total;
-    expect(withClean).toBeCloseTo(Math.ceil(noBonus * 1.2));
+    expect(withClean).toBe(Math.ceil(noBonus * 1.5));
 
     // Place a face card on the border → bonus disabled.
     g[20] = C('K', 'C');

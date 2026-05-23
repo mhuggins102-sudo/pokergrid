@@ -258,12 +258,12 @@ const BonusVisual = () => (
         <Text style={demoStyles.bonusDesc}>Multiplies row 3's total by 2.</Text>
       </View>
       <View style={[demoStyles.bonusChip, glow(colors.warn, 8, 0.45)]}>
-        <Text style={demoStyles.bonusName}>+10 / deck</Text>
-        <Text style={demoStyles.bonusDesc}>+10 flat per deck card remaining at game end.</Text>
+        <Text style={demoStyles.bonusName}>×1.05 / deck card</Text>
+        <Text style={demoStyles.bonusDesc}>Compounds 1.05 per deck card remaining at game end.</Text>
       </View>
     </View>
     <Caption>
-      The bonus deck has 31 unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
+      The bonus deck has 35 unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
       to 3; at the cap, ♣ forces a swap.
     </Caption>
     <Text style={demoStyles.subsection}>What kinds?</Text>
@@ -444,12 +444,17 @@ const AchievementsVisual = () => {
     <View style={demoStyles.wrap}>
       <GridView grid={grid} />
       <Caption>
-        Five grid-wide cards multiply the final total: <Text style={{ color: colors.success }}>Clean
-        border ×1.2</Text> (no face cards on the perimeter — satisfied above),{' '}
-        <Text style={{ color: colors.success }}>Monochrome border ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Rainbow corners ×1.2</Text> (4 distinct suits),{' '}
-        <Text style={{ color: colors.success }}>Cozy joker ×1.15</Text> (joker inside the 3×3
-        center), and <Text style={{ color: colors.warn }}>+10 / deck card</Text>.
+        Eight grid-wide cards multiply the final total. Some reward grid shape —{' '}
+        <Text style={{ color: colors.success }}>Clean border ×1.5</Text> (no face cards on the
+        perimeter — satisfied above),{' '}
+        <Text style={{ color: colors.success }}>Monochrome border ×1.5</Text>,{' '}
+        <Text style={{ color: colors.success }}>Rainbow corners ×1.25</Text>,{' '}
+        <Text style={{ color: colors.success }}>Cozy joker ×1.15</Text>. Others reward
+        restraint — <Text style={{ color: colors.success }}>No Flushes ×1.25</Text>,{' '}
+        <Text style={{ color: colors.success }}>No Straights ×1.25</Text>,{' '}
+        <Text style={{ color: colors.success }}>Trash Joker ×1.25</Text>. And{' '}
+        <Text style={{ color: colors.warn }}>×1.05 / deck card</Text> compounds with cards
+        left in the deck.
       </Caption>
     </View>
   );
