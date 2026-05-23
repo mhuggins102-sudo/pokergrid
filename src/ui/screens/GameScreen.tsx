@@ -153,6 +153,14 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
       .filter((c): c is { card: Card; from: number; to: number } => c.card !== null);
     haptic('medium');
     playSound('slide');
+    // The drag path skips the explicit "select source" tap, so when we arrive
+    // here the phase is still awaiting-target-slide-source — the reducer
+    // would reject the RESOLVE_SLIDE. Move into the dest phase first; React
+    // batches both dispatches and the queued RESOLVE_SLIDE fires once the
+    // animation timer expires, with the phase already transitioned.
+    if (state.phase.kind === 'awaiting-target-slide-source') {
+      dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: from });
+    }
     performAnimated(
       { kind: 'slide', cards },
       { type: 'RESOLVE_SLIDE', from, direction, distance }
