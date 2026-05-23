@@ -5,30 +5,20 @@ import { Difficulty } from '../../game/rules';
 interface GameApi {
   state: GameState;
   dispatch: (a: Action) => void;
-  reset: (difficulty: Difficulty) => void;
 }
 
-type Reducer = (s: GameState, a: Action | { type: '__reset'; difficulty: Difficulty }) => GameState;
+type Reducer = (s: GameState, a: Action) => GameState;
 
-const reducer: Reducer = (s, a) => {
-  if (a.type === '__reset') return newGame(a.difficulty);
-  return step(s, a);
-};
+const reducer: Reducer = (s, a) => step(s, a);
 
-export const useGame = (difficulty: Difficulty): GameApi => {
-  const [state, rawDispatch] = useReducer(reducer, undefined as unknown as GameState, () =>
-    newGame(difficulty)
+export const useGame = (difficulty: Difficulty, target?: number): GameApi => {
+  const [state, rawDispatch] = useReducer(
+    reducer,
+    undefined as unknown as GameState,
+    () => newGame(difficulty, undefined, target)
   );
 
-  const dispatch = useCallback(
-    (a: Action) => rawDispatch(a),
-    [rawDispatch]
-  );
+  const dispatch = useCallback((a: Action) => rawDispatch(a), [rawDispatch]);
 
-  const reset = useCallback(
-    (d: Difficulty) => rawDispatch({ type: '__reset', difficulty: d }),
-    [rawDispatch]
-  );
-
-  return { state, dispatch, reset };
+  return { state, dispatch };
 };

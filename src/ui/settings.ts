@@ -10,6 +10,9 @@ export interface Settings {
   // When true, augments the per-suit color with a glyph/pattern accent so that
   // suits remain distinguishable even when colors are hard to tell apart.
   colorBlindAssist: boolean;
+  // When true, use the standard 2-color playing-card palette (red for ♥/♦,
+  // pale-white for ♠/♣) instead of the default 4-color neon palette.
+  twoColorDeck: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -17,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sounds: false, // off by default — we don't ship sound files yet
   reduceMotion: false,
   colorBlindAssist: false,
+  twoColorDeck: false,
 };
 
 const STORAGE_KEY = 'pokergrid:settings:v1';

@@ -7,6 +7,8 @@ import Animated, {
   withSequence,
   withDelay,
 } from 'react-native-reanimated';
+import type { PlayContext } from '../../../App';
+import { challengeWon, findChallenge } from '../../game/challenges';
 import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { scoreGrid } from '../../game/scoring';
@@ -23,8 +25,10 @@ import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   state: GameState;
+  context: PlayContext;
   onReplay: () => void;
   onHome: () => void;
+  onAdvance: () => void;
 }
 
 const HAND_LABEL: Record<HandRank, string> = {
@@ -41,7 +45,17 @@ const HAND_LABEL: Record<HandRank, string> = {
   ROYAL_FLUSH: 'Royal Flush',
 };
 
-const BannerHero = ({ won, score, target }: { won: boolean; score: number; target: number }) => {
+const BannerHero = ({
+  won,
+  score,
+  target,
+  kicker,
+}: {
+  won: boolean;
+  score: number;
+  target: number;
+  kicker?: string;
+}) => {
   const { settings } = useSettings();
   const haptic = useHaptic();
   const playSound = useSound();
@@ -76,6 +90,7 @@ const BannerHero = ({ won, score, target }: { won: boolean; score: number; targe
 
   return (
     <Animated.View style={[styles.banner, { borderColor: accent }, glow(accent, 18, 0.55), animStyle]}>
+      {kicker && <Text style={styles.bannerMode}>{kicker}</Text>}
       <Text style={[styles.bannerKicker, { color: accent, textShadowColor: accent }]}>
         {won ? '· WIN ·' : '· DEFEAT ·'}
       </Text>
@@ -87,9 +102,9 @@ const BannerHero = ({ won, score, target }: { won: boolean; score: number; targe
   );
 };
 
-export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
+export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
-  const { record } = useStats();
+  const { record, recordTargetsUp, recordChallenge } = useStats();
   const recorded = useRef(false);
 
   const report = useMemo(
@@ -99,6 +114,19 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
     }),
     [state.grid, state.bonusCards, state.deck.length, state.trash]
   );
+
+  const bonusValues = useMemo(() => {
+    const opts = { deckRemaining: state.deck.length, trash: state.trash } as const;
+    const withAll = report.total;
+    return state.bonusCards.map((_, i) => {
+      const withoutOne = scoreGrid(
+        state.grid,
+        state.bonusCards.filter((_, j) => j !== i),
+        opts
+      ).total;
+      return withAll - withoutOne;
+    });
+  }, [report.total, state.grid, state.bonusCards, state.deck.length, state.trash]);
   const {
     lines: scoredLines,
     subtotal,
@@ -107,20 +135,46 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
     gridFlat,
     total,
   } = report;
-  const won = total >= state.target;
+  // Whether the run was a "win" depends on the play context.
+  //  - Free play: total ≥ target.
+  //  - Targets-Up: total ≥ target for the current level.
+  //  - Challenge: total ≥ challenge target AND the challenge's structural
+  //    condition is met.
+  const challenge = context.mode === 'challenge' ? findChallenge(context.id) : null;
+  const won = challenge
+    ? challengeWon(challenge, state.grid, report)
+    : total >= state.target;
 
-  // Record the run exactly once on mount.
+  const kicker =
+    context.mode === 'targets-up'
+      ? `LEVEL ${context.level}`
+      : context.mode === 'challenge'
+      ? `CHALLENGE · ${challenge!.name.toUpperCase()}`
+      : context.difficulty.toUpperCase();
+
+  // Record the run exactly once on mount — applying the correct stats
+  // method based on the play context.
   useEffect(() => {
     if (recorded.current) return;
     recorded.current = true;
-    record({
-      ts: Date.now(),
-      difficulty: state.difficulty,
-      score: total,
-      target: state.target,
-      won,
-    });
-  }, [record, state.difficulty, state.target, total, won]);
+    switch (context.mode) {
+      case 'free':
+        record({
+          ts: Date.now(),
+          difficulty: state.difficulty,
+          score: total,
+          target: state.target,
+          won,
+        });
+        break;
+      case 'targets-up':
+        if (won) recordTargetsUp(context.level);
+        break;
+      case 'challenge':
+        if (won) recordChallenge(context.id);
+        break;
+    }
+  }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won]);
 
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
@@ -134,9 +188,20 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <BannerHero won={won} score={total} target={state.target} />
+      <BannerHero won={won} score={total} target={state.target} kicker={kicker} />
 
-      <BonusCardStrip cards={state.bonusCards} />
+      {context.mode === 'targets-up' && (
+        <Text style={styles.modeNote}>
+          {won
+            ? `Cleared Level ${context.level}. Next target: ${state.target + 50}.`
+            : `Run ended at Level ${context.level}. Wins this run: ${context.wins}.`}
+        </Text>
+      )}
+      {context.mode === 'challenge' && (
+        <Text style={styles.modeNote}>{challenge!.goal}</Text>
+      )}
+
+      <BonusCardStrip cards={state.bonusCards} values={bonusValues} />
       <View style={styles.gridArea}>
         <GridView
           grid={state.grid}
@@ -199,13 +264,29 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
       </View>
 
       <View style={styles.btnRow}>
-        <NeonButton
-          label={`Replay · ${state.difficulty}`}
-          variant="primary"
-          size="lg"
-          onPress={onReplay}
-          style={{ flex: 1 }}
-        />
+        {context.mode === 'targets-up' && won ? (
+          <NeonButton
+            label={`Next · Level ${context.level + 1}`}
+            variant="primary"
+            size="lg"
+            onPress={onAdvance}
+            style={{ flex: 1 }}
+          />
+        ) : (
+          <NeonButton
+            label={
+              context.mode === 'free'
+                ? `Replay · ${state.difficulty}`
+                : context.mode === 'targets-up'
+                ? 'Try Again'
+                : 'Try Again'
+            }
+            variant="primary"
+            size="lg"
+            onPress={onReplay}
+            style={{ flex: 1 }}
+          />
+        )}
         <NeonButton
           label="Home"
           variant="secondary"
@@ -241,6 +322,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: radius.lg,
   },
+  bannerMode: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 3,
+    marginBottom: 2,
+  },
   bannerKicker: {
     fontFamily: fonts.mono,
     fontSize: 12,
@@ -248,6 +337,16 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     textShadowRadius: 8,
     marginBottom: spacing.xs,
+  },
+  modeNote: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    lineHeight: 17,
   },
   bannerScore: {
     fontFamily: fonts.mono,

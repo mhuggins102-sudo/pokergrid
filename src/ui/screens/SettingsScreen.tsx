@@ -110,6 +110,12 @@ export const SettingsScreen = ({ onBack }: Props) => {
         value={settings.colorBlindAssist}
         onChange={v => update({ colorBlindAssist: v })}
       />
+      <Toggle
+        label="2-color deck"
+        desc="Standard playing-card palette: red for ♥/♦, pale-white for ♠/♣. Off by default (4 distinct neon colors per suit)."
+        value={settings.twoColorDeck}
+        onChange={v => update({ twoColorDeck: v })}
+      />
 
       <View style={styles.divider} />
 

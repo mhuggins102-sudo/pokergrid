@@ -112,32 +112,79 @@ const GoalVisual = () => {
   );
 };
 
+// Sequential spiral placement: empty grid → press Play → first card lands in
+// the center, then the next, then the next… settles after 6 cards. Each step
+// uses the existing place anim so it matches the in-game feel.
+const SPIRAL_DEMO: Array<{ slot: number; card: Card }> = [
+  { slot: 12, card: C('A', 'H') },
+  { slot: 13, card: C('K', 'C') },
+  { slot: 18, card: C('Q', 'D') },
+  { slot: 17, card: C('J', 'S') },
+  { slot: 16, card: C('10', 'H') },
+  { slot: 11, card: C('7', 'D') },
+];
+
 const SpiralVisual = () => {
-  const initial = gridWith([
-    [12, C('A', 'H')], // 1
-    [13, C('K', 'C')], // 2
-    [18, C('Q', 'D')], // 3
-    [17, C('J', 'S')], // 4
-    [16, C('10', 'H')], // 5
-  ]);
-  const after = gridWith([
-    [12, C('A', 'H')],
-    [13, C('K', 'C')],
-    [18, C('Q', 'D')],
-    [17, C('J', 'S')],
-    [16, C('10', 'H')],
-    [11, C('7', 'S')], // 6 — new card lands at slot 6
-  ]);
+  const [grid, setGrid] = React.useState<Grid>(emptyGrid());
+  const [anim, setAnim] = React.useState<AnimSpec | null>(null);
+  const [nextHint, setNextHint] = React.useState<number | null>(12);
+  const timers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const stop = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  };
+
+  const play = () => {
+    stop();
+    setGrid(emptyGrid());
+    setAnim(null);
+    // Run through the spiral one card at a time.
+    SPIRAL_DEMO.forEach(({ slot, card }, i) => {
+      timers.current.push(
+        setTimeout(() => {
+          setAnim({ kind: 'place', card, toSlot: slot });
+          // The cyan pulse should point at the NEXT slot once this one lands.
+          const next = SPIRAL_DEMO[i + 1]?.slot ?? null;
+          setNextHint(next);
+        }, i * (ANIM_DURATION.place + 80))
+      );
+      timers.current.push(
+        setTimeout(() => {
+          setGrid(prev => {
+            const g = prev.slice();
+            g[slot] = card;
+            return g;
+          });
+          setAnim(null);
+        }, i * (ANIM_DURATION.place + 80) + ANIM_DURATION.place)
+      );
+    });
+  };
+
+  React.useEffect(() => stop, []);
+
   return (
     <View style={demoStyles.wrap}>
-      <DemoGrid
-        initialGrid={initial}
-        animSpec={{ kind: 'place', card: C('7', 'S'), toSlot: 11 }}
-        afterAnim={after}
-      />
+      <View style={demoStyles.gridStack}>
+        <GridView
+          grid={grid}
+          hiddenSlots={hiddenSlotsFor(anim)}
+          nextSlotHint={nextHint}
+        />
+        <AnimationLayer anim={anim} />
+      </View>
+      <View style={demoStyles.btnRow}>
+        <NeonButton
+          label={anim ? '▶ Playing…' : '▶ Play'}
+          variant="primary"
+          size="sm"
+          onPress={play}
+        />
+      </View>
       <Caption>
-        First card lands at the center (R3C3). Subsequent cards spiral clockwise outward — the
-        cyan pulse marks the next slot.
+        Tap Play. Cards drop in a clockwise spiral — center first, then to the right, then down,
+        then around. The pulsing cyan ring always marks where the next placed card lands.
       </Caption>
     </View>
   );
@@ -315,13 +362,17 @@ const JokerVisual = () => {
 };
 
 const ScoringLinesVisual = () => {
-  // Full grid where row 0 is a Flush of ♥ and other lines vary.
+  // Crafted to pay out across many lines so users see what "good scoring"
+  // looks like:
+  //   R1 → Royal Flush ♥, R2 → Three of a Kind 5s, R3 → Two Pair,
+  //   R4 → Pair of 2s, R5 → Straight 3-7.
+  //   C3 → Two Pair, C4 → Pair of Js.
   const grid = gridWith([
-    [0,  C('A', 'H')], [1,  C('5', 'H')], [2,  C('8', 'H')], [3,  C('J', 'H')], [4,  C('K', 'H')],
-    [5,  C('A', 'C')], [6,  C('2', 'D')], [7,  C('3', 'S')], [8,  C('6', 'C')], [9,  C('Q', 'S')],
-    [10, C('4', 'D')], [11, C('9', 'C')], [12, C('5', 'D')], [13, C('7', 'S')], [14, C('10','D')],
-    [15, C('3', 'C')], [16, C('K', 'D')], [17, C('Q', 'C')], [18, C('2', 'S')], [19, C('9', 'H')],
-    [20, C('8', 'D')], [21, C('J', 'D')], [22, C('4', 'S')], [23, C('10','S')], [24, C('6', 'D')],
+    [0,  C('A','H')], [1, C('K','H')], [2, C('Q','H')], [3, C('J','H')], [4, C('10','H')],
+    [5,  C('5','H')], [6, C('5','S')], [7, C('5','D')], [8, C('7','C')], [9, C('K','C')],
+    [10, C('8','D')], [11,C('8','C')], [12,C('Q','D')], [13,C('Q','S')], [14,C('4','H')],
+    [15, C('2','C')], [16,C('2','S')], [17,C('7','D')], [18,C('J','C')], [19,C('A','C')],
+    [20, C('3','H')], [21,C('4','C')], [22,C('5','C')], [23,C('6','S')], [24,C('7','S')],
   ]);
   const report = useMemo(() => scoreGrid(grid, []), [grid]);
   return (
@@ -387,41 +438,82 @@ const HandValuesVisual = () => {
   );
 };
 
+// Multiplier worked example. Press Play to highlight Row 3, light up the two
+// bonus cards that match, and roll through the multiplicative math.
 const MultiplierMathVisual = () => {
-  // A pair on row 3: 5♥ 5♠ 2♣ 8♦ 10♣. Show pair=5, ×Pair-4 = 20, ×Row3-2 = 40.
-  const cards: Card[] = [C('5', 'H'), C('5', 'S'), C('2', 'C'), C('8', 'D'), C('10', 'C')];
+  const [active, setActive] = React.useState(false);
+
+  // Full grid with a Pair on Row 3 (slots 10-14, user-facing "R3"). Other
+  // rows are filler that doesn't pair / straight / flush.
+  const grid: Grid = gridWith([
+    [0,  C('A','C')], [1, C('3','H')], [2, C('8','D')], [3, C('J','S')], [4, C('10','S')],
+    [5,  C('K','D')], [6, C('7','C')], [7, C('4','H')], [8, C('9','S')], [9, C('Q','C')],
+    [10, C('5','H')], [11,C('5','S')], [12,C('2','C')], [13,C('8','D')], [14,C('10','C')],
+    [15, C('A','H')], [16,C('K','S')], [17,C('6','D')], [18,C('J','C')], [19,C('3','S')],
+    [20, C('9','D')], [21,C('Q','H')], [22,C('7','S')], [23,C('4','C')], [24,C('2','H')],
+  ]);
+  const row3Slots = new Set([10, 11, 12, 13, 14]);
+
   return (
     <View style={demoStyles.wrap}>
-      <Text style={demoStyles.subsection}>Row 3 (with these two cards held)</Text>
-      <View style={demoStyles.lineRow}>
-        {cards.map((c, i) => (
-          <View key={i} style={{ marginHorizontal: 1 }}>
-            <CardTile card={c} size="sm" />
+      <GridView grid={grid} highlight={active ? row3Slots : undefined} />
+
+      <Text style={demoStyles.subsection}>Bonus cards held</Text>
+      <View style={demoStyles.heldRow}>
+        <View
+          style={[
+            demoStyles.held,
+            active && demoStyles.heldActive,
+          ]}
+        >
+          <Text style={demoStyles.heldName}>Pair ×4</Text>
+          <Text style={demoStyles.heldDesc}>Multiplies any Pair line.</Text>
+        </View>
+        <View
+          style={[
+            demoStyles.held,
+            active && demoStyles.heldActive,
+          ]}
+        >
+          <Text style={demoStyles.heldName}>Row 3 ×2</Text>
+          <Text style={demoStyles.heldDesc}>Multiplies whatever Row 3 scores.</Text>
+        </View>
+      </View>
+
+      {active && (
+        <View style={demoStyles.mathBlock}>
+          <View style={demoStyles.mathRow}>
+            <Text style={demoStyles.mathLabel}>R3 · Pair (base)</Text>
+            <Text style={demoStyles.mathValue}>5</Text>
           </View>
-        ))}
+          <View style={demoStyles.mathRow}>
+            <Text style={demoStyles.mathLabel}>× Pair ×4</Text>
+            <Text style={demoStyles.mathValue}>= 20</Text>
+          </View>
+          <View style={demoStyles.mathRow}>
+            <Text style={demoStyles.mathLabel}>× Row 3 ×2</Text>
+            <Text style={demoStyles.mathValue}>= 40</Text>
+          </View>
+          <View style={demoStyles.mathTotal}>
+            <Text style={demoStyles.mathTotalLabel}>R3 score</Text>
+            <Text style={demoStyles.mathTotalValue}>40</Text>
+          </View>
+        </View>
+      )}
+
+      <View style={demoStyles.btnRow}>
+        <NeonButton
+          label={active ? '▶ Reset' : '▶ Score Row 3'}
+          variant="primary"
+          size="sm"
+          onPress={() => setActive(a => !a)}
+        />
       </View>
-      <View style={demoStyles.mathBlock}>
-        <View style={demoStyles.mathRow}>
-          <Text style={demoStyles.mathLabel}>Base · Pair</Text>
-          <Text style={demoStyles.mathValue}>5</Text>
-        </View>
-        <View style={demoStyles.mathRow}>
-          <Text style={demoStyles.mathLabel}>× Pair ×4</Text>
-          <Text style={demoStyles.mathValue}>= 20</Text>
-        </View>
-        <View style={demoStyles.mathRow}>
-          <Text style={demoStyles.mathLabel}>× Row 3 ×2</Text>
-          <Text style={demoStyles.mathValue}>= 40</Text>
-        </View>
-        <View style={demoStyles.mathTotal}>
-          <Text style={demoStyles.mathTotalLabel}>Line score</Text>
-          <Text style={demoStyles.mathTotalValue}>40</Text>
-        </View>
-      </View>
+
       <Caption>
         Multipliers compose <Text style={{ color: colors.success }}>multiplicatively</Text>.
-        Three ×2s on the same line = ×8, not ×6. Hand-type multipliers for Straight and above
-        are capped at ×1.5; row/column and other cards can still push higher.
+        Both held bonuses apply to R3's Pair: 5 × 4 × 2 = 40. Three ×2s on one line would be
+        ×8, not ×6.
       </Caption>
     </View>
   );
@@ -909,6 +1001,39 @@ const demoStyles = StyleSheet.create({
     flexDirection: 'row',
     gap: 2,
     marginTop: spacing.xs,
+  },
+  heldRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    marginTop: 4,
+  },
+  held: {
+    flex: 1,
+    backgroundColor: colors.bgGlass,
+    borderColor: colors.outline,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+  },
+  heldActive: {
+    borderColor: colors.warn,
+    borderWidth: 2,
+    ...glow(colors.warn, 10, 0.7),
+  },
+  heldName: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  heldDesc: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 9,
+    marginTop: 3,
+    lineHeight: 12,
   },
   mathBlock: {
     width: '100%',

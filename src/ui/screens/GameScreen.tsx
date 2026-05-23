@@ -10,7 +10,14 @@ import Animated, {
 import { slideDestinationsFrom, suitActionAvailable } from '../../game/actions';
 import { Card, isJoker } from '../../game/cards';
 import { BONUS_HAND_LIMIT } from '../../game/bonusCards';
-import { Direction, GRID_SIZE, LineKind, nextSpiralSlot, slideChain } from '../../game/grid';
+import {
+  Direction,
+  GRID_SIZE,
+  LineKind,
+  nextSpiralSlot,
+  slideChain,
+  SPIRAL_ORDER,
+} from '../../game/grid';
 import { scoreGrid } from '../../game/scoring';
 import { Action, GameState } from '../../game/state';
 import {
@@ -35,6 +42,7 @@ interface Props {
   state: GameState;
   dispatch: (a: Action) => void;
   onHome?: () => void;
+  kicker?: string;
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
@@ -56,9 +64,11 @@ const SUIT_PERK_VARIANT: Record<string, 'primary' | 'warn' | 'danger'> = {
 const DrawnArea = ({
   drawnKey,
   children,
+  deckCount,
 }: {
   drawnKey: string;
   children: React.ReactNode;
+  deckCount?: number;
 }) => {
   const { settings } = useSettings();
   const opacity = useSharedValue(1);
@@ -74,10 +84,17 @@ const DrawnArea = ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
   }));
-  return <Animated.View style={[styles.drawnBlock, style]}>{children}</Animated.View>;
+  return (
+    <Animated.View style={[styles.drawnBlock, style]}>
+      {children}
+      {deckCount !== undefined && (
+        <Text style={styles.deckUnderDrawn}>deck {deckCount}</Text>
+      )}
+    </Animated.View>
+  );
 };
 
-export const GameScreen = ({ state, dispatch, onHome }: Props) => {
+export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
@@ -97,6 +114,39 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
     if (animTimer.current) clearTimeout(animTimer.current);
   }, []);
 
+  // Intro animation: when the game first mounts, replay the place animations
+  // for the cards the reducer auto-placed at start (the seeded center card
+  // plus any jokers drawn before the first interactive card). Skips entirely
+  // when reduce-motion is on.
+  const introPlayedRef = useRef(false);
+  useEffect(() => {
+    if (introPlayedRef.current) return;
+    introPlayedRef.current = true;
+    if (settings.reduceMotion) return;
+    const placed: Array<{ slot: number; card: NonNullable<GameState['grid'][number]> }> = [];
+    for (const slot of SPIRAL_ORDER) {
+      const c = state.grid[slot];
+      if (c) placed.push({ slot, card: c });
+      else break;
+    }
+    if (placed.length === 0) return;
+    let delay = 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    placed.forEach(({ slot, card }) => {
+      timers.push(setTimeout(() => {
+        playSound('place');
+        setAnim({ kind: 'place', card, toSlot: slot });
+      }, delay));
+      delay += ANIM_DURATION.place + 80;
+    });
+    // Clear the overlay after the last animation finishes.
+    timers.push(setTimeout(() => setAnim(null), delay));
+    return () => timers.forEach(clearTimeout);
+    // Only run on mount; we explicitly don't want this to re-run on every
+    // render that updates state.grid.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const liveScore = useMemo(
     () =>
       scoreGrid(state.grid, state.bonusCards, {
@@ -106,6 +156,26 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
       }).total,
     [state.grid, state.bonusCards, state.deck.length, state.trash]
   );
+
+  // Marginal value of each held bonus card — what the live score drops by if
+  // that card is removed (all OTHER cards stay active). Recomputed whenever
+  // the grid, bonus set, deck size, or trash changes.
+  const bonusValues = useMemo(() => {
+    const opts = {
+      deckRemaining: state.deck.length,
+      ignoreIncompletePenalty: true,
+      trash: state.trash,
+    } as const;
+    const withAll = liveScore;
+    return state.bonusCards.map((_, i) => {
+      const withoutOne = scoreGrid(
+        state.grid,
+        state.bonusCards.filter((_, j) => j !== i),
+        opts
+      ).total;
+      return withAll - withoutOne;
+    });
+  }, [liveScore, state.grid, state.bonusCards, state.deck.length, state.trash]);
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
 
@@ -379,15 +449,13 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
   return (
     <View style={styles.root}>
       <ScoreBar
-        deckCount={state.deck.length}
-        trashCount={state.trash.length}
         target={state.target}
-        difficulty={state.difficulty}
         liveScore={liveScore}
         onInfoPress={() => setScoringOpen(true)}
         onHomePress={onHome}
+        kicker={kicker}
       />
-      <BonusCardStrip cards={state.bonusCards} />
+      <BonusCardStrip cards={state.bonusCards} values={bonusValues} />
 
       <View style={styles.gridWrap}>
         <GestureDetector gesture={panGesture}>
@@ -448,7 +516,7 @@ const renderBottom = (
     const suit = !isJk ? (state.drawn as any).suit : null;
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey}>
+        <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
           <Text style={styles.drawnLabel}>Drawn</Text>
           {animating ? (
             <View style={{ width: 88, height: 88 }} />
@@ -497,7 +565,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-hop') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-hop'}>
+        <DrawnArea drawnKey={drawnKey + '-hop'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitH }]}>♥ Swap</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -517,7 +585,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-slide-source') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-slide'}>
+        <DrawnArea drawnKey={drawnKey + '-slide'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -539,7 +607,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-slide-dest') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-slide-dest'}>
+        <DrawnArea drawnKey={drawnKey + '-slide-dest'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -559,7 +627,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-destroy') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-destroy'}>
+        <DrawnArea drawnKey={drawnKey + '-destroy'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitD }]}>♦ Destroy</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -671,6 +739,15 @@ const styles = StyleSheet.create({
   },
   actionCol: { gap: spacing.sm, alignItems: 'stretch' },
   drawnBlock: { alignItems: 'center', gap: spacing.xs },
+  deckUnderDrawn: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 2,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
   drawnLabel: {
     color: colors.textLow,
     fontFamily: fonts.mono,

@@ -4,6 +4,15 @@ import { Card, isJoker, Suit } from '../../game/cards';
 import { useSettings } from '../settings';
 import { cardSize, colors, fonts, glow, radius, suitColor } from '../theme';
 
+// 2-color palette — red for ♥/♦, pale-off-white for ♠/♣. Reads as a classic
+// playing-card deck on the dark glass background.
+const TWO_COLOR_SUIT: Record<Suit, string> = {
+  H: '#ff5577',
+  D: '#ff5577',
+  S: '#d8dcea',
+  C: '#d8dcea',
+};
+
 interface Props {
   card: Card | null;
   highlighted?: boolean;
@@ -33,12 +42,15 @@ const SUIT_LETTER: Record<Suit, string> = {
   C: 'C',
 };
 
-const cardGlowColor = (card: Card): string =>
-  isJoker(card) ? colors.joker : suitColor(card.suit);
+const cardGlowColor = (card: Card, twoColor: boolean): string => {
+  if (isJoker(card)) return colors.joker;
+  return twoColor ? TWO_COLOR_SUIT[card.suit] : suitColor(card.suit);
+};
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
   const { settings } = useSettings();
   const cba = settings.colorBlindAssist;
+  const twoColor = settings.twoColorDeck;
   const dim = SIZES[size];
   const square: ViewStyle = { width: dim.side, height: dim.side };
 
@@ -63,7 +75,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
     );
   }
 
-  const glowColor = cardGlowColor(card);
+  const glowColor = cardGlowColor(card, twoColor);
 
   // In color-blind-assist mode we:
   //  - render the rank in plain white (no suit-colored text);

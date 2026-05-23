@@ -107,7 +107,8 @@ const drawNext = (state: GameState): GameState => {
 
 export const newGame = (
   difficulty: Difficulty,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  targetOverride?: number
 ): GameState => {
   const deck = freshShuffledDeck(rng);
   const bonusDeck = shuffle(BONUS_DECK_POOL, rng);
@@ -121,7 +122,7 @@ export const newGame = (
     grid,
     drawn: null,
     difficulty,
-    target: TARGET_BY_DIFFICULTY[difficulty],
+    target: targetOverride ?? TARGET_BY_DIFFICULTY[difficulty],
     phase: { kind: 'awaiting-action' },
     history: ['Game start'],
   };

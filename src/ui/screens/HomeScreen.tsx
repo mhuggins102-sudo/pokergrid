@@ -14,7 +14,9 @@ import { useStats } from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
-  onStart: (d: Difficulty) => void;
+  onStartFree: (d: Difficulty) => void;
+  onStartTargetsUp: () => void;
+  onOpenChallenges: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
   onOpenRules: () => void;
@@ -34,13 +36,13 @@ const NeonTitle = () => {
     textShadowRadius: 4 + pulse.value * 14,
     opacity: 0.85 + pulse.value * 0.15,
   }));
-  return (
-    <Animated.Text style={[styles.title, style]}>POKERGRID</Animated.Text>
-  );
+  return <Animated.Text style={[styles.title, style]}>POKERGRID</Animated.Text>;
 };
 
 export const HomeScreen = ({
-  onStart,
+  onStartFree,
+  onStartTargetsUp,
+  onOpenChallenges,
   onOpenStats,
   onOpenSettings,
   onOpenRules,
@@ -55,7 +57,8 @@ export const HomeScreen = ({
         <NeonTitle />
       </View>
 
-      <Text style={styles.sectionLabel}>Difficulty</Text>
+      {/* FREE PLAY ----------------------------------------------------- */}
+      <Text style={styles.sectionLabel}>Free Play</Text>
       <View style={styles.diffRow}>
         {DIFFS.map(d => {
           const selected = d === diff;
@@ -78,19 +81,52 @@ export const HomeScreen = ({
           );
         })}
       </View>
-
       <View style={styles.startWrap}>
         <NeonButton
           label={`Start · target ${TARGET_BY_DIFFICULTY[diff]}`}
           size="lg"
-          onPress={() => onStart(diff)}
+          onPress={() => onStartFree(diff)}
         />
+      </View>
+
+      {/* GAME MODES --------------------------------------------------- */}
+      <Text style={styles.sectionLabel}>Game Modes</Text>
+      <View style={styles.modesCol}>
+        <Pressable style={styles.modeCard} onPress={onStartTargetsUp}>
+          <View style={styles.modeHeader}>
+            <Text style={styles.modeTitle}>Targets Up</Text>
+            {stats.targetsUpBest > 0 && (
+              <Text style={styles.modeBest}>best L{stats.targetsUpBest}</Text>
+            )}
+          </View>
+          <Text style={styles.modeBody}>
+            A ladder. Level 1 starts at target 300; each win pushes the bar +50. Lose once and the
+            run ends. Final score is the highest level you cleared.
+          </Text>
+          <Text style={styles.modeCta}>Start at Level 1 →</Text>
+        </Pressable>
+
+        <Pressable style={styles.modeCard} onPress={onOpenChallenges}>
+          <View style={styles.modeHeader}>
+            <Text style={styles.modeTitle}>Challenges</Text>
+            {stats.challengesDone.length > 0 && (
+              <Text style={styles.modeBest}>
+                {stats.challengesDone.length} done
+              </Text>
+            )}
+          </View>
+          <Text style={styles.modeBody}>
+            A handful of structural goals — score 500+ with constraints on which lines may pay
+            out, where the joker can be, and so on.
+          </Text>
+          <Text style={styles.modeCta}>Pick a challenge →</Text>
+        </Pressable>
       </View>
 
       <View style={styles.streakRow}>
         {stats.wins > 0 && (
           <Text style={styles.streakText}>
-            {stats.wins} win{stats.wins !== 1 ? 's' : ''}
+            {stats.wins} free-play win{stats.wins !== 1 ? 's' : ''}
             {stats.streak > 1 ? ` · streak ${stats.streak}` : ''}
           </Text>
         )}
@@ -110,7 +146,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
   hero: {
     paddingTop: spacing.xxl,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
     alignItems: 'center',
   },
   subtitle: {
@@ -142,10 +178,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginTop: spacing.lg,
   },
-  diffRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  diffRow: { flexDirection: 'row', gap: spacing.sm },
   diffCell: {
     flex: 1,
     borderWidth: 1,
@@ -188,7 +221,58 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   diffBestSel: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 3 },
-  startWrap: { marginTop: spacing.lg, alignItems: 'stretch' },
+  startWrap: { marginTop: spacing.md, alignItems: 'stretch' },
+  modesCol: { gap: spacing.sm },
+  modeCard: {
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.outline,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    ...glow(colors.warn, 6, 0.18),
+  },
+  modeHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  modeTitle: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    textShadowColor: colors.warn,
+    textShadowRadius: 6,
+  },
+  modeBest: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: '800',
+    textShadowColor: colors.success,
+    textShadowRadius: 3,
+  },
+  modeBody: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: spacing.sm,
+  },
+  modeCta: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    textShadowColor: colors.accent,
+    textShadowRadius: 3,
+  },
   streakRow: { alignItems: 'center', marginTop: spacing.md, height: 18 },
   streakText: {
     fontFamily: fonts.mono,

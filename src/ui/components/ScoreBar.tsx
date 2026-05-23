@@ -10,13 +10,12 @@ import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
-  deckCount: number;
-  trashCount: number;
   target: number;
-  difficulty: string;
   liveScore?: number;
   onInfoPress?: () => void;
   onHomePress?: () => void;
+  // Optional kicker shown above the score (e.g. "level 3", "balanced").
+  kicker?: string;
 }
 
 // Live-score readout. Ticks softly on every change so the number feels alive.
@@ -66,21 +65,12 @@ const ScoreReadout = ({
   );
 };
 
-const Tag = ({ label, value }: { label: string; value: string | number }) => (
-  <View style={styles.tag}>
-    <Text style={styles.tagLabel}>{label}</Text>
-    <Text style={styles.tagValue}>{value}</Text>
-  </View>
-);
-
 export const ScoreBar = ({
-  deckCount,
-  trashCount,
   target,
-  difficulty,
   liveScore,
   onInfoPress,
   onHomePress,
+  kicker,
 }: Props) => {
   return (
     <View style={styles.bar}>
@@ -90,23 +80,17 @@ export const ScoreBar = ({
             <Text style={styles.iconText}>‹</Text>
           </Pressable>
         )}
-        {liveScore !== undefined ? (
-          <ScoreReadout score={liveScore} target={target} />
-        ) : (
-          <View style={styles.scoreBlock} />
-        )}
+        <View style={styles.scoreBlock}>
+          {kicker && <Text style={styles.kicker}>{kicker}</Text>}
+          {liveScore !== undefined && (
+            <ScoreReadout score={liveScore} target={target} />
+          )}
+        </View>
         {onInfoPress && (
           <Pressable onPress={onInfoPress} hitSlop={10} style={styles.iconBtn}>
             <Text style={styles.iconText}>ⓘ</Text>
           </Pressable>
         )}
-      </View>
-      <View style={styles.tagsRow}>
-        <Tag label="deck" value={deckCount} />
-        <View style={styles.tagSep} />
-        <Tag label="trash" value={trashCount} />
-        <View style={styles.tagSep} />
-        <Tag label="diff" value={difficulty} />
       </View>
     </View>
   );
@@ -148,6 +132,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  kicker: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 2,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
   scoreLine: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -172,38 +165,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 1,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xs,
-  },
-  tagLabel: {
-    color: colors.textLow,
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 2,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginRight: 4,
-  },
-  tagValue: {
-    color: colors.textMid,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  tagSep: {
-    width: 1,
-    height: 10,
-    backgroundColor: colors.outlineSoft,
-    marginHorizontal: spacing.xs,
   },
 });

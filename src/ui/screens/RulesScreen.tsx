@@ -6,6 +6,7 @@ import { colors, fonts, glow, radius, spacing } from '../theme';
 interface Props {
   onBack: () => void;
   onOpenTutorial: () => void;
+  onOpenBonusCards: () => void;
 }
 
 const Section = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -35,7 +36,7 @@ const Perk = ({
   </View>
 );
 
-export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
+export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props) => (
   <View style={styles.root}>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -50,9 +51,10 @@ export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
       <Section label="Each turn">
         <Text style={styles.body}>
           A card is drawn for you. You can <Text style={styles.bodyHi}>place</Text> it (it lands
-          in the next spiral slot starting at R3C3 and expanding clockwise),{' '}
-          <Text style={styles.bodyHi}>trash</Text> it (it's gone), or spend it on its{' '}
-          <Text style={styles.bodyHi}>suit perk</Text>.
+          in the next spiral slot, starting at the center of the grid and expanding clockwise
+          outward), <Text style={styles.bodyHi}>trash</Text> it (it's gone), or spend it on its{' '}
+          <Text style={styles.bodyHi}>suit perk</Text>. A pulsing cyan ring marks the next slot
+          a placed card will land in.
         </Text>
       </Section>
 
@@ -67,7 +69,7 @@ export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
           symbol="♠"
           color={colors.suitS}
           name="Slide"
-          desc="Pick a card; that card and the cards in front of it slide together as a chain, any distance up to a wall or blocker."
+          desc="Pick a card; that card and the cards in front of it slide together as a chain, any distance up to a wall or blocker. Drag from the card in a direction instead of tapping if you like."
         />
         <Perk
           symbol="♦"
@@ -79,7 +81,7 @@ export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
           symbol="♣"
           color={colors.suitC}
           name="Bonus"
-          desc="Draw two from the bonus deck, keep one. Hold up to 3; at the cap you must swap one out."
+          desc="Draw two bonus cards from the bonus deck and keep one. Hold up to 3 in your hand; at the cap, ♣ forces a swap."
         />
         <Text style={styles.footnoteInSection}>
           The drawn card is trashed after a suit perk. If a perk has no legal target, its button
@@ -89,26 +91,28 @@ export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
 
       <Section label="Bonus cards">
         <Text style={styles.body}>
-          Bonus cards multiply your scores. They <Text style={styles.bodyHi}>stack
-          multiplicatively</Text>: two ×2 cards on the same line is ×4. Some multiply specific
-          poker hands, some multiply a row or column, some multiply the entire grid total at
-          game end.
+          You hold up to 3 bonus cards at a time. They multiply your scores — some target a
+          specific poker hand, some target a specific row or column, some are conditional, and
+          some multiply your whole grid total at game end. Multipliers{' '}
+          <Text style={styles.bodyHi}>stack multiplicatively</Text>: two ×2 cards on one line
+          is ×4, not ×3.
         </Text>
       </Section>
 
       <Section label="The joker">
         <Text style={styles.body}>
-          The joker can't be trashed — it auto-places when drawn. On the grid it's a wild,
-          taking whatever rank and suit makes the best hand in its row, and independently in
-          its column.
+          The joker is auto-placed when drawn — you don't get to choose where, and it can't be
+          trashed initially. On the grid it's a wild, taking whatever rank and suit make the
+          best hand in its row, and independently in its column. A ♦ Destroy can remove it
+          mid-game (and triggers the "Trash Joker" bonus card if you hold it).
         </Text>
       </Section>
 
       <Section label="Scoring">
         <Text style={styles.body}>
-          At the end, every row and every column scores as a 5-card poker hand. High Card
-          earns nothing — only Pair and above pay out. Bonuses multiply each line; grid
-          achievements multiply the summed total. Lines with fewer than 5 cards{' '}
+          At the end, every row and every column scores as a 5-card poker hand. High Card earns
+          nothing — only Pair and above pay out. Bonuses multiply each line; grid achievements
+          multiply the summed total. Lines with fewer than 5 cards{' '}
           <Text style={styles.bodyDanger}>cost 25 points each</Text>, so unfilled empties from
           a ♦ Destroy are expensive.
         </Text>
@@ -117,6 +121,8 @@ export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
       <Section label="End of game">
         <Text style={styles.body}>
           The run ends when the grid is full or the deck runs out. Beat your target to win.
+          Free Play uses Easy 300, Medium 400, or Hard 500. Targets Up and Challenges set
+          their own targets.
         </Text>
       </Section>
 
@@ -127,11 +133,17 @@ export const RulesScreen = ({ onBack, onOpenTutorial }: Props) => (
           size="lg"
           onPress={onOpenTutorial}
         />
-        <Text style={styles.ctaHint}>
-          Walks you through the rules with playable examples (swap / slide / destroy demos,
-          scoring math, the bonus card categories).
-        </Text>
+        <NeonButton
+          label="Bonus Cards"
+          variant="secondary"
+          size="lg"
+          onPress={onOpenBonusCards}
+        />
       </View>
+      <Text style={styles.ctaHint}>
+        The Tutorial walks through the rules with interactive examples. Bonus Cards lists every
+        card in the bonus deck.
+      </Text>
     </ScrollView>
   </View>
 );
@@ -162,9 +174,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     fontStyle: 'italic',
   },
-  section: {
-    marginBottom: spacing.lg,
-  },
+  section: { marginBottom: spacing.lg },
   sectionLabel: {
     color: colors.textMid,
     fontFamily: fonts.mono,
@@ -180,14 +190,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
-  bodyHi: {
-    color: colors.textHi,
-    fontWeight: '700',
-  },
-  bodyDanger: {
-    color: colors.danger,
-    fontWeight: '700',
-  },
+  bodyHi: { color: colors.textHi, fontWeight: '700' },
+  bodyDanger: { color: colors.danger, fontWeight: '700' },
   footnoteInSection: {
     color: colors.textLow,
     fontFamily: fonts.sans,
@@ -241,5 +245,6 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     textAlign: 'center',
     paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
   },
 });

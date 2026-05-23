@@ -25,7 +25,7 @@ describe('GameState — initial state', () => {
   test('newGame seeds a complete state', () => {
     const s = newGame('easy', seededRng(1));
     expect(s.difficulty).toBe('easy');
-    expect(s.target).toBe(200);
+    expect(s.target).toBe(300);
     // Center slot is filled first (spiral position 1 = slot 12).
     expect(s.grid[12]).not.toBeNull();
     expect(s.bonusCards).toEqual([]);
