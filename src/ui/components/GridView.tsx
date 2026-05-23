@@ -16,6 +16,9 @@ import { CardTile } from './CardTile';
 interface Props {
   grid: (Card | null)[];
   highlight?: Set<number>;
+  // Slots whose card is currently being animated by the overlay; we render
+  // them as empty here so the moving overlay card is the only thing visible.
+  hiddenSlots?: Set<number>;
   selected?: number | null;
   nextSlotHint?: number | null;
   onSlotPress?: (idx: number) => void;
@@ -53,6 +56,7 @@ const NextPulse = ({ size }: { size: number }) => {
 export const GridView = ({
   grid,
   highlight,
+  hiddenSlots,
   selected,
   nextSlotHint,
   onSlotPress,
@@ -84,9 +88,11 @@ export const GridView = ({
 
           {Array.from({ length: GRID_SIZE }, (_, c) => {
             const idx = r * GRID_SIZE + c;
+            const isHidden = hiddenSlots?.has(idx) ?? false;
+            const cardHere = isHidden ? null : grid[idx];
             const isHighlighted = highlight?.has(idx) || selected === idx;
-            const isNext = nextSlotHint === idx && grid[idx] === null;
-            const isEmpty = grid[idx] === null;
+            const isNext = nextSlotHint === idx && cardHere === null;
+            const isEmpty = cardHere === null;
             const positionNum = SPIRAL_POSITION[idx];
 
             return (
@@ -96,7 +102,7 @@ export const GridView = ({
                 onPress={onSlotPress ? () => onSlotPress(idx) : undefined}
               >
                 <View style={styles.slotInner}>
-                  <CardTile card={grid[idx]} highlighted={isHighlighted} size="md" />
+                  <CardTile card={cardHere} highlighted={isHighlighted} size="md" />
                   {isEmpty && (
                     <Text
                       style={[

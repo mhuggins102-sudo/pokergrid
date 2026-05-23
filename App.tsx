@@ -83,7 +83,7 @@ const GameContainer = ({ difficulty, onHome, onReplay }: GameContainerProps) => 
   if (state.phase.kind === 'game-over') {
     return <ResultScreen state={state} onHome={onHome} onReplay={onReplay} />;
   }
-  return <GameScreen state={state} dispatch={dispatch} />;
+  return <GameScreen state={state} dispatch={dispatch} onHome={onHome} />;
 };
 
 const styles = StyleSheet.create({

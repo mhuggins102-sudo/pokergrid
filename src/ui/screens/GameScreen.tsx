@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -6,11 +6,17 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { suitActionAvailable } from '../../game/actions';
-import { isJoker } from '../../game/cards';
+import { Card, isJoker } from '../../game/cards';
 import { BONUS_HAND_LIMIT } from '../../game/bonusCards';
-import { LineKind, nextSpiralSlot } from '../../game/grid';
+import { GRID_SIZE, LineKind, nextSpiralSlot, slideChain } from '../../game/grid';
 import { scoreGrid } from '../../game/scoring';
 import { Action, GameState } from '../../game/state';
+import {
+  ANIM_DURATION,
+  AnimationLayer,
+  AnimSpec,
+  hiddenSlotsFor,
+} from '../components/AnimationLayer';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
@@ -20,11 +26,13 @@ import { ScoreBar } from '../components/ScoreBar';
 import { ScoringReferenceModal } from '../components/ScoringReferenceModal';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
+import { useSound } from '../sound';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   state: GameState;
   dispatch: (a: Action) => void;
+  onHome?: () => void;
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
@@ -42,7 +50,7 @@ const SUIT_PERK_VARIANT: Record<string, 'primary' | 'warn' | 'danger'> = {
 };
 
 // Drawn-card area: card fades + scales in on every change so each new draw
-// reads as a beat.
+// reads as a beat. The duration is intentionally slow so placing feels weighty.
 const DrawnArea = ({
   drawnKey,
   children,
@@ -57,8 +65,8 @@ const DrawnArea = ({
     if (settings.reduceMotion) return;
     opacity.value = 0;
     scale.value = 0.85;
-    opacity.value = withTiming(1, { duration: 200 });
-    scale.value = withTiming(1, { duration: 280 });
+    opacity.value = withTiming(1, { duration: 320 });
+    scale.value = withTiming(1, { duration: 420 });
   }, [drawnKey, opacity, scale, settings.reduceMotion]);
   const style = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -67,15 +75,25 @@ const DrawnArea = ({
   return <Animated.View style={[styles.drawnBlock, style]}>{children}</Animated.View>;
 };
 
-export const GameScreen = ({ state, dispatch }: Props) => {
+export const GameScreen = ({ state, dispatch, onHome }: Props) => {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
+  const [anim, setAnim] = useState<AnimSpec | null>(null);
+  const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const haptic = useHaptic();
+  const playSound = useSound();
+  const { settings } = useSettings();
 
   useEffect(() => {
     if (state.phase.kind === 'awaiting-action') setSelectedSlot(null);
   }, [state.phase.kind]);
+
+  // Cancel any pending animation if we unmount.
+  useEffect(() => () => {
+    if (animTimer.current) clearTimeout(animTimer.current);
+  }, []);
 
   const liveScore = useMemo(
     () =>
@@ -93,17 +111,36 @@ export const GameScreen = ({ state, dispatch }: Props) => {
     state.phase.kind === 'awaiting-action' &&
     suitActionAvailable(drawn, state.grid, state.bonusDeck.length);
 
-  const fire = (a: Action, h: 'light' | 'medium' | 'heavy' = 'medium') => {
-    haptic(h);
-    dispatch(a);
+  // Trigger an animation, then dispatch the action when it ends.
+  const performAnimated = (spec: AnimSpec, action: Action) => {
+    const duration = ANIM_DURATION[spec.kind];
+    if (settings.reduceMotion) {
+      dispatch(action);
+      return;
+    }
+    setAnim(spec);
+    if (animTimer.current) clearTimeout(animTimer.current);
+    animTimer.current = setTimeout(() => {
+      dispatch(action);
+      setAnim(null);
+    }, duration);
+  };
+
+  const handlePlace = () => {
+    if (!state.drawn || nextSlot === null) return;
+    haptic('medium');
+    playSound('place');
+    performAnimated({ kind: 'place', card: state.drawn, toSlot: nextSlot }, { type: 'PLACE' });
   };
 
   const handleSlotPress = (idx: number) => {
+    if (anim) return;
     const p = state.phase;
     if (p.kind === 'awaiting-target-hop') {
       if (selectedSlot === null) {
         if (p.pairs.some(([a, b]) => a === idx || b === idx)) {
           haptic('light');
+          playSound('tap');
           setSelectedSlot(idx);
         }
       } else if (idx === selectedSlot) {
@@ -113,33 +150,66 @@ export const GameScreen = ({ state, dispatch }: Props) => {
           ([a, b]) => (a === selectedSlot && b === idx) || (a === idx && b === selectedSlot)
         );
         if (pair) {
-          fire({ type: 'RESOLVE_HOP', i: pair[0], j: pair[1] }, 'medium');
-          setSelectedSlot(null);
+          const cardA = state.grid[pair[0]];
+          const cardB = state.grid[pair[1]];
+          if (cardA && cardB) {
+            haptic('medium');
+            playSound('swap');
+            performAnimated(
+              { kind: 'swap', cardA, slotA: pair[0], cardB, slotB: pair[1] },
+              { type: 'RESOLVE_HOP', i: pair[0], j: pair[1] }
+            );
+            setSelectedSlot(null);
+          }
         }
       }
     } else if (p.kind === 'awaiting-target-slide-source') {
       if (p.sources.includes(idx)) {
         haptic('light');
+        playSound('tap');
         dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: idx });
         setSelectedSlot(idx);
       }
     } else if (p.kind === 'awaiting-target-slide-dest') {
       const valid = p.moves.find(m => m.leadingDest === idx);
       if (valid) {
-        fire(
+        const chainSlots = slideChain(state.grid, valid.from, valid.direction);
+        const step =
+          valid.direction === 'up' ? -GRID_SIZE
+          : valid.direction === 'down' ? GRID_SIZE
+          : valid.direction === 'left' ? -1
+          : 1;
+        const cards = chainSlots
+          .map(slot => ({
+            card: state.grid[slot],
+            from: slot,
+            to: slot + step * valid.distance,
+          }))
+          .filter((c): c is { card: Card; from: number; to: number } => c.card !== null);
+        haptic('medium');
+        playSound('slide');
+        performAnimated(
+          { kind: 'slide', cards },
           {
             type: 'RESOLVE_SLIDE',
             from: valid.from,
             direction: valid.direction,
             distance: valid.distance,
-          },
-          'medium'
+          }
         );
         setSelectedSlot(null);
       }
     } else if (p.kind === 'awaiting-target-destroy') {
       if (p.targets.includes(idx)) {
-        fire({ type: 'RESOLVE_DESTROY', slot: idx }, 'heavy');
+        const card = state.grid[idx];
+        if (card) {
+          haptic('heavy');
+          playSound('destroy');
+          performAnimated(
+            { kind: 'destroy', card, slot: idx },
+            { type: 'RESOLVE_DESTROY', slot: idx }
+          );
+        }
       }
     }
   };
@@ -184,32 +254,45 @@ export const GameScreen = ({ state, dispatch }: Props) => {
     ? isJoker(drawn) ? 'joker' : `${drawn.rank}${drawn.suit}`
     : 'none';
 
+  // Soft chime on every new drawn card so the rhythm of the game is audible.
+  const prevDrawnSig = useRef(drawnKey);
+  useEffect(() => {
+    if (drawnKey !== prevDrawnSig.current && drawnKey !== 'none') {
+      playSound('draw');
+    }
+    prevDrawnSig.current = drawnKey;
+  }, [drawnKey, playSound]);
+
   return (
     <View style={styles.root}>
       <ScoreBar
         deckCount={state.deck.length}
         trashCount={state.trash.length}
-        bonusDeckCount={state.bonusDeck.length}
         target={state.target}
         difficulty={state.difficulty}
         liveScore={liveScore}
         onInfoPress={() => setScoringOpen(true)}
+        onHomePress={onHome}
       />
       <BonusCardStrip cards={state.bonusCards} />
 
       <View style={styles.gridWrap}>
-        <GridView
-          grid={state.grid}
-          highlight={highlightedSlots}
-          selected={selectedSlot}
-          nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
-          onSlotPress={handleSlotPress}
-          onLinePress={(kind, index) => setInspectLine({ kind, index })}
-        />
+        <View style={styles.gridStack}>
+          <GridView
+            grid={state.grid}
+            highlight={highlightedSlots}
+            hiddenSlots={hiddenSlotsFor(anim)}
+            selected={selectedSlot}
+            nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
+            onSlotPress={handleSlotPress}
+            onLinePress={(kind, index) => setInspectLine({ kind, index })}
+          />
+          <AnimationLayer anim={anim} />
+        </View>
       </View>
 
       <View style={styles.bottom}>
-        {renderBottom(state, fire, dispatch, haptic, suitOK, drawnKey)}
+        {renderBottom(state, handlePlace, dispatch, haptic, playSound, suitOK, drawnKey, !!anim)}
       </View>
 
       <ScoringReferenceModal
@@ -233,13 +316,16 @@ export const GameScreen = ({ state, dispatch }: Props) => {
 
 const renderBottom = (
   state: GameState,
-  fire: (a: Action, h?: 'light' | 'medium' | 'heavy') => void,
+  onPlace: () => void,
   dispatch: (a: Action) => void,
   haptic: (k: 'light' | 'medium' | 'heavy' | 'warning') => void,
+  playSound: (k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus') => void,
   suitOK: boolean,
-  drawnKey: string
+  drawnKey: string,
+  animating: boolean
 ) => {
   const p = state.phase;
+  const disabled = animating;
 
   if (p.kind === 'awaiting-action') {
     if (!state.drawn) return null;
@@ -249,19 +335,29 @@ const renderBottom = (
       <View style={styles.actionRow}>
         <DrawnArea drawnKey={drawnKey}>
           <Text style={styles.drawnLabel}>Drawn</Text>
-          <CardTile card={state.drawn} size="lg" />
+          {animating ? (
+            <View style={{ width: 88, height: 88 }} />
+          ) : (
+            <CardTile card={state.drawn} size="lg" />
+          )}
         </DrawnArea>
         <View style={styles.btnCol}>
           <NeonButton
             label="Place"
             variant="primary"
-            onPress={() => fire({ type: 'PLACE' }, 'medium')}
+            disabled={disabled}
+            onPress={onPlace}
           />
           {!isJk && suitOK && suit && (
             <NeonButton
               label={SUIT_PERK_LABEL[suit]}
               variant={SUIT_PERK_VARIANT[suit]}
-              onPress={() => fire({ type: 'BEGIN_SUIT_ACTION' }, 'light')}
+              disabled={disabled}
+              onPress={() => {
+                haptic('light');
+                playSound('tap');
+                dispatch({ type: 'BEGIN_SUIT_ACTION' });
+              }}
             />
           )}
           {!isJk && (
@@ -269,7 +365,12 @@ const renderBottom = (
               label="Trash"
               variant="secondary"
               size="sm"
-              onPress={() => fire({ type: 'DISCARD_NONE' }, 'light')}
+              disabled={disabled}
+              onPress={() => {
+                haptic('light');
+                playSound('tap');
+                dispatch({ type: 'DISCARD_NONE' });
+              }}
             />
           )}
           {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
@@ -306,7 +407,7 @@ const renderBottom = (
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap a card to slide.</Text>
+          <Text style={styles.hint}>Tap a card to slide. Cards in front of it slide together.</Text>
           <NeonButton
             label="Cancel"
             variant="secondary"
@@ -326,9 +427,7 @@ const renderBottom = (
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>
-            Tap a destination — the chain in front of the picked card slides together.
-          </Text>
+          <Text style={styles.hint}>Tap a glowing destination.</Text>
           <NeonButton
             label="Pick a different card"
             variant="secondary"
@@ -379,6 +478,7 @@ const renderBottom = (
               style={styles.bonusPick}
               onPress={() => {
                 haptic('light');
+                playSound('bonus');
                 dispatch(
                   atMax
                     ? { type: 'BONUS_SELECT_NEW', idx: i }
@@ -420,6 +520,7 @@ const renderBottom = (
               style={styles.bonusPick}
               onPress={() => {
                 haptic('medium');
+                playSound('bonus');
                 dispatch({ type: 'BONUS_REPLACE', oldIdx: i });
               }}
             >
@@ -444,6 +545,7 @@ const renderBottom = (
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
   gridWrap: { alignItems: 'center', paddingVertical: spacing.xs },
+  gridStack: { position: 'relative' },
   bottom: { flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   actionRow: {
     flexDirection: 'row',

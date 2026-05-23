@@ -12,137 +12,198 @@ import { colors, fonts, glow, radius, spacing } from '../theme';
 interface Props {
   deckCount: number;
   trashCount: number;
-  bonusDeckCount: number;
   target: number;
   difficulty: string;
   liveScore?: number;
   onInfoPress?: () => void;
+  onHomePress?: () => void;
 }
 
-// A single readout cell. When `value` changes, the value text briefly scales
-// up + glows — like a flipclock tick.
-const Cell = ({
-  label,
-  value,
-  highlight,
-  glowColor,
+// Live-score readout. Ticks softly on every change so the number feels alive.
+const ScoreReadout = ({
+  score,
+  target,
 }: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  glowColor?: string;
+  score: number;
+  target: number;
 }) => {
   const { settings } = useSettings();
   const scale = useSharedValue(1);
-  const valueRef = useRef(value);
+  const prev = useRef(score);
 
   useEffect(() => {
-    if (valueRef.current === value) return;
-    valueRef.current = value;
+    if (prev.current === score) return;
+    prev.current = score;
     if (settings.reduceMotion) return;
     scale.value = withSequence(
-      withTiming(1.15, { duration: 80 }),
-      withTiming(1, { duration: 160 })
+      withTiming(1.08, { duration: 90 }),
+      withTiming(1, { duration: 180 })
     );
-  }, [value, scale, settings.reduceMotion]);
+  }, [score, settings.reduceMotion, scale]);
 
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const hit = score >= target;
+  const accent = hit ? colors.success : colors.accent;
 
   return (
-    <View style={styles.cell}>
-      <Text style={styles.cellLabel}>{label}</Text>
-      <Animated.Text
-        style={[
-          styles.cellValue,
-          highlight && styles.cellValueHi,
-          glowColor && { color: glowColor, textShadowColor: glowColor },
-          animStyle,
-        ]}
-      >
-        {value}
-      </Animated.Text>
+    <View style={styles.scoreBlock}>
+      <Animated.View style={[styles.scoreLine, animStyle]}>
+        <Text
+          style={[
+            styles.scoreValue,
+            { color: accent, textShadowColor: accent },
+          ]}
+        >
+          {score}
+        </Text>
+        <Text style={styles.scoreSep}>/</Text>
+        <Text style={styles.scoreTarget}>{target}</Text>
+      </Animated.View>
     </View>
   );
 };
 
+const Tag = ({ label, value }: { label: string; value: string | number }) => (
+  <View style={styles.tag}>
+    <Text style={styles.tagLabel}>{label}</Text>
+    <Text style={styles.tagValue}>{value}</Text>
+  </View>
+);
+
 export const ScoreBar = ({
   deckCount,
   trashCount,
-  bonusDeckCount,
   target,
   difficulty,
   liveScore,
   onInfoPress,
+  onHomePress,
 }: Props) => {
-  const scoreHit = liveScore !== undefined && liveScore >= target;
   return (
     <View style={styles.bar}>
-      <Cell label="Deck" value={`${deckCount}`} />
-      <Cell label="Trash" value={`${trashCount}`} />
-      <Cell label="Bonus" value={`${bonusDeckCount}`} />
-      <Cell label={`Tgt · ${difficulty}`} value={`${target}`} />
-      {liveScore !== undefined && (
-        <Cell
-          label="Score"
-          value={`${liveScore}`}
-          highlight={scoreHit}
-          glowColor={scoreHit ? colors.success : undefined}
-        />
-      )}
-      {onInfoPress && (
-        <Pressable onPress={onInfoPress} style={styles.infoBtn} hitSlop={10}>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </Pressable>
-      )}
+      <View style={styles.topRow}>
+        {onHomePress && (
+          <Pressable onPress={onHomePress} hitSlop={10} style={styles.iconBtn}>
+            <Text style={styles.iconText}>‹</Text>
+          </Pressable>
+        )}
+        {liveScore !== undefined ? (
+          <ScoreReadout score={liveScore} target={target} />
+        ) : (
+          <View style={styles.scoreBlock} />
+        )}
+        {onInfoPress && (
+          <Pressable onPress={onInfoPress} hitSlop={10} style={styles.iconBtn}>
+            <Text style={styles.iconText}>ⓘ</Text>
+          </Pressable>
+        )}
+      </View>
+      <View style={styles.tagsRow}>
+        <Tag label="deck" value={deckCount} />
+        <View style={styles.tagSep} />
+        <Tag label="trash" value={trashCount} />
+        <View style={styles.tagSep} />
+        <Tag label="diff" value={difficulty} />
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: colors.bgPanel,
     borderBottomWidth: 1,
     borderBottomColor: colors.outlineSoft,
+  },
+  topRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 40,
   },
-  cell: { flex: 1, alignItems: 'center' },
-  cellLabel: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    color: colors.textLow,
-    letterSpacing: 1.4,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  cellValue: {
-    fontFamily: fonts.mono,
-    fontSize: 18,
-    color: colors.textHi,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginTop: 1,
-    textShadowColor: colors.textHi,
-    textShadowRadius: 1,
-  },
-  cellValueHi: {
-    color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 8,
-  },
-  infoBtn: {
-    width: 28,
-    height: 28,
+  iconBtn: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: spacing.xs,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.outline,
-    ...glow(colors.accent, 6, 0.3),
+    ...glow(colors.accent, 4, 0.22),
   },
-  infoIcon: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  iconText: {
+    color: colors.accent,
+    fontSize: 16,
+    fontFamily: fonts.mono,
+    fontWeight: '800',
+  },
+  scoreBlock: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scoreLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  scoreValue: {
+    fontFamily: fonts.mono,
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowRadius: 10,
+  },
+  scoreSep: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 18,
+    marginHorizontal: 6,
+    fontWeight: '500',
+  },
+  scoreTarget: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  tagLabel: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 2,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginRight: 4,
+  },
+  tagValue: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  tagSep: {
+    width: 1,
+    height: 10,
+    backgroundColor: colors.outlineSoft,
+    marginHorizontal: spacing.xs,
+  },
 });

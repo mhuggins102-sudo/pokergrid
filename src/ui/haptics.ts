@@ -13,9 +13,26 @@ export type HapticKind =
   | 'warning'  // attempt invalid action
   | 'error';   // loss
 
+// Web fallback: vibrate via the Vibration API. Desktop browsers ignore it,
+// but mobile browsers (Chrome on Android, some others) honor it.
+const webVibrate = (pattern: number | number[]) => {
+  if (typeof navigator === 'undefined') return;
+  const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
+  if (typeof nav.vibrate === 'function') nav.vibrate(pattern);
+};
+
 const trigger = (kind: HapticKind) => {
-  // expo-haptics is a no-op on web in some browsers, but the call is safe.
-  // Avoid awaiting — fire-and-forget.
+  if (Platform.OS === 'web') {
+    switch (kind) {
+      case 'light':   return webVibrate(10);
+      case 'medium':  return webVibrate(20);
+      case 'heavy':   return webVibrate(40);
+      case 'success': return webVibrate([10, 40, 10]);
+      case 'warning': return webVibrate([20, 20]);
+      case 'error':   return webVibrate([40, 30, 40]);
+    }
+    return;
+  }
   switch (kind) {
     case 'light': return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     case 'medium': return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -31,8 +48,6 @@ export const useHaptic = () => {
   return useCallback(
     (kind: HapticKind) => {
       if (!settings.haptics) return;
-      // Web's Vibration API support is spotty — only fire on native.
-      if (Platform.OS === 'web') return;
       trigger(kind);
     },
     [settings.haptics]

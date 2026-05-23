@@ -17,6 +17,7 @@ import { LineDetailModal } from '../components/LineDetailModal';
 import { NeonButton } from '../components/NeonButton';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
+import { useSound } from '../sound';
 import { useStats } from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -43,6 +44,7 @@ const HAND_LABEL: Record<HandRank, string> = {
 const BannerHero = ({ won, score, target }: { won: boolean; score: number; target: number }) => {
   const { settings } = useSettings();
   const haptic = useHaptic();
+  const playSound = useSound();
   const fade = useSharedValue(0);
   const scale = useSharedValue(0.8);
   const fired = useRef(false);
@@ -51,22 +53,19 @@ const BannerHero = ({ won, score, target }: { won: boolean; score: number; targe
     if (settings.reduceMotion) {
       fade.value = 1;
       scale.value = 1;
-      if (!fired.current) {
-        haptic(won ? 'success' : 'warning' as any);
-        fired.current = true;
-      }
-      return;
+    } else {
+      fade.value = withTiming(1, { duration: 280 });
+      scale.value = withSequence(
+        withTiming(1.08, { duration: 280 }),
+        withTiming(1, { duration: 220 })
+      );
     }
-    fade.value = withTiming(1, { duration: 280 });
-    scale.value = withSequence(
-      withTiming(1.08, { duration: 280 }),
-      withTiming(1, { duration: 220 })
-    );
     if (!fired.current) {
-      haptic(won ? 'success' : 'warning' as any);
+      haptic(won ? 'success' : 'error');
+      playSound(won ? 'win' : 'lose');
       fired.current = true;
     }
-  }, [won, fade, scale, settings.reduceMotion, haptic]);
+  }, [won, fade, scale, settings.reduceMotion, haptic, playSound]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: fade.value,
