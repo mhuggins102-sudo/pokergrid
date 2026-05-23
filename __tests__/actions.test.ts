@@ -91,50 +91,84 @@ describe('♠ Slide (spade) — free destination in path', () => {
     expect(validSlideSources(g)).toEqual([12]);
   });
 
-  test('slideDestinationsFrom enumerates each empty slot in each direction up to first blocker', () => {
+  test('slideDestinationsFrom enumerates each leading-edge destination per direction', () => {
     let g = emptyGrid();
     g = placeAt(g, 12, C('A', 'H'));
     g = placeAt(g, 14, C('K', 'C')); // blocker to the right of (12) +2
     const moves = slideDestinationsFrom(g, 12);
-    const right = moves.filter(m => m.direction === 'right').map(m => m.to);
-    expect(right).toEqual([13]); // can land on 13 only, blocked at 14
-    const up = moves.filter(m => m.direction === 'up').map(m => m.to).sort((a, b) => a - b);
+    const right = moves.filter(m => m.direction === 'right').map(m => m.leadingDest);
+    expect(right).toEqual([13]); // single-card chain can only reach slot 13
+    const up = moves
+      .filter(m => m.direction === 'up')
+      .map(m => m.leadingDest)
+      .sort((a, b) => a - b);
     expect(up).toEqual([2, 7]);
   });
 
-  test('canSlide is false when no card can move in any direction', () => {
-    // Surround the only card on all 4 sides with blockers.
-    const g = fillSlots([
-      [12, C('A', 'H')], // center
-      [7, C('2', 'C')],  // up
-      [17, C('3', 'C')], // down
-      [11, C('4', 'C')], // left
-      [13, C('5', 'C')], // right
-    ]);
-    // The center is blocked, but the 4 blockers themselves can slide.
-    expect(canSlide(g)).toBe(true);
+  test('canSlide is false on an empty grid and on a fully packed grid', () => {
+    expect(canSlide(emptyGrid())).toBe(false);
 
-    // Now fully wall it off.
-    const fullRow = emptyGrid();
-    // single card cornered
-    fullRow[0] = C('A', 'H');
-    fullRow[1] = C('2', 'C');
-    fullRow[5] = C('3', 'C');
-    expect(validSlideSources(fullRow).includes(0)).toBe(false); // 0 is cornered with neighbors
+    // Fully packed grid: every chain spans the row/column entirely → nowhere to go.
+    let full: Grid = emptyGrid();
+    for (let i = 0; i < 25; i++) full = placeAt(full, i, C('2', 'C'));
+    expect(canSlide(full)).toBe(false);
+
+    // A surrounded center is itself blocked, but neighbors form chains that
+    // can slide outward.
+    const g = fillSlots([
+      [12, C('A', 'H')],
+      [7, C('2', 'C')],
+      [17, C('3', 'C')],
+      [11, C('4', 'C')],
+      [13, C('5', 'C')],
+    ]);
+    expect(canSlide(g)).toBe(true);
   });
 
-  test('executeSlide moves card and empties source', () => {
+  test('executeSlide moves a single-card chain and empties source', () => {
     let g = emptyGrid();
     g = placeAt(g, 12, C('A', 'H'));
-    const next = executeSlide(g, 12, 13);
+    const next = executeSlide(g, 12, 'right', 1);
     expect(next[12]).toBeNull();
     expect(next[13]).toEqual(C('A', 'H'));
   });
 
-  test('executeSlide throws when source and dest are not in line', () => {
+  test('executeSlide throws when distance exceeds maximum', () => {
     let g = emptyGrid();
     g = placeAt(g, 12, C('A', 'H'));
-    expect(() => executeSlide(g, 12, 6)).toThrow(); // 6 is diagonal
+    g = placeAt(g, 14, C('K', 'C'));
+    // chain at 12, max distance right = 1 (blocked at 14)
+    expect(() => executeSlide(g, 12, 'right', 2)).toThrow();
+  });
+
+  test('group slide moves a 3-card vertical chain up by 1 (the user\'s example)', () => {
+    // C4 = column index 3. R2/R3/R4 filled, R1 empty.
+    let g = emptyGrid();
+    const a = C('A', 'H');
+    const b = C('K', 'C');
+    const c = C('Q', 'D');
+    g = placeAt(g, 1 * 5 + 3, a); // R2C4 = 8
+    g = placeAt(g, 2 * 5 + 3, b); // R3C4 = 13
+    g = placeAt(g, 3 * 5 + 3, c); // R4C4 = 18
+    // User taps the bottom of the chain (R4C4 = 18) and chooses up by 1.
+    const next = executeSlide(g, 18, 'up', 1);
+    // After up-1: cards land at R1C4 (=3), R2C4 (=8), R3C4 (=13); R4C4 (=18) empty.
+    expect(next[3]).toEqual(a);
+    expect(next[8]).toEqual(b);
+    expect(next[13]).toEqual(c);
+    expect(next[18]).toBeNull();
+  });
+
+  test('group slide max distance respects walls and blockers', () => {
+    let g = emptyGrid();
+    // Vertical chain at C2 R2-R3 (slots 6, 11). R1=1, R4=16, R5=21 are empty.
+    g = placeAt(g, 6, C('A', 'H'));
+    g = placeAt(g, 11, C('K', 'C'));
+    const moves = slideDestinationsFrom(g, 11);
+    const up = moves.filter(m => m.direction === 'up').map(m => m.distance).sort();
+    expect(up).toEqual([1]); // can only go up 1 before wall
+    const down = moves.filter(m => m.direction === 'down').map(m => m.distance).sort();
+    expect(down).toEqual([1, 2]); // can go down 1 or 2 (R4 then R5)
   });
 });
 

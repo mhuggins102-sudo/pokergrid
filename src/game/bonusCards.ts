@@ -16,8 +16,8 @@ export interface LineContext {
 }
 
 export interface LineEffect {
-  // Boosts compose additively per line: multiplier = 1 + Σ boosts.
-  multiplierBoost?: number;
+  // Multipliers compose multiplicatively across cards. Omitted/1.0 = no effect.
+  multiplier?: number;
   // Flats add to the per-line total after the multiplier.
   flatAdd?: number;
 }
@@ -27,8 +27,8 @@ export interface GridSnapshot {
 }
 
 export interface GridEffect {
-  // Additive contribution to the final-total multiplier (1 + Σ boosts).
-  totalMultiplierBoost?: number;
+  // Multiplicative contribution to the final-total multiplier (1.0 = no effect).
+  totalMultiplier?: number;
   totalFlatAdd?: number;
 }
 
@@ -53,6 +53,9 @@ export const lineSuit = (line: LineContext): Suit | null => {
   return std.every(c => c.suit === s) ? s : null;
 };
 
+// Constructor base values — explicit multipliers (no longer additive boosts).
+// Each card returns its actual multiplier; the aggregator multiplies them.
+
 // ---------- Bonus card constructors ----------
 
 const HAND_NAME: Record<HandRank, string> = {
@@ -71,38 +74,38 @@ const HAND_NAME: Record<HandRank, string> = {
 
 const SUIT_GLYPH: Record<Suit, string> = { H: '♥', S: '♠', D: '♦', C: '♣' };
 
-const handBoost = (hand: HandRank, boost: number): BonusCard => {
-  const mult = (1 + boost).toString().replace(/\.0$/, '');
+const handBoost = (hand: HandRank, multiplier: number): BonusCard => {
+  const m = multiplier.toString().replace(/\.0$/, '');
   return {
-    id: `hand-${hand.toLowerCase()}-x${mult}`,
-    name: `${HAND_NAME[hand]} ×${mult}`,
-    description: `Each line that scores ${HAND_NAME[hand]} is multiplied by ${mult}.`,
-    lineEffect: line => (line.hand === hand ? { multiplierBoost: boost } : {}),
+    id: `hand-${hand.toLowerCase()}-x${m}`,
+    name: `${HAND_NAME[hand]} ×${m}`,
+    description: `Each line that scores ${HAND_NAME[hand]} is multiplied by ${m}.`,
+    lineEffect: line => (line.hand === hand ? { multiplier } : {}),
   };
 };
 
-const rowBoost = (rowIdx: number, boost: number): BonusCard => {
-  const mult = (1 + boost).toString().replace(/\.0$/, '');
+const rowBoost = (rowIdx: number, multiplier: number): BonusCard => {
+  const m = multiplier.toString().replace(/\.0$/, '');
   return {
-    id: `row-${rowIdx + 1}-x${mult}`,
-    name: `Row ${rowIdx + 1} ×${mult}`,
-    description: `Row ${rowIdx + 1}'s score is multiplied by ${mult}.`,
+    id: `row-${rowIdx + 1}-x${m}`,
+    name: `Row ${rowIdx + 1} ×${m}`,
+    description: `Row ${rowIdx + 1}'s score is multiplied by ${m}.`,
     lineEffect: line =>
       line.kind === 'row' && line.index === rowIdx && line.hand
-        ? { multiplierBoost: boost }
+        ? { multiplier }
         : {},
   };
 };
 
-const colBoost = (colIdx: number, boost: number): BonusCard => {
-  const mult = (1 + boost).toString().replace(/\.0$/, '');
+const colBoost = (colIdx: number, multiplier: number): BonusCard => {
+  const m = multiplier.toString().replace(/\.0$/, '');
   return {
-    id: `col-${colIdx + 1}-x${mult}`,
-    name: `Col ${colIdx + 1} ×${mult}`,
-    description: `Column ${colIdx + 1}'s score is multiplied by ${mult}.`,
+    id: `col-${colIdx + 1}-x${m}`,
+    name: `Col ${colIdx + 1} ×${m}`,
+    description: `Column ${colIdx + 1}'s score is multiplied by ${m}.`,
     lineEffect: line =>
       line.kind === 'col' && line.index === colIdx && line.hand
-        ? { multiplierBoost: boost }
+        ? { multiplier }
         : {},
   };
 };
@@ -115,7 +118,7 @@ const suitDensity = (suit: Suit): BonusCard => ({
   lineEffect: line => {
     if (!line.hand) return {};
     const n = standardCards(line).filter(c => c.suit === suit).length;
-    return n > 0 ? { multiplierBoost: Math.pow(1.1, n) - 1 } : {};
+    return n > 0 ? { multiplier: Math.pow(1.1, n) } : {};
   },
 });
 
@@ -128,7 +131,7 @@ const rainbowLine: BonusCard = {
   lineEffect: line => {
     if (!line.hand) return {};
     const suits = new Set(standardCards(line).map(c => c.suit));
-    return suits.size >= 4 ? { multiplierBoost: 1.0 } : {};
+    return suits.size >= 4 ? { multiplier: 2 } : {};
   },
 };
 
@@ -139,7 +142,7 @@ const jokerLine: BonusCard = {
   lineEffect: line => {
     if (!line.hand) return {};
     const hasJoker = line.cards.some(c => c !== null && isJoker(c));
-    return hasJoker ? { multiplierBoost: 1.0 } : {};
+    return hasJoker ? { multiplier: 2 } : {};
   },
 };
 
@@ -150,7 +153,7 @@ const royalTouch: BonusCard = {
   lineEffect: line => {
     if (!line.hand) return {};
     const hasAce = standardCards(line).some(c => c.rank === 'A');
-    return hasAce ? { multiplierBoost: 0.5 } : {};
+    return hasAce ? { multiplier: 1.5 } : {};
   },
 };
 
@@ -163,7 +166,7 @@ const spiralCore: BonusCard = {
     const onCore =
       (line.kind === 'row' && line.index === 2) ||
       (line.kind === 'col' && line.index === 2);
-    return onCore ? { multiplierBoost: 0.5 } : {};
+    return onCore ? { multiplier: 1.5 } : {};
   },
 };
 
@@ -181,7 +184,7 @@ const cleanBorder: BonusCard = {
       const c = grid[i];
       return c !== null && isFace(c);
     });
-    return anyFace ? {} : { totalMultiplierBoost: 0.2 };
+    return anyFace ? {} : { totalMultiplier: 1.2 };
   },
 };
 
@@ -195,7 +198,7 @@ const monochromeBorder: BonusCard = {
     const isRed = (c: Card) => !isJoker(c) && (c.suit === 'H' || c.suit === 'D');
     const allRed = cards.every(isRed);
     const allBlack = cards.every(c => !isRed(c));
-    return allRed || allBlack ? { totalMultiplierBoost: 0.25 } : {};
+    return allRed || allBlack ? { totalMultiplier: 1.25 } : {};
   },
 };
 
@@ -207,7 +210,7 @@ const rainbowCorners: BonusCard = {
     const cards = CORNER_SLOTS.map(i => grid[i]);
     if (cards.some(c => !c || isJoker(c))) return {};
     const suits = new Set(cards.map(c => (c as any).suit as Suit));
-    return suits.size === 4 ? { totalMultiplierBoost: 0.2 } : {};
+    return suits.size === 4 ? { totalMultiplier: 1.2 } : {};
   },
 };
 
@@ -220,34 +223,34 @@ const cozyJoker: BonusCard = {
       const c = grid[i];
       return c !== null && isJoker(c);
     });
-    return inInner ? { totalMultiplierBoost: 0.15 } : {};
+    return inInner ? { totalMultiplier: 1.15 } : {};
   },
 };
 
 // ---------- The 30-card pool ----------
 
 export const BONUS_DECK_POOL: BonusCard[] = [
-  // Hand-type (8)
-  handBoost('PAIR', 3.0),
-  handBoost('TWO_PAIR', 2.0),
-  handBoost('THREE_OF_A_KIND', 2.0),
-  handBoost('STRAIGHT', 1.0),
-  handBoost('FLUSH', 1.0),
-  handBoost('FULL_HOUSE', 1.0),
-  handBoost('FOUR_OF_A_KIND', 1.0),
-  handBoost('FIVE_OF_A_KIND', 1.0),
+  // Hand-type (8) — literal multipliers
+  handBoost('PAIR', 4),
+  handBoost('TWO_PAIR', 3),
+  handBoost('THREE_OF_A_KIND', 3),
+  handBoost('STRAIGHT', 2),
+  handBoost('FLUSH', 2),
+  handBoost('FULL_HOUSE', 2),
+  handBoost('FOUR_OF_A_KIND', 2),
+  handBoost('FIVE_OF_A_KIND', 2),
 
-  // Rows + Cols (10)
-  rowBoost(0, 1.0),
-  rowBoost(1, 1.0),
-  rowBoost(2, 1.0),
-  rowBoost(3, 1.0),
-  rowBoost(4, 1.0),
-  colBoost(0, 1.0),
-  colBoost(1, 1.0),
-  colBoost(2, 1.0),
-  colBoost(3, 1.0),
-  colBoost(4, 1.0),
+  // Rows + Cols (10) — literal ×2
+  rowBoost(0, 2),
+  rowBoost(1, 2),
+  rowBoost(2, 2),
+  rowBoost(3, 2),
+  rowBoost(4, 2),
+  colBoost(0, 2),
+  colBoost(1, 2),
+  colBoost(2, 2),
+  colBoost(3, 2),
+  colBoost(4, 2),
 
   // Suit-density (4)
   suitDensity('H'),
@@ -281,7 +284,7 @@ export const applyLineEffects = (
   for (const bc of cards) {
     if (!bc.lineEffect) continue;
     const e = bc.lineEffect(line);
-    if (e.multiplierBoost) mult += e.multiplierBoost;
+    if (e.multiplier !== undefined && e.multiplier !== 0) mult *= e.multiplier;
     if (e.flatAdd) flat += e.flatAdd;
   }
   return { multiplier: mult, flat };
@@ -296,7 +299,7 @@ export const applyGridEffects = (
   for (const bc of cards) {
     if (!bc.gridEffect) continue;
     const e = bc.gridEffect(snap);
-    if (e.totalMultiplierBoost) mult += e.totalMultiplierBoost;
+    if (e.totalMultiplier !== undefined && e.totalMultiplier !== 0) mult *= e.totalMultiplier;
     if (e.totalFlatAdd) flat += e.totalFlatAdd;
   }
   return { multiplier: mult, flat };
@@ -330,12 +333,12 @@ export const universalEffectFor = (
     { kind: 'col', index: 0, cards: PROBE_CARDS_B, hand },
     { kind: 'col', index: 4, cards: PROBE_CARDS_A, hand },
   ];
-  const sig = (e: LineEffect) => `${e.multiplierBoost ?? 0}|${e.flatAdd ?? 0}`;
+  const sig = (e: LineEffect) => `${e.multiplier ?? 1}|${e.flatAdd ?? 0}`;
   const results = variants.map(v => bc.lineEffect!(v));
   const first = sig(results[0]);
   if (!results.every(r => sig(r) === first)) return null;
   const e = results[0];
-  if (!e.multiplierBoost && !e.flatAdd) return null;
+  if ((e.multiplier === undefined || e.multiplier === 1) && !e.flatAdd) return null;
   return e;
 };
 
@@ -348,7 +351,7 @@ export const universalEffectSum = (
   for (const bc of cards) {
     const e = universalEffectFor(bc, hand);
     if (!e) continue;
-    if (e.multiplierBoost) multiplier += e.multiplierBoost;
+    if (e.multiplier !== undefined && e.multiplier !== 0) multiplier *= e.multiplier;
     if (e.flatAdd) flat += e.flatAdd;
   }
   return { multiplier, flat };

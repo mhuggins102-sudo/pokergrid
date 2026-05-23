@@ -23,7 +23,7 @@ export const ScoreBar = ({
   <View style={styles.bar}>
     <Cell label="Deck" value={`${deckCount}`} />
     <Cell label="Trash" value={`${trashCount}`} />
-    <Cell label="♣ Deck" value={`${bonusDeckCount}`} />
+    <Cell label="Bonus" value={`${bonusDeckCount}`} />
     <Cell label={`Tgt (${difficulty})`} value={`${target}`} />
     {liveScore !== undefined && (
       <Cell label="Score" value={`${liveScore}`} highlight={liveScore >= target} />

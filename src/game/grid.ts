@@ -120,29 +120,97 @@ const STEP: Record<Direction, [number, number]> = {
   right: [0, 1],
 };
 
-// Empty slots reachable from `from` in `direction` before hitting a blocker
-// or the wall. Empty slots in that path are valid destinations.
-export const slideTargets = (g: Grid, from: number, direction: Direction): number[] => {
-  const [dr, dc] = STEP[direction];
-  let r = rowOf(from);
-  let c = colOf(from);
+// Maximal contiguous filled run in `slot`'s column that includes `slot`.
+// Returned as slot indices ordered top → bottom. Returns empty when slot empty.
+export const columnChain = (g: Grid, slot: number): number[] => {
+  if (g[slot] === null) return [];
+  const c = colOf(slot);
+  const startR = rowOf(slot);
+  let top = startR;
+  while (top - 1 >= 0 && g[(top - 1) * GRID_SIZE + c] !== null) top--;
+  let bottom = startR;
+  while (bottom + 1 < GRID_SIZE && g[(bottom + 1) * GRID_SIZE + c] !== null) bottom++;
   const out: number[] = [];
+  for (let r = top; r <= bottom; r++) out.push(r * GRID_SIZE + c);
+  return out;
+};
+
+// Maximal contiguous filled run in `slot`'s row that includes `slot`.
+// Returned as slot indices ordered left → right.
+export const rowChain = (g: Grid, slot: number): number[] => {
+  if (g[slot] === null) return [];
+  const r = rowOf(slot);
+  const startC = colOf(slot);
+  let left = startC;
+  while (left - 1 >= 0 && g[r * GRID_SIZE + (left - 1)] !== null) left--;
+  let right = startC;
+  while (right + 1 < GRID_SIZE && g[r * GRID_SIZE + (right + 1)] !== null) right++;
+  const out: number[] = [];
+  for (let c = left; c <= right; c++) out.push(r * GRID_SIZE + c);
+  return out;
+};
+
+// The chain that participates in a slide of `slot` in `direction`.
+// up/down → columnChain; left/right → rowChain.
+export const slideChain = (g: Grid, slot: number, direction: Direction): number[] => {
+  if (direction === 'up' || direction === 'down') return columnChain(g, slot);
+  return rowChain(g, slot);
+};
+
+// How far the chain containing `slot` can slide in `direction`.
+// Returns the max integer step count (0 = can't slide).
+export const slideChainMaxDistance = (
+  g: Grid,
+  slot: number,
+  direction: Direction
+): number => {
+  const chain = slideChain(g, slot, direction);
+  if (chain.length === 0) return 0;
+  const [dr, dc] = STEP[direction];
+  // Leading edge is the chain endpoint in the direction of motion.
+  let leadIdx: number;
+  if (direction === 'up') leadIdx = chain[0];
+  else if (direction === 'down') leadIdx = chain[chain.length - 1];
+  else if (direction === 'left') leadIdx = chain[0];
+  else leadIdx = chain[chain.length - 1];
+
+  let r = rowOf(leadIdx);
+  let c = colOf(leadIdx);
+  let dist = 0;
   while (true) {
     r += dr;
     c += dc;
     if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) break;
-    const idx = r * GRID_SIZE + c;
-    if (g[idx] !== null) break;
-    out.push(idx);
+    if (g[r * GRID_SIZE + c] !== null) break;
+    dist++;
+  }
+  return dist;
+};
+
+// Empty slots reachable by the chain's leading edge in `direction` (1..max).
+export const slideTargets = (g: Grid, slot: number, direction: Direction): number[] => {
+  const max = slideChainMaxDistance(g, slot, direction);
+  if (max === 0) return [];
+  const chain = slideChain(g, slot, direction);
+  const [dr, dc] = STEP[direction];
+  const leadIdx =
+    direction === 'up' || direction === 'left' ? chain[0] : chain[chain.length - 1];
+  const out: number[] = [];
+  let r = rowOf(leadIdx);
+  let c = colOf(leadIdx);
+  for (let d = 1; d <= max; d++) {
+    r += dr;
+    c += dc;
+    out.push(r * GRID_SIZE + c);
   }
   return out;
 };
 
-// All reachable destinations from `from` across all 4 directions.
-export const allSlideTargets = (g: Grid, from: number): number[] => {
+// All reachable leading-edge destinations across 4 directions.
+export const allSlideTargets = (g: Grid, slot: number): number[] => {
   const out: number[] = [];
   for (const d of ['up', 'down', 'left', 'right'] as Direction[]) {
-    out.push(...slideTargets(g, from, d));
+    out.push(...slideTargets(g, slot, d));
   }
   return out;
 };

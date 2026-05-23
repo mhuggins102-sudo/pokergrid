@@ -27,9 +27,9 @@ const findCard = (id: string): BonusCard => {
 };
 
 describe('scoring (no bonus cards)', () => {
-  test('empty grid totals 0', () => {
+  test('empty grid penalizes all 10 lines as incomplete', () => {
     const { total } = scoreGrid(emptyGrid(), []);
-    expect(total).toBe(0);
+    expect(total).toBe(-250); // 10 lines × -25
   });
 
   test('base values reflect HAND_BASE_VALUE', () => {
@@ -50,6 +50,17 @@ describe('scoring with bonus cards', () => {
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
     expect(row0.multiplier).toBe(4);
     expect(row0.total).toBe(20); // ceil(5 * 4)
+  });
+
+  test('two bonuses stack multiplicatively on the same line', () => {
+    // Pair on row 0 ⇒ Pair ×4 hits AND Row 1 ×2 hits ⇒ ×8 total.
+    const pair4 = findCard('hand-pair-x4');
+    const row1 = findCard('row-1-x2');
+    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [pair4, row1]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(8);
+    expect(row0.total).toBe(40); // ceil(5 * 8)
   });
 
   test('×1.1 per ♥ in line compounds with hearts count', () => {
@@ -89,20 +100,68 @@ describe('scoring with bonus cards', () => {
   });
 });
 
+describe('incomplete-line penalty', () => {
+  test('a line with fewer than 5 cards scores -25', () => {
+    const g = emptyGrid();
+    // Place 4 cards in row 0 (incomplete) and 0 in others.
+    g[0] = C('2', 'H');
+    g[1] = C('3', 'H');
+    g[2] = C('4', 'H');
+    g[3] = C('5', 'H');
+    const report = scoreGrid(g, []);
+    const row0 = report.lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.incomplete).toBe(true);
+    expect(row0.total).toBe(-25);
+    // All other 9 lines also incomplete → 10 lines × -25 = -250 subtotal.
+    expect(report.subtotal).toBe(-250);
+    expect(report.incompletePenalty).toBe(-250);
+  });
+
+  test('a single empty slot at game end penalizes both its row and column', () => {
+    // Fill the grid except slot 0.
+    const g = emptyGrid();
+    let v = 0;
+    const ranks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'] as const;
+    const suits = ['H','S','D','C'] as const;
+    for (let i = 1; i < 25; i++) {
+      g[i] = C(ranks[v % ranks.length], suits[v % suits.length]);
+      v++;
+    }
+    const report = scoreGrid(g, []);
+    const row0 = report.lines.find(l => l.kind === 'row' && l.index === 0)!;
+    const col0 = report.lines.find(l => l.kind === 'col' && l.index === 0)!;
+    expect(row0.incomplete).toBe(true);
+    expect(col0.incomplete).toBe(true);
+    expect(row0.total).toBe(-25);
+    expect(col0.total).toBe(-25);
+    expect(report.incompletePenalty).toBe(-50);
+  });
+});
+
 describe('grid-level achievements', () => {
   test('Clean border ×1.2 applies only when no face cards on the border', () => {
     const clean = findCard('clean-border-x1_2');
-    const noFaces: Grid = emptyGrid();
-    // Put a pair in row 0 with no face cards, and leave the rest empty for now.
-    const pair = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('10', 'H')];
-    for (let i = 0; i < 5; i++) noFaces[i] = pair[i];
-    const { total } = scoreGrid(noFaces, [clean]);
-    // Pair scores 5; no other lines score. Subtotal = 5. Multiplier 1.2 → 6.
-    expect(total).toBe(6);
+    // Fill the grid completely with non-face cards so only the border test matters.
+    const g: Grid = emptyGrid();
+    const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const suitCycle: Suit[] = ['H', 'C', 'D', 'S'];
+    for (let i = 0; i < 25; i++) {
+      g[i] = C(ranks2to10[i % ranks2to10.length], suitCycle[i % suitCycle.length]);
+    }
+    // Force a clean Pair on row 0 for a known scoring delta.
+    g[0] = C('2', 'H');
+    g[1] = C('2', 'C');
+    g[2] = C('5', 'D');
+    g[3] = C('8', 'S');
+    g[4] = C('10', 'H');
 
-    // Add a face card to the border → bonus does not apply.
-    noFaces[20] = C('K', 'C');
-    const after = scoreGrid(noFaces, [clean]);
-    expect(after.total).toBeLessThan(6);
+    const noBonus = scoreGrid(g, []).total;
+    const withClean = scoreGrid(g, [clean]).total;
+    expect(withClean).toBeCloseTo(Math.ceil(noBonus * 1.2));
+
+    // Place a face card on the border → bonus disabled.
+    g[20] = C('K', 'C');
+    const broken = scoreGrid(g, [clean]).total;
+    expect(broken).toBeLessThanOrEqual(scoreGrid(g, []).total);
   });
 });

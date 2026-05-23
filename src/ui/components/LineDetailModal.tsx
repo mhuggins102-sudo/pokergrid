@@ -4,7 +4,7 @@ import { Card } from '../../game/cards';
 import { applyLineEffects, BonusCard, LineContext } from '../../game/bonusCards';
 import { LineKind } from '../../game/grid';
 import { HandRank, evaluateLine } from '../../game/hands';
-import { HAND_BASE_VALUE } from '../../game/scoring';
+import { HAND_BASE_VALUE, INCOMPLETE_LINE_PENALTY } from '../../game/scoring';
 import { CardTile } from './CardTile';
 
 interface Props {
@@ -73,9 +73,16 @@ export const LineDetailModal = ({
           </View>
 
           {!hand ? (
-            <Text style={styles.incomplete}>
-              {filledCount} / 5 placed — fill the line to score it.
-            </Text>
+            <>
+              <Text style={styles.incomplete}>
+                {filledCount} / 5 placed — incomplete lines cost {INCOMPLETE_LINE_PENALTY * -1}
+                {' '}points at game end.
+              </Text>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>End-of-game</Text>
+                <Text style={styles.penaltyValue}>{INCOMPLETE_LINE_PENALTY}</Text>
+              </View>
+            </>
           ) : (
             <>
               <View style={styles.handBlock}>
@@ -171,4 +178,5 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: '#9aa0b2', fontSize: 13 },
   totalValue: { color: '#7cdca0', fontSize: 18, fontWeight: '800' },
+  penaltyValue: { color: '#f08585', fontSize: 18, fontWeight: '800' },
 });

@@ -22,6 +22,7 @@ import {
   validHopSwaps,
   validSlideSources,
 } from './actions';
+import { Direction } from './grid';
 
 export type TargetReturnTo = 'awaiting-action';
 
@@ -72,7 +73,7 @@ export type Action =
   | { type: 'BEGIN_SUIT_ACTION' }
   | { type: 'RESOLVE_HOP'; i: number; j: number }
   | { type: 'SLIDE_SELECT_SOURCE'; slot: number }
-  | { type: 'RESOLVE_SLIDE'; from: number; to: number }
+  | { type: 'RESOLVE_SLIDE'; from: number; direction: Direction; distance: number }
   | { type: 'RESOLVE_DESTROY'; slot: number }
   | { type: 'BONUS_KEEP'; idx: number }
   | { type: 'BONUS_SELECT_NEW'; idx: number }
@@ -222,13 +223,22 @@ const handleSlideSelectSource = (s: GameState, slot: number): GameState => {
   };
 };
 
-const handleResolveSlide = (s: GameState, from: number, to: number): GameState => {
+const handleResolveSlide = (
+  s: GameState,
+  from: number,
+  direction: Direction,
+  distance: number
+): GameState => {
   if (s.phase.kind !== 'awaiting-target-slide-dest') return s;
   if (!s.drawn || isJoker(s.drawn)) return s;
-  const valid = s.phase.moves.find(m => m.from === from && m.to === to);
+  const valid = s.phase.moves.find(
+    m => m.from === from && m.direction === direction && m.distance === distance
+  );
   if (!valid) return s;
-  const grid = executeSlide(s.grid, from, to);
-  return drawNext(log(pushTrash({ ...s, grid }, s.drawn), `Slide ${from}→${to}`));
+  const grid = executeSlide(s.grid, from, direction, distance);
+  return drawNext(
+    log(pushTrash({ ...s, grid }, s.drawn), `Slide ${direction} × ${distance}`)
+  );
 };
 
 const handleResolveDestroy = (s: GameState, slot: number): GameState => {
@@ -310,6 +320,9 @@ const handleBonusDecline = (s: GameState): GameState => {
   ) {
     return s;
   }
+  // At the cap, declining is not allowed — the player must take one of the
+  // drawn cards and swap out an old one.
+  if (s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
   return finishBonusFlow(s, s.phase.drawn, s.bonusCards);
 };
 
@@ -363,7 +376,7 @@ export const step = (
     case 'SLIDE_SELECT_SOURCE':
       return handleSlideSelectSource(state, action.slot);
     case 'RESOLVE_SLIDE':
-      return handleResolveSlide(state, action.from, action.to);
+      return handleResolveSlide(state, action.from, action.direction, action.distance);
     case 'RESOLVE_DESTROY':
       return handleResolveDestroy(state, action.slot);
     case 'BONUS_KEEP':

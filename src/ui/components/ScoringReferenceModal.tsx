@@ -107,8 +107,9 @@ export const ScoringReferenceModal = ({ visible, onClose, bonusCards }: Props) =
             )}
 
             <Text style={styles.footnote}>
-              Per-line bonuses compose additively: total per line = ⌈base × (1 + Σ boosts)⌉ + flats.
-              Grid achievements multiply the summed total.
+              Bonus multipliers compose multiplicatively: total per line = ⌈base × Π multipliers⌉
+              + flats. Grid achievements multiply the summed total. Incomplete lines (fewer than
+              5 cards) cost 25 points each.
             </Text>
           </ScrollView>
         </Pressable>

@@ -103,7 +103,12 @@ describe('GameState — suit perks', () => {
     expect(src.phase.kind).toBe('awaiting-target-slide-source');
     const dest = step(src, { type: 'SLIDE_SELECT_SOURCE', slot: 10 });
     expect(dest.phase.kind).toBe('awaiting-target-slide-dest');
-    const after = step(dest, { type: 'RESOLVE_SLIDE', from: 10, to: 13 });
+    const after = step(dest, {
+      type: 'RESOLVE_SLIDE',
+      from: 10,
+      direction: 'right',
+      distance: 3,
+    });
     expect(after.grid[10]).toBeNull();
     expect(after.grid[13]).toEqual(onGrid);
     expect(after.trash).toContainEqual(spade);
@@ -154,6 +159,24 @@ describe('GameState — ♣ Cards bonus draw', () => {
     expect(after.bonusDeck[after.bonusDeck.length - 1]).toEqual(otherDrawn);
     // The club itself is trashed.
     expect(after.trash).toContainEqual(club);
+  });
+
+  test('at the limit (3 held), declining is a no-op — the player must swap', () => {
+    const club = { kind: 'standard' as const, rank: 'K' as const, suit: 'C' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'H' as const };
+    const held = BONUS_DECK_POOL.slice(0, BONUS_HAND_LIMIT);
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      bonusCards: held,
+      bonusDeck: BONUS_DECK_POOL.slice(BONUS_HAND_LIMIT),
+    });
+    const begun = step(state, { type: 'BEGIN_SUIT_ACTION' });
+    if (begun.phase.kind !== 'bonus-card-resolving') return;
+    const after = step(begun, { type: 'BONUS_DECLINE' });
+    // Phase unchanged, bonus cards unchanged, deck unchanged.
+    expect(after.phase.kind).toBe('bonus-card-resolving');
+    expect(after.bonusCards).toEqual(held);
   });
 
   test('declining returns both drawn to the bottom of the deck', () => {

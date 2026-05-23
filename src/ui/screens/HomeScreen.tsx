@@ -48,14 +48,15 @@ export const HomeScreen = ({ onStart }: Props) => {
         <Text style={styles.rulesText}>
           Cards fill a spiral starting at the center (R3C3). Each turn, place the drawn card,
           discard it to trash, or use its suit perk.{'\n\n'}
-          ♥ Hop: swap any two cards that share a row or column.{'\n'}
-          ♠ Slide: pick a card and slide it any distance in one direction until it hits a card or
-          a wall.{'\n'}
+          ♥ Swap: swap any two cards that share a row or column.{'\n'}
+          ♠ Slide: pick a card; the whole connected chain in its row or column slides together,
+          any distance up to a wall or blocker.{'\n'}
           ♦ Destroy: trash any card on the grid.{'\n'}
-          ♣ Cards: draw 2 from the bonus deck and keep one (hold up to 3; at 3, a ♣ lets you
-          optionally swap one in).{'\n\n'}
-          Cards used for a suit perk are trashed. The joker is auto-placed and acts as a wild in
-          its row and column. Score the 5 rows + 5 columns at the end and beat your target.
+          ♣ Bonus: draw 2 from the bonus deck and keep one (hold up to 3; at the cap you must swap
+          one out).{'\n\n'}
+          Bonus multipliers stack multiplicatively. Cards used for a suit perk are trashed. The
+          joker is auto-placed and is a wild in its row and column. At the end, score the 5 rows
+          + 5 columns — each incomplete line costs 25 points. Beat your target to win.
         </Text>
       </View>
     </View>

@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
+import { LineDetailModal } from '../components/LineDetailModal';
 
 interface Props {
   state: GameState;
@@ -27,12 +29,30 @@ const HAND_LABEL: Record<HandRank, string> = {
 };
 
 export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
+  const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const report = useMemo(
     () => scoreGrid(state.grid, state.bonusCards),
     [state.grid, state.bonusCards]
   );
-  const { lines: scoredLines, subtotal, gridMultiplier, gridFlat, total } = report;
+  const {
+    lines: scoredLines,
+    subtotal,
+    incompletePenalty,
+    gridMultiplier,
+    gridFlat,
+    total,
+  } = report;
   const won = total >= state.target;
+
+  const inspectCards = useMemo(() => {
+    if (!inspectLine) return [];
+    if (inspectLine.kind === 'row') {
+      return state.grid.slice(inspectLine.index * 5, inspectLine.index * 5 + 5);
+    }
+    const out = [];
+    for (let r = 0; r < 5; r++) out.push(state.grid[r * 5 + inspectLine.index]);
+    return out;
+  }, [state.grid, inspectLine]);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -44,26 +64,49 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
       </View>
 
       <BonusCardStrip cards={state.bonusCards} />
-      <GridView grid={state.grid} />
+      <GridView
+        grid={state.grid}
+        onLinePress={(kind, index) => setInspectLine({ kind, index })}
+      />
 
       <View style={styles.breakdownBlock}>
         <Text style={styles.sectionLabel}>Per-line breakdown</Text>
         {scoredLines.map(line => (
-          <View
+          <Pressable
             key={`${line.kind}-${line.index}`}
-            style={[styles.lineRow, line.total > 0 && styles.lineRowActive]}
+            onPress={() => setInspectLine({ kind: line.kind, index: line.index })}
+            style={[
+              styles.lineRow,
+              line.total > 0 && styles.lineRowActive,
+              line.total < 0 && styles.lineRowPenalty,
+            ]}
           >
             <Text style={styles.lineLabel}>
               {line.kind === 'row' ? `Row ${line.index + 1}` : `Col ${line.index + 1}`}
             </Text>
-            <Text style={styles.lineHand}>{line.hand ? HAND_LABEL[line.hand] : '—'}</Text>
-            <Text style={styles.lineScore}>{line.total}</Text>
-          </View>
+            <Text style={styles.lineHand}>
+              {line.hand ? HAND_LABEL[line.hand] : line.incomplete ? 'Incomplete' : '—'}
+            </Text>
+            <Text
+              style={[
+                styles.lineScore,
+                line.total < 0 && styles.lineScorePenalty,
+              ]}
+            >
+              {line.total}
+            </Text>
+          </Pressable>
         ))}
         <View style={styles.subtotalRow}>
           <Text style={styles.totalLabel}>Subtotal</Text>
           <Text style={styles.subtotalValue}>{subtotal}</Text>
         </View>
+        {incompletePenalty < 0 && (
+          <View style={styles.subtotalRow}>
+            <Text style={styles.totalLabel}>Incomplete penalty (in subtotal)</Text>
+            <Text style={styles.penaltyValue}>{incompletePenalty}</Text>
+          </View>
+        )}
         {(gridMultiplier !== 1 || gridFlat !== 0) && (
           <View style={styles.subtotalRow}>
             <Text style={styles.totalLabel}>Grid achievements</Text>
@@ -78,6 +121,17 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
           <Text style={styles.totalScore}>{total}</Text>
         </View>
       </View>
+
+      {inspectLine && (
+        <LineDetailModal
+          visible
+          onClose={() => setInspectLine(null)}
+          kind={inspectLine.kind}
+          index={inspectLine.index}
+          cards={inspectCards}
+          bonusCards={state.bonusCards}
+        />
+      )}
 
       <View style={styles.btnRow}>
         <Pressable style={[styles.btn, { backgroundColor: '#3680ff' }]} onPress={onReplay}>
@@ -117,6 +171,9 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   lineRowActive: { backgroundColor: '#27314a' },
+  lineRowPenalty: { backgroundColor: '#4a2727' },
+  lineScorePenalty: { color: '#f08585' },
+  penaltyValue: { color: '#f08585', fontSize: 13, fontWeight: '700' },
   lineLabel: { color: '#cfd2dd', fontSize: 12, width: 60 },
   lineHand: { color: '#cfd2dd', fontSize: 12, flex: 1 },
   lineScore: { color: '#f4f5f9', fontSize: 13, fontWeight: '700', width: 40, textAlign: 'right' },

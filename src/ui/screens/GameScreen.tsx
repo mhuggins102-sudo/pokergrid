@@ -19,10 +19,10 @@ interface Props {
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
-  H: 'Hop (♥)',
+  H: 'Swap (♥)',
   S: 'Slide (♠)',
   D: 'Destroy (♦)',
-  C: 'Cards (♣)',
+  C: 'Bonus (♣)',
 };
 
 export const GameScreen = ({ state, dispatch }: Props) => {
@@ -68,9 +68,14 @@ export const GameScreen = ({ state, dispatch }: Props) => {
         setSelectedSlot(idx);
       }
     } else if (p.kind === 'awaiting-target-slide-dest') {
-      const valid = p.moves.find(m => m.to === idx);
+      const valid = p.moves.find(m => m.leadingDest === idx);
       if (valid) {
-        dispatch({ type: 'RESOLVE_SLIDE', from: valid.from, to: valid.to });
+        dispatch({
+          type: 'RESOLVE_SLIDE',
+          from: valid.from,
+          direction: valid.direction,
+          distance: valid.distance,
+        });
         setSelectedSlot(null);
       }
     } else if (p.kind === 'awaiting-target-destroy') {
@@ -98,7 +103,7 @@ export const GameScreen = ({ state, dispatch }: Props) => {
     } else if (p.kind === 'awaiting-target-slide-source') {
       for (const s of p.sources) out.add(s);
     } else if (p.kind === 'awaiting-target-slide-dest') {
-      for (const m of p.moves) out.add(m.to);
+      for (const m of p.moves) out.add(m.leadingDest);
       out.add(p.source);
     } else if (p.kind === 'awaiting-target-destroy') {
       for (const t of p.targets) out.add(t);
@@ -204,7 +209,7 @@ const renderBottom = (state: GameState, dispatch: (a: Action) => void, suitOK: b
     return (
       <View style={styles.actionRow}>
         <View style={styles.drawnBlock}>
-          <Text style={styles.drawnLabel}>♥ Hop</Text>
+          <Text style={styles.drawnLabel}>♥ Swap</Text>
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
@@ -238,7 +243,9 @@ const renderBottom = (state: GameState, dispatch: (a: Action) => void, suitOK: b
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap a destination in line with the selected card.</Text>
+          <Text style={styles.hint}>
+            Tap a destination — the whole connected chain slides together.
+          </Text>
           <Btn label="Pick a different card" tint="#4d525f" onPress={() => dispatch({ type: 'CANCEL_ACTION' })} />
         </View>
       </View>
@@ -266,7 +273,7 @@ const renderBottom = (state: GameState, dispatch: (a: Action) => void, suitOK: b
       <View style={styles.actionCol}>
         <Text style={styles.hint}>
           {atMax
-            ? 'You\'re at 3 bonus cards. Pick one of the drawn to swap into your hand, or decline.'
+            ? "You\'re at 3 bonus cards. Pick one of the drawn — you must swap an old one out."
             : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
         <View style={styles.bonusRow}>
@@ -285,7 +292,9 @@ const renderBottom = (state: GameState, dispatch: (a: Action) => void, suitOK: b
             </Pressable>
           ))}
         </View>
-        <Btn label="Decline both" tint="#4d525f" onPress={() => dispatch({ type: 'BONUS_DECLINE' })} />
+        {!atMax && (
+          <Btn label="Decline both" tint="#4d525f" onPress={() => dispatch({ type: 'BONUS_DECLINE' })} />
+        )}
       </View>
     );
   }

@@ -7,6 +7,8 @@ import {
   GRID_SLOTS,
   rowOf,
   colOf,
+  slideChain,
+  slideChainMaxDistance,
   slideTargets,
 } from './grid';
 
@@ -64,13 +66,16 @@ export const executeHop = (grid: Grid, i: number, j: number): Grid => {
 };
 
 // ---------- ♠ Slide (spade) ----------
-// Pick a card on the grid + a direction. The card may move to any empty slot
-// in the unobstructed path in that direction (stops at a blocker or wall).
+// Pick a card on the grid + a direction + a distance. The contiguous chain of
+// cards containing the picked card (column for up/down, row for left/right)
+// slides as a unit. Distance 1..max where max is empty space until a wall or
+// non-chain blocker.
 
 export interface SlideMove {
-  from: number;
-  to: number;
+  from: number; // user-selected source slot (any card in the chain)
   direction: Direction;
+  distance: number; // 1..maxDistance
+  leadingDest: number; // slot the leading edge lands in (for UI highlight)
 }
 
 export const validSlideSources = (grid: Grid): number[] => {
@@ -85,25 +90,38 @@ export const validSlideSources = (grid: Grid): number[] => {
 export const slideDestinationsFrom = (grid: Grid, from: number): SlideMove[] => {
   const out: SlideMove[] = [];
   for (const d of ['up', 'down', 'left', 'right'] as Direction[]) {
-    for (const to of slideTargets(grid, from, d)) {
-      out.push({ from, to, direction: d });
-    }
+    const leads = slideTargets(grid, from, d);
+    leads.forEach((leadingDest, i) => {
+      out.push({ from, direction: d, distance: i + 1, leadingDest });
+    });
   }
   return out;
 };
 
 export const canSlide = (grid: Grid): boolean => validSlideSources(grid).length > 0;
 
-export const executeSlide = (grid: Grid, from: number, to: number): Grid => {
+export const executeSlide = (
+  grid: Grid,
+  from: number,
+  direction: Direction,
+  distance: number
+): Grid => {
   if (!grid[from]) throw new Error('Slide: source slot is empty');
-  if (grid[to] !== null) throw new Error('Slide: destination is occupied');
-  // Must share a row or column with `from` (slide is straight-line).
-  if (rowOf(from) !== rowOf(to) && colOf(from) !== colOf(to)) {
-    throw new Error('Slide: destination must be in line with source');
+  const chain = slideChain(grid, from, direction);
+  if (chain.length === 0) throw new Error('Slide: no chain at source');
+  const max = slideChainMaxDistance(grid, from, direction);
+  if (distance < 1 || distance > max) {
+    throw new Error(`Slide: distance ${distance} out of range (max ${max})`);
   }
+  const step =
+    direction === 'up' ? -GRID_SIZE
+    : direction === 'down' ? GRID_SIZE
+    : direction === 'left' ? -1
+    : 1;
   const next = grid.slice();
-  next[to] = grid[from];
-  next[from] = null;
+  // Clear all chain positions first, then write to shifted positions.
+  for (const idx of chain) next[idx] = null;
+  for (const idx of chain) next[idx + step * distance] = grid[idx];
   return next;
 };
 
