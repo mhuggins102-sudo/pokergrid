@@ -3,8 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface Props {
   deckCount: number;
-  discardCount: number;
   trashCount: number;
+  bonusDeckCount: number;
   target: number;
   difficulty: string;
   liveScore?: number;
@@ -13,8 +13,8 @@ interface Props {
 
 export const ScoreBar = ({
   deckCount,
-  discardCount,
   trashCount,
+  bonusDeckCount,
   target,
   difficulty,
   liveScore,
@@ -22,8 +22,8 @@ export const ScoreBar = ({
 }: Props) => (
   <View style={styles.bar}>
     <Cell label="Deck" value={`${deckCount}`} />
-    <Cell label="Discard" value={`${discardCount}`} />
     <Cell label="Trash" value={`${trashCount}`} />
+    <Cell label="♣ Deck" value={`${bonusDeckCount}`} />
     <Cell label={`Tgt (${difficulty})`} value={`${target}`} />
     {liveScore !== undefined && (
       <Cell label="Score" value={`${liveScore}`} highlight={liveScore >= target} />

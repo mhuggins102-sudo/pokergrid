@@ -1,147 +1,155 @@
+import { Card, isJoker, StandardCard } from './cards';
 import {
-  Card,
-  StandardCard,
-  clubPip,
-  isJoker,
-  movementPip,
-} from './cards';
-import { circularDistance, Grid, GRID_SLOTS } from './grid';
-import { HandRank } from './hands';
-import { ClubBonus, HAND_BASE_VALUE } from './scoring';
+  allSlideTargets,
+  Direction,
+  Grid,
+  GRID_SIZE,
+  GRID_SLOTS,
+  rowOf,
+  colOf,
+  slideTargets,
+} from './grid';
 
-// ---------- Hearts ----------
-// New rule: swap any two cards on the grid whose slot positions are within
-// the heart card's movementPip (A=1, 2-10=face, J=11, Q=12, K=13) on the
-// circular 25-slot ring. The joker is treated like any other card.
+// ---------- ♥ Hop (heart) ----------
+// Swap any two cards that share a row OR share a column. Suit and pip are
+// irrelevant. Joker is a valid participant.
 
-export const validHeartsSwaps = (
-  grid: Grid,
-  heart: StandardCard
-): [number, number][] => {
-  const pip = movementPip(heart);
-  const out: [number, number][] = [];
-  for (let i = 0; i < GRID_SLOTS; i++) {
-    if (!grid[i]) continue;
-    for (let j = i + 1; j < GRID_SLOTS; j++) {
-      if (!grid[j]) continue;
-      if (circularDistance(i, j) <= pip) out.push([i, j]);
+export const validHopSwaps = (grid: Grid): [number, number][] => {
+  const pairs: [number, number][] = [];
+
+  // Row pairs
+  for (let r = 0; r < GRID_SIZE; r++) {
+    const occupied: number[] = [];
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const i = r * GRID_SIZE + c;
+      if (grid[i] !== null) occupied.push(i);
+    }
+    for (let i = 0; i < occupied.length; i++) {
+      for (let j = i + 1; j < occupied.length; j++) {
+        pairs.push([occupied[i], occupied[j]]);
+      }
     }
   }
-  return out;
+
+  // Column pairs (row and col are disjoint at the slot level so no dedup needed)
+  for (let c = 0; c < GRID_SIZE; c++) {
+    const occupied: number[] = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      const i = r * GRID_SIZE + c;
+      if (grid[i] !== null) occupied.push(i);
+    }
+    for (let i = 0; i < occupied.length; i++) {
+      for (let j = i + 1; j < occupied.length; j++) {
+        pairs.push([occupied[i], occupied[j]]);
+      }
+    }
+  }
+
+  return pairs;
 };
 
-export const canExecuteHearts = (grid: Grid, heart: StandardCard): boolean =>
-  validHeartsSwaps(grid, heart).length > 0;
+export const canHop = (grid: Grid): boolean => validHopSwaps(grid).length > 0;
 
-export const executeHearts = (grid: Grid, i: number, j: number): Grid => {
+export const executeHop = (grid: Grid, i: number, j: number): Grid => {
   const a = grid[i];
   const b = grid[j];
-  if (!a || !b) throw new Error('Hearts: both slots must be filled');
+  if (!a || !b) throw new Error('Hop: both slots must be filled');
+  if (rowOf(i) !== rowOf(j) && colOf(i) !== colOf(j)) {
+    throw new Error('Hop: cards must share a row or column');
+  }
   const next = grid.slice();
   next[i] = b;
   next[j] = a;
   return next;
 };
 
-// Slots reachable by a hearts swap from a given anchor slot — useful for the
-// "highlight valid partners" UI.
-export const heartsReachable = (
-  grid: Grid,
-  heart: StandardCard,
-  from: number
-): number[] => {
-  const pip = movementPip(heart);
+// ---------- ♠ Slide (spade) ----------
+// Pick a card on the grid + a direction. The card may move to any empty slot
+// in the unobstructed path in that direction (stops at a blocker or wall).
+
+export interface SlideMove {
+  from: number;
+  to: number;
+  direction: Direction;
+}
+
+export const validSlideSources = (grid: Grid): number[] => {
   const out: number[] = [];
-  for (let j = 0; j < GRID_SLOTS; j++) {
-    if (j === from || !grid[j]) continue;
-    if (circularDistance(from, j) <= pip) out.push(j);
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    if (!grid[i]) continue;
+    if (allSlideTargets(grid, i).length > 0) out.push(i);
   }
   return out;
 };
 
-// ---------- Spades ----------
-// Spade slides a card up to `movementPip` slots forward (1..pip) on the
-// circular 25-slot ring. Forward only (not backward). Destination must be
-// empty.
-
-export interface SpadeMove {
-  from: number;
-  to: number;
-  distance: number; // 1..pip
-}
-
-export const validSpadeMoves = (grid: Grid, spade: StandardCard): SpadeMove[] => {
-  const out: SpadeMove[] = [];
-  const pip = movementPip(spade);
-  for (let from = 0; from < GRID_SLOTS; from++) {
-    if (!grid[from]) continue;
-    for (let d = 1; d <= pip; d++) {
-      const to = (from + d) % GRID_SLOTS;
-      if (to === from) continue;
-      if (grid[to] !== null) continue;
-      out.push({ from, to, distance: d });
+export const slideDestinationsFrom = (grid: Grid, from: number): SlideMove[] => {
+  const out: SlideMove[] = [];
+  for (const d of ['up', 'down', 'left', 'right'] as Direction[]) {
+    for (const to of slideTargets(grid, from, d)) {
+      out.push({ from, to, direction: d });
     }
   }
   return out;
 };
 
-export const canExecuteSpades = (grid: Grid, spade: StandardCard): boolean =>
-  validSpadeMoves(grid, spade).length > 0;
+export const canSlide = (grid: Grid): boolean => validSlideSources(grid).length > 0;
 
-export const executeSpades = (grid: Grid, from: number, to: number): Grid => {
-  if (!grid[from]) throw new Error('Spades: source slot is empty');
-  if (grid[to] !== null) throw new Error('Spades: destination is occupied');
+export const executeSlide = (grid: Grid, from: number, to: number): Grid => {
+  if (!grid[from]) throw new Error('Slide: source slot is empty');
+  if (grid[to] !== null) throw new Error('Slide: destination is occupied');
+  // Must share a row or column with `from` (slide is straight-line).
+  if (rowOf(from) !== rowOf(to) && colOf(from) !== colOf(to)) {
+    throw new Error('Slide: destination must be in line with source');
+  }
   const next = grid.slice();
   next[to] = grid[from];
   next[from] = null;
   return next;
 };
 
-// ---------- Clubs ----------
+// ---------- ♦ Destroy (diamond) ----------
+// Trash any one card on the grid (any rank/suit, including joker).
 
-const ALL_HANDS: HandRank[] = Object.keys(HAND_BASE_VALUE) as HandRank[];
-
-export const availableClubTargets = (clubs: ClubBonus): HandRank[] =>
-  ALL_HANDS.filter(h => clubs[h] === undefined);
-
-export const canExecuteClubs = (clubs: ClubBonus): boolean =>
-  availableClubTargets(clubs).length > 0;
-
-export const executeClubs = (
-  clubs: ClubBonus,
-  club: StandardCard,
-  hand: HandRank
-): ClubBonus => {
-  if (clubs[hand] !== undefined)
-    throw new Error(`Clubs: ${hand} already boosted`);
-  return { ...clubs, [hand]: clubPip(club) };
+export const destroyableSlots = (grid: Grid): number[] => {
+  const out: number[] = [];
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    if (grid[i] !== null) out.push(i);
+  }
+  return out;
 };
 
-// ---------- Diamonds ----------
+export const canDestroy = (grid: Grid): boolean => destroyableSlots(grid).length > 0;
 
-export const canExecuteDiamonds = (discardSize: number): boolean =>
-  discardSize >= 1;
+export const executeDestroy = (grid: Grid, slot: number): { grid: Grid; removed: Card } => {
+  const card = grid[slot];
+  if (!card) throw new Error('Destroy: slot is empty');
+  const next = grid.slice();
+  next[slot] = null;
+  return { grid: next, removed: card };
+};
 
-// ---------- Legality of any suit action given drawn card ----------
+// ---------- ♣ Cards (club) ----------
+// Pure deck-management; the bonus-card flow lives in state.ts and bonusCards.ts.
+// Here we expose only the "is this perk legal at all" check.
+
+export const canDrawBonus = (bonusDeckSize: number): boolean => bonusDeckSize >= 1;
+
+// ---------- Generic legality ----------
 
 export const suitActionAvailable = (
   drawn: Card | null,
   grid: Grid,
-  clubs: ClubBonus,
-  discardSize: number,
-  inDiamondResolving = false
+  bonusDeckSize: number
 ): boolean => {
   if (!drawn || isJoker(drawn)) return false;
-  // Diamond chain is forbidden when resolving a diamond-drawn pick.
-  if (inDiamondResolving && drawn.suit === 'D') return false;
   switch (drawn.suit) {
     case 'H':
-      return canExecuteHearts(grid, drawn);
+      return canHop(grid);
     case 'S':
-      return canExecuteSpades(grid, drawn);
-    case 'C':
-      return canExecuteClubs(clubs);
+      return canSlide(grid);
     case 'D':
-      return canExecuteDiamonds(discardSize);
+      return canDestroy(grid);
+    case 'C':
+      return canDrawBonus(bonusDeckSize);
   }
 };

@@ -1,22 +1,17 @@
 import { Rank, StandardCard, Suit } from '../src/game/cards';
-import { emptyGrid, Grid, GRID_SLOTS } from '../src/game/grid';
-import { Modifier } from '../src/game/modifiers';
 import {
-  clubMultiplier,
-  HAND_BASE_VALUE,
-  scoreGrid,
-} from '../src/game/scoring';
+  BonusCard,
+  BONUS_DECK_POOL,
+  LineContext,
+} from '../src/game/bonusCards';
+import { emptyGrid, Grid, GRID_SLOTS } from '../src/game/grid';
+import { HAND_BASE_VALUE, scoreGrid } from '../src/game/scoring';
 
 const C = (rank: Rank, suit: Suit): StandardCard => ({ kind: 'standard', rank, suit });
 
-// Helper: a 5x5 grid where row 0 is a specific 5-card line and the rest is
-// junk that doesn't form any matching line. This isolates scoring to row 0
-// for clearer assertions.
 const gridWithRow0 = (line: StandardCard[]): Grid => {
   const g: Grid = emptyGrid();
   for (let i = 0; i < 5; i++) g[i] = line[i];
-  // Fill remaining slots with a junk sequence that creates only high cards
-  // — non-matching ranks/suits so no row/col makes anything.
   const junkRanks: Rank[] = ['2', '3', '4', '6', '7'];
   const junkSuits: Suit[] = ['C', 'D', 'S', 'H', 'C'];
   for (let i = 5; i < GRID_SLOTS; i++) {
@@ -25,66 +20,89 @@ const gridWithRow0 = (line: StandardCard[]): Grid => {
   return g;
 };
 
-describe('scoring', () => {
+const findCard = (id: string): BonusCard => {
+  const c = BONUS_DECK_POOL.find(b => b.id === id);
+  if (!c) throw new Error(`No bonus card ${id}`);
+  return c;
+};
+
+describe('scoring (no bonus cards)', () => {
   test('empty grid totals 0', () => {
-    const { total } = scoreGrid(emptyGrid(), {}, []);
+    const { total } = scoreGrid(emptyGrid(), []);
     expect(total).toBe(0);
   });
 
-  test('clubMultiplier: K (pip 13) is 1.52 with pip*4 formula', () => {
-    expect(clubMultiplier('PAIR', { PAIR: 13 })).toBeCloseTo(1.52);
-    expect(clubMultiplier('PAIR', {})).toBe(1);
-  });
-
-  test('clubMultiplier: A (pip 14) is 1.56', () => {
-    expect(clubMultiplier('FLUSH', { FLUSH: 14 })).toBeCloseTo(1.56);
-  });
-
-  test('club bonus rounds UP at the per-hand level', () => {
-    // Pair base = 5. K♣ bonus = ×1.52 → 7.6 → round up to 8
+  test('base values reflect HAND_BASE_VALUE', () => {
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
-    const { lines } = scoreGrid(gridWithRow0(line), { PAIR: 13 }, []);
+    const { lines } = scoreGrid(gridWithRow0(line), []);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
     expect(row0.hand).toBe('PAIR');
     expect(row0.base).toBe(HAND_BASE_VALUE.PAIR);
-    expect(row0.total).toBe(8); // ceil(5 * 1.52) = 8
+    expect(row0.total).toBe(5);
+  });
+});
+
+describe('scoring with bonus cards', () => {
+  test('Pair ×4 multiplies pair lines', () => {
+    const pair4 = findCard('hand-pair-x4');
+    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [pair4]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(4);
+    expect(row0.total).toBe(20); // ceil(5 * 4)
   });
 
-  test('multiplier and flat bonus stack additively / additively respectively', () => {
-    // Pair base 5, with multiplierBoost +1.0 → multiplier=2, total=ceil(5*1*2)+0=10
-    const pair2x: Modifier = {
-      id: 't.pair2x',
-      label: '',
-      description: '',
-      effect: line => (line.hand === 'PAIR' ? { multiplierBoost: 1.0 } : {}),
-    };
-    const flat5: Modifier = {
-      id: 't.flat5',
-      label: '',
-      description: '',
-      effect: line => (line.hand === 'PAIR' ? { flatAdd: 5 } : {}),
-    };
-    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
-    const { lines } = scoreGrid(gridWithRow0(line), {}, [pair2x, flat5]);
+  test('×1.1 per ♥ in line compounds with hearts count', () => {
+    const hearts = findCard('suit-density-h');
+    // 3 hearts + 2 others → straight (use 4-5-6-7-8 to also be a straight for higher base)
+    const line = [C('4', 'H'), C('5', 'H'), C('6', 'H'), C('7', 'C'), C('8', 'D')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hearts]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.modifierMultiplier).toBe(2);
-    expect(row0.modifierFlatBonus).toBe(5);
-    // ceil(5 * 1 * 2) + 5 = 15
-    expect(row0.total).toBe(15);
+    expect(row0.hand).toBe('STRAIGHT');
+    // multiplier = 1 + (1.1^3 - 1) = 1.331; ceil(30 * 1.331) = ceil(39.93) = 40
+    expect(row0.multiplier).toBeCloseTo(1.331);
+    expect(row0.total).toBe(40);
   });
 
-  test('club + modifier multiplier compose: ceil(base * club * mult) + flat', () => {
-    // PAIR base 5, club K♣ → 1.52, modifier pair2x → +1.0 mult
-    // total: ceil(5 * 1.52 * 2) = ceil(15.2) = 16
-    const pair2x: Modifier = {
-      id: 't.pair2x',
-      label: '',
-      description: '',
-      effect: line => (line.hand === 'PAIR' ? { multiplierBoost: 1.0 } : {}),
-    };
+  test('Rainbow ×2 only triggers on lines with 4+ distinct suits', () => {
+    const rainbow = findCard('rainbow-line-x2');
+    // 4 distinct suits: H, C, D, S, H (suits: 4)
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
-    const { lines } = scoreGrid(gridWithRow0(line), { PAIR: 13 }, [pair2x]);
+    const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.total).toBe(16);
+    expect(row0.multiplier).toBe(2);
+  });
+
+  test('Row 3 ×2 only multiplies row index 2', () => {
+    const row3 = findCard('row-3-x2');
+    const g = emptyGrid();
+    // Build pair in row 0 and pair in row 2
+    const pairA = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    const pairB = [C('3', 'H'), C('3', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    for (let i = 0; i < 5; i++) g[i] = pairA[i];
+    for (let i = 0; i < 5; i++) g[10 + i] = pairB[i];
+    const { lines } = scoreGrid(g, [row3]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    const row2 = lines.find(l => l.kind === 'row' && l.index === 2)!;
+    expect(row0.multiplier).toBe(1);
+    expect(row2.multiplier).toBe(2);
+  });
+});
+
+describe('grid-level achievements', () => {
+  test('Clean border ×1.2 applies only when no face cards on the border', () => {
+    const clean = findCard('clean-border-x1_2');
+    const noFaces: Grid = emptyGrid();
+    // Put a pair in row 0 with no face cards, and leave the rest empty for now.
+    const pair = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('10', 'H')];
+    for (let i = 0; i < 5; i++) noFaces[i] = pair[i];
+    const { total } = scoreGrid(noFaces, [clean]);
+    // Pair scores 5; no other lines score. Subtotal = 5. Multiplier 1.2 → 6.
+    expect(total).toBe(6);
+
+    // Add a face card to the border → bonus does not apply.
+    noFaces[20] = C('K', 'C');
+    const after = scoreGrid(noFaces, [clean]);
+    expect(after.total).toBeLessThan(6);
   });
 });

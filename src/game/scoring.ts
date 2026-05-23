@@ -1,6 +1,11 @@
+import {
+  applyGridEffects,
+  applyLineEffects,
+  BonusCard,
+  LineContext,
+} from './bonusCards';
 import { Grid, lines } from './grid';
-import { HandRank, evaluateLine } from './hands';
-import { applyModifiers, LineContext, Modifier } from './modifiers';
+import { evaluateLine, HandRank } from './hands';
 
 export const HAND_BASE_VALUE: Record<HandRank, number> = {
   HIGH_CARD: 1,
@@ -16,31 +21,25 @@ export const HAND_BASE_VALUE: Record<HandRank, number> = {
   ROYAL_FLUSH: 200,
 };
 
-// One club bonus per hand type. The stored value is the pip used by the club
-// card (with A=14), and the bonus multiplier is 1 + pip * 4 / 100.
-export type ClubBonus = Partial<Record<HandRank, number>>;
-
-export const CLUB_PIP_MULTIPLIER = 4;
-
-export const clubMultiplier = (hand: HandRank, clubs: ClubBonus): number => {
-  const pip = clubs[hand];
-  if (!pip) return 1;
-  return 1 + (pip * CLUB_PIP_MULTIPLIER) / 100;
-};
-
 export interface ScoredLine extends LineContext {
   base: number;
-  clubBonus: number;
-  modifierMultiplier: number;
-  modifierFlatBonus: number;
+  multiplier: number;
+  flat: number;
   total: number;
+}
+
+export interface ScoreReport {
+  lines: ScoredLine[];
+  subtotal: number; // sum of all line totals
+  gridMultiplier: number;
+  gridFlat: number;
+  total: number; // final score: ceil(subtotal * gridMultiplier) + gridFlat
 }
 
 export const scoreGrid = (
   grid: Grid,
-  clubs: ClubBonus,
-  modifiers: readonly Modifier[]
-): { lines: ScoredLine[]; total: number } => {
+  bonusCards: readonly BonusCard[]
+): ScoreReport => {
   const scored: ScoredLine[] = lines(grid).map(l => {
     const ctx: LineContext = {
       kind: l.kind,
@@ -49,28 +48,18 @@ export const scoreGrid = (
       hand: evaluateLine(l.cards),
     };
     if (!ctx.hand) {
-      return {
-        ...ctx,
-        base: 0,
-        clubBonus: 1,
-        modifierMultiplier: 1,
-        modifierFlatBonus: 0,
-        total: 0,
-      };
+      return { ...ctx, base: 0, multiplier: 1, flat: 0, total: 0 };
     }
     const base = HAND_BASE_VALUE[ctx.hand];
-    const cb = clubMultiplier(ctx.hand, clubs);
-    const { multiplier, flat } = applyModifiers(ctx, modifiers);
-    const total = Math.ceil(base * cb * multiplier) + flat;
-    return {
-      ...ctx,
-      base,
-      clubBonus: cb,
-      modifierMultiplier: multiplier,
-      modifierFlatBonus: flat,
-      total,
-    };
+    const { multiplier, flat } = applyLineEffects(ctx, bonusCards);
+    const total = Math.ceil(base * multiplier) + flat;
+    return { ...ctx, base, multiplier, flat, total };
   });
-  const total = scored.reduce((sum, s) => sum + s.total, 0);
-  return { lines: scored, total };
+  const subtotal = scored.reduce((sum, s) => sum + s.total, 0);
+  const { multiplier: gridMultiplier, flat: gridFlat } = applyGridEffects(
+    { grid },
+    bonusCards
+  );
+  const total = Math.ceil(subtotal * gridMultiplier) + gridFlat;
+  return { lines: scored, subtotal, gridMultiplier, gridFlat, total };
 };

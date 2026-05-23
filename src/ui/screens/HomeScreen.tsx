@@ -46,13 +46,16 @@ export const HomeScreen = ({ onStart }: Props) => {
       <View style={styles.rulesBlock}>
         <Text style={styles.rulesTitle}>How it works</Text>
         <Text style={styles.rulesText}>
-          Draw a card. Place it, discard it, or use its suit perk. ♥ swap any two cards within the
-          heart's pip distance (wraps). ♠ slide a card up to the spade's pip forward (wraps).
-          ♣ boost a hand type's payout by 4% per pip (one boost per hand type). ♦ pull a card from
-          the shuffled discard pile; you can place it (in the lowest empty slot or by swapping with
-          a grid card), trash it, or use its perk (no ♦ chaining). Cards used for a suit perk are
-          trashed — out of the game. The joker is always placed and acts as a wild in its row and
-          column. Score the 5 rows + 5 columns as poker hands at the end and beat your target.
+          Cards fill a spiral starting at the center (R3C3). Each turn, place the drawn card,
+          discard it to trash, or use its suit perk.{'\n\n'}
+          ♥ Hop: swap any two cards that share a row or column.{'\n'}
+          ♠ Slide: pick a card and slide it any distance in one direction until it hits a card or
+          a wall.{'\n'}
+          ♦ Destroy: trash any card on the grid.{'\n'}
+          ♣ Cards: draw 2 from the bonus deck and keep one (hold up to 3; at 3, a ♣ lets you
+          optionally swap one in).{'\n\n'}
+          Cards used for a suit perk are trashed. The joker is auto-placed and acts as a wild in
+          its row and column. Score the 5 rows + 5 columns at the end and beat your target.
         </Text>
       </View>
     </View>

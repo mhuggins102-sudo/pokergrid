@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { isJoker, movementPip } from '../../game/cards';
+import { isJoker } from '../../game/cards';
 import { suitActionAvailable } from '../../game/actions';
-import { LineKind, lowestEmptySlot } from '../../game/grid';
-import { HandRank } from '../../game/hands';
-import { HAND_BASE_VALUE, scoreGrid } from '../../game/scoring';
+import { BONUS_HAND_LIMIT } from '../../game/bonusCards';
+import { LineKind, nextSpiralSlot } from '../../game/grid';
+import { scoreGrid } from '../../game/scoring';
 import { Action, GameState } from '../../game/state';
+import { BonusCardStrip } from '../components/BonusCardStrip';
 import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
-import { ModifierStrip } from '../components/ModifierStrip';
 import { ScoreBar } from '../components/ScoreBar';
 import { ScoringReferenceModal } from '../components/ScoringReferenceModal';
 
@@ -18,25 +18,11 @@ interface Props {
   dispatch: (a: Action) => void;
 }
 
-const SUIT_ACTION_LABEL: Record<string, string> = {
-  H: 'Swap (♥)',
+const SUIT_PERK_LABEL: Record<string, string> = {
+  H: 'Hop (♥)',
   S: 'Slide (♠)',
-  C: 'Boost (♣)',
-  D: 'Reshuffle (♦)',
-};
-
-const HAND_LABEL: Record<HandRank, string> = {
-  HIGH_CARD: 'High Card',
-  PAIR: 'Pair',
-  TWO_PAIR: 'Two Pair',
-  THREE_OF_A_KIND: 'Three of a Kind',
-  STRAIGHT: 'Straight',
-  FLUSH: 'Flush',
-  FULL_HOUSE: 'Full House',
-  FOUR_OF_A_KIND: 'Four of a Kind',
-  STRAIGHT_FLUSH: 'Straight Flush',
-  FIVE_OF_A_KIND: 'Five of a Kind',
-  ROYAL_FLUSH: 'Royal Flush',
+  D: 'Destroy (♦)',
+  C: 'Cards (♣)',
 };
 
 export const GameScreen = ({ state, dispatch }: Props) => {
@@ -45,32 +31,24 @@ export const GameScreen = ({ state, dispatch }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
 
   useEffect(() => {
-    if (state.phase.kind === 'awaiting-action' || state.phase.kind === 'diamond-resolving') {
-      setSelectedSlot(null);
-    }
+    if (state.phase.kind === 'awaiting-action') setSelectedSlot(null);
   }, [state.phase.kind]);
 
   const liveScore = useMemo(
-    () => scoreGrid(state.grid, state.clubs, state.modifiers).total,
-    [state.grid, state.clubs, state.modifiers]
+    () => scoreGrid(state.grid, state.bonusCards).total,
+    [state.grid, state.bonusCards]
   );
 
-  const nextSlot = useMemo(() => lowestEmptySlot(state.grid), [state.grid]);
+  const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
 
   const drawn = state.drawn;
-  const inDiamondResolving = state.phase.kind === 'diamond-resolving';
-  const suitActOK =
-    (state.phase.kind === 'awaiting-action' || inDiamondResolving) &&
-    suitActionAvailable(drawn, state.grid, state.clubs, state.discard.length, inDiamondResolving);
-
-  const swapTargetsExist = useMemo(
-    () => state.grid.some(c => c !== null && !isJoker(c)),
-    [state.grid]
-  );
+  const suitOK =
+    state.phase.kind === 'awaiting-action' &&
+    suitActionAvailable(drawn, state.grid, state.bonusDeck.length);
 
   const handleSlotPress = (idx: number) => {
     const p = state.phase;
-    if (p.kind === 'awaiting-target-hearts') {
+    if (p.kind === 'awaiting-target-hop') {
       if (selectedSlot === null) {
         if (p.pairs.some(([a, b]) => a === idx || b === idx)) setSelectedSlot(idx);
       } else if (idx === selectedSlot) {
@@ -80,38 +58,32 @@ export const GameScreen = ({ state, dispatch }: Props) => {
           ([a, b]) => (a === selectedSlot && b === idx) || (a === idx && b === selectedSlot)
         );
         if (pair) {
-          dispatch({ type: 'RESOLVE_HEARTS', i: pair[0], j: pair[1] });
+          dispatch({ type: 'RESOLVE_HOP', i: pair[0], j: pair[1] });
           setSelectedSlot(null);
         }
       }
-    } else if (p.kind === 'awaiting-target-spades') {
-      if (selectedSlot === null) {
-        if (p.moves.some(m => m.from === idx)) setSelectedSlot(idx);
-      } else if (idx === selectedSlot) {
+    } else if (p.kind === 'awaiting-target-slide-source') {
+      if (p.sources.includes(idx)) {
+        dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: idx });
+        setSelectedSlot(idx);
+      }
+    } else if (p.kind === 'awaiting-target-slide-dest') {
+      const valid = p.moves.find(m => m.to === idx);
+      if (valid) {
+        dispatch({ type: 'RESOLVE_SLIDE', from: valid.from, to: valid.to });
         setSelectedSlot(null);
-      } else {
-        const move = p.moves.find(m => m.from === selectedSlot && m.to === idx);
-        if (move) {
-          dispatch({ type: 'RESOLVE_SPADES', from: move.from, to: move.to });
-          setSelectedSlot(null);
-        }
       }
-    } else if (p.kind === 'diamond-place-swap') {
-      const target = state.grid[idx];
-      if (target && !isJoker(target)) {
-        dispatch({ type: 'RESOLVE_DIAMOND_SWAP', slot: idx });
+    } else if (p.kind === 'awaiting-target-destroy') {
+      if (p.targets.includes(idx)) {
+        dispatch({ type: 'RESOLVE_DESTROY', slot: idx });
       }
     }
-  };
-
-  const handleLinePress = (kind: LineKind, index: number) => {
-    setInspectLine({ kind, index });
   };
 
   const highlightedSlots = useMemo(() => {
     const out = new Set<number>();
     const p = state.phase;
-    if (p.kind === 'awaiting-target-hearts') {
+    if (p.kind === 'awaiting-target-hop') {
       if (selectedSlot === null) {
         for (const [a, b] of p.pairs) {
           out.add(a);
@@ -123,20 +95,16 @@ export const GameScreen = ({ state, dispatch }: Props) => {
           if (b === selectedSlot) out.add(a);
         }
       }
-    } else if (p.kind === 'awaiting-target-spades') {
-      if (selectedSlot === null) {
-        for (const m of p.moves) out.add(m.from);
-      } else {
-        for (const m of p.moves) if (m.from === selectedSlot) out.add(m.to);
-      }
-    } else if (p.kind === 'diamond-place-swap') {
-      for (let i = 0; i < state.grid.length; i++) {
-        const c = state.grid[i];
-        if (c && !isJoker(c)) out.add(i);
-      }
+    } else if (p.kind === 'awaiting-target-slide-source') {
+      for (const s of p.sources) out.add(s);
+    } else if (p.kind === 'awaiting-target-slide-dest') {
+      for (const m of p.moves) out.add(m.to);
+      out.add(p.source);
+    } else if (p.kind === 'awaiting-target-destroy') {
+      for (const t of p.targets) out.add(t);
     }
     return out;
-  }, [state.phase, selectedSlot, state.grid]);
+  }, [state.phase, selectedSlot]);
 
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
@@ -152,14 +120,19 @@ export const GameScreen = ({ state, dispatch }: Props) => {
     <View style={styles.root}>
       <ScoreBar
         deckCount={state.deck.length}
-        discardCount={state.discard.length}
         trashCount={state.trash.length}
+        bonusDeckCount={state.bonusDeck.length}
         target={state.target}
         difficulty={state.difficulty}
         liveScore={liveScore}
         onInfoPress={() => setScoringOpen(true)}
       />
-      <ModifierStrip modifiers={state.modifiers} />
+      <BonusCardStrip
+        cards={state.bonusCards}
+        selectedIdx={
+          state.phase.kind === 'bonus-card-replacing' ? null : undefined
+        }
+      />
 
       <View style={styles.gridWrap}>
         <GridView
@@ -168,19 +141,16 @@ export const GameScreen = ({ state, dispatch }: Props) => {
           selected={selectedSlot}
           nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
           onSlotPress={handleSlotPress}
-          onLinePress={handleLinePress}
+          onLinePress={(kind, index) => setInspectLine({ kind, index })}
         />
       </View>
 
-      <View style={styles.bottom}>
-        {renderBottom(state, dispatch, suitActOK, swapTargetsExist)}
-      </View>
+      <View style={styles.bottom}>{renderBottom(state, dispatch, suitOK)}</View>
 
       <ScoringReferenceModal
         visible={scoringOpen}
         onClose={() => setScoringOpen(false)}
-        clubs={state.clubs}
-        modifiers={state.modifiers}
+        bonusCards={state.bonusCards}
       />
       {inspectLine && (
         <LineDetailModal
@@ -189,20 +159,14 @@ export const GameScreen = ({ state, dispatch }: Props) => {
           kind={inspectLine.kind}
           index={inspectLine.index}
           cards={inspectCards}
-          clubs={state.clubs}
-          modifiers={state.modifiers}
+          bonusCards={state.bonusCards}
         />
       )}
     </View>
   );
 };
 
-const renderBottom = (
-  state: GameState,
-  dispatch: (a: Action) => void,
-  suitActOK: boolean,
-  swapTargetsExist: boolean
-) => {
+const renderBottom = (state: GameState, dispatch: (a: Action) => void, suitOK: boolean) => {
   const p = state.phase;
 
   if (p.kind === 'awaiting-action') {
@@ -215,18 +179,18 @@ const renderBottom = (
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <PrimaryButton label="Place" onPress={() => dispatch({ type: 'PLACE' })} />
-          {!isJk && suitActOK && (
-            <PrimaryButton
-              label={SUIT_ACTION_LABEL[(state.drawn as any).suit]}
+          <Btn label="Place" onPress={() => dispatch({ type: 'PLACE' })} />
+          {!isJk && suitOK && (
+            <Btn
+              label={SUIT_PERK_LABEL[(state.drawn as any).suit]}
               tint="#ffb547"
               onPress={() => dispatch({ type: 'BEGIN_SUIT_ACTION' })}
             />
           )}
           {!isJk && (
-            <PrimaryButton
-              label="Discard"
-              tint="#4d525f"
+            <Btn
+              label="Trash"
+              tint="#7a4040"
               onPress={() => dispatch({ type: 'DISCARD_NONE' })}
             />
           )}
@@ -236,154 +200,116 @@ const renderBottom = (
     );
   }
 
-  if (p.kind === 'diamond-resolving') {
-    if (!state.drawn || isJoker(state.drawn)) return null;
-    const isDiamond = state.drawn.suit === 'D';
+  if (p.kind === 'awaiting-target-hop') {
     return (
       <View style={styles.actionRow}>
         <View style={styles.drawnBlock}>
-          <Text style={styles.drawnLabel}>♦ Pick</Text>
+          <Text style={styles.drawnLabel}>♥ Hop</Text>
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <PrimaryButton label="Place" onPress={() => dispatch({ type: 'PLACE' })} />
-          {swapTargetsExist && (
-            <PrimaryButton
-              label="Swap onto grid"
-              tint="#1b6fc7"
-              onPress={() => dispatch({ type: 'BEGIN_DIAMOND_SWAP' })}
-            />
-          )}
-          {!isDiamond && suitActOK && (
-            <PrimaryButton
-              label={`Use ${SUIT_ACTION_LABEL[state.drawn.suit]}`}
-              tint="#ffb547"
-              onPress={() => dispatch({ type: 'BEGIN_SUIT_ACTION' })}
-            />
-          )}
-          <PrimaryButton
-            label="Trash"
-            tint="#7a4040"
-            onPress={() => dispatch({ type: 'DISCARD_NONE' })}
-          />
-          {isDiamond && (
-            <Text style={styles.lockedNote}>♦ chain blocked — no perk on this pick.</Text>
-          )}
+          <Text style={styles.hint}>Tap two cards that share a row or a column.</Text>
+          <Btn label="Cancel" tint="#4d525f" onPress={() => dispatch({ type: 'CANCEL_ACTION' })} />
         </View>
       </View>
     );
   }
 
-  if (p.kind === 'diamond-place-swap') {
+  if (p.kind === 'awaiting-target-slide-source') {
     return (
       <View style={styles.actionRow}>
         <View style={styles.drawnBlock}>
-          <Text style={styles.drawnLabel}>♦ Pick</Text>
+          <Text style={styles.drawnLabel}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>
-            Tap a grid card to swap it out. The displaced card goes to discard. Jokers can't be
-            displaced.
-          </Text>
-          <PrimaryButton
-            label="Cancel"
-            tint="#4d525f"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
+          <Text style={styles.hint}>Tap a card to slide.</Text>
+          <Btn label="Cancel" tint="#4d525f" onPress={() => dispatch({ type: 'CANCEL_ACTION' })} />
         </View>
       </View>
     );
   }
 
-  if (p.kind === 'awaiting-target-hearts') {
-    const pip = state.drawn && !isJoker(state.drawn) ? movementPip(state.drawn) : 0;
+  if (p.kind === 'awaiting-target-slide-dest') {
     return (
       <View style={styles.actionRow}>
         <View style={styles.drawnBlock}>
-          <Text style={styles.drawnLabel}>♥ {pip}</Text>
+          <Text style={styles.drawnLabel}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>
-            Tap two cards within {pip} position{pip === 1 ? '' : 's'} of each other (wraps).
-          </Text>
-          <PrimaryButton
-            label="Cancel"
-            tint="#4d525f"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
+          <Text style={styles.hint}>Tap a destination in line with the selected card.</Text>
+          <Btn label="Pick a different card" tint="#4d525f" onPress={() => dispatch({ type: 'CANCEL_ACTION' })} />
         </View>
       </View>
     );
   }
 
-  if (p.kind === 'awaiting-target-spades') {
-    const pip = state.drawn && !isJoker(state.drawn) ? movementPip(state.drawn) : 0;
+  if (p.kind === 'awaiting-target-destroy') {
     return (
       <View style={styles.actionRow}>
         <View style={styles.drawnBlock}>
-          <Text style={styles.drawnLabel}>♠ {pip}</Text>
+          <Text style={styles.drawnLabel}>♦ Destroy</Text>
           <CardTile card={state.drawn} size="lg" />
         </View>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>
-            Tap a card, then a destination up to {pip} slot{pip === 1 ? '' : 's'} forward (wraps).
-          </Text>
-          <PrimaryButton
-            label="Cancel"
-            tint="#4d525f"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
+          <Text style={styles.hint}>Tap any card on the grid to trash it.</Text>
+          <Btn label="Cancel" tint="#4d525f" onPress={() => dispatch({ type: 'CANCEL_ACTION' })} />
         </View>
       </View>
     );
   }
 
-  if (p.kind === 'awaiting-target-clubs') {
-    return (
-      <View style={styles.actionCol}>
-        <Text style={styles.hint}>Pick a hand type to boost.</Text>
-        <ScrollView style={styles.clubsList}>
-          {p.targets.map(h => (
-            <Pressable
-              key={h}
-              style={styles.clubsRow}
-              onPress={() => dispatch({ type: 'RESOLVE_CLUBS', hand: h })}
-            >
-              <Text style={styles.clubsHandLabel}>{HAND_LABEL[h]}</Text>
-              <Text style={styles.clubsHandBase}>base {HAND_BASE_VALUE[h]}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <PrimaryButton
-          label="Cancel"
-          tint="#4d525f"
-          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-        />
-      </View>
-    );
-  }
-
-  if (p.kind === 'diamond-choosing') {
+  if (p.kind === 'bonus-card-resolving') {
+    const atMax = state.bonusCards.length >= BONUS_HAND_LIMIT;
     return (
       <View style={styles.actionCol}>
         <Text style={styles.hint}>
-          Pick one to play next. The other returns to discard. You can place it, swap it onto the
-          grid, use its perk (except ♦), or trash it.
+          {atMax
+            ? 'You\'re at 3 bonus cards. Pick one of the drawn to swap into your hand, or decline.'
+            : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
-        <View style={styles.diamondRow}>
-          {p.choices.map((c, i) => (
+        <View style={styles.bonusRow}>
+          {p.drawn.map((b, i) => (
             <Pressable
               key={i}
-              style={styles.diamondPick}
-              onPress={() => dispatch({ type: 'CHOOSE_DIAMOND', idx: i as 0 | 1 })}
+              style={styles.bonusPick}
+              onPress={() =>
+                atMax
+                  ? dispatch({ type: 'BONUS_SELECT_NEW', idx: i })
+                  : dispatch({ type: 'BONUS_KEEP', idx: i })
+              }
             >
-              <CardTile card={c} size="lg" />
-              <Text style={styles.pickLabel}>Pick</Text>
+              <Text style={styles.bonusName} numberOfLines={1}>{b.name}</Text>
+              <Text style={styles.bonusDesc} numberOfLines={3}>{b.description}</Text>
             </Pressable>
           ))}
         </View>
+        <Btn label="Decline both" tint="#4d525f" onPress={() => dispatch({ type: 'BONUS_DECLINE' })} />
+      </View>
+    );
+  }
+
+  if (p.kind === 'bonus-card-replacing') {
+    const newCard = p.drawn[p.pickedNew];
+    return (
+      <View style={styles.actionCol}>
+        <Text style={styles.hint}>
+          Tap one of your 3 to replace with "{newCard?.name}". The old one is discarded for good.
+        </Text>
+        <View style={styles.bonusRow}>
+          {state.bonusCards.map((b, i) => (
+            <Pressable
+              key={i}
+              style={styles.bonusPick}
+              onPress={() => dispatch({ type: 'BONUS_REPLACE', oldIdx: i })}
+            >
+              <Text style={styles.bonusName} numberOfLines={1}>{b.name}</Text>
+              <Text style={styles.bonusDesc} numberOfLines={3}>{b.description}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Btn label="Back" tint="#4d525f" onPress={() => dispatch({ type: 'CANCEL_ACTION' })} />
       </View>
     );
   }
@@ -391,12 +317,12 @@ const renderBottom = (
   return null;
 };
 
-interface ButtonProps {
+interface BtnProps {
   label: string;
   onPress: () => void;
   tint?: string;
 }
-const PrimaryButton = ({ label, onPress, tint = '#3680ff' }: ButtonProps) => (
+const Btn = ({ label, onPress, tint = '#3680ff' }: BtnProps) => (
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [styles.btn, { backgroundColor: tint, opacity: pressed ? 0.85 : 1 }]}
@@ -427,18 +353,21 @@ const styles = StyleSheet.create({
   btnLabel: { color: '#fff', fontWeight: '700', fontSize: 13 },
   hint: { color: '#cfd2dd', fontSize: 11, marginBottom: 2 },
   lockedNote: { color: '#caa44a', fontSize: 11, fontStyle: 'italic' },
-  clubsList: { maxHeight: 160 },
-  clubsRow: {
+  bonusRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#1d2331',
-    padding: 7,
-    borderRadius: 6,
-    marginBottom: 3,
+    gap: 8,
+    justifyContent: 'center',
+    marginVertical: 4,
   },
-  clubsHandLabel: { color: '#f4f5f9', fontSize: 12, fontWeight: '600' },
-  clubsHandBase: { color: '#9aa0b2', fontSize: 11 },
-  diamondRow: { flexDirection: 'row', gap: 16, justifyContent: 'center', marginTop: 4 },
-  diamondPick: { alignItems: 'center', gap: 4 },
-  pickLabel: { color: '#7cdca0', fontSize: 11, fontWeight: '700' },
+  bonusPick: {
+    flex: 1,
+    backgroundColor: '#f1efe6',
+    borderColor: '#d6cfa7',
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 8,
+    maxWidth: 160,
+  },
+  bonusName: { fontSize: 12, fontWeight: '700', color: '#5d4f1a' },
+  bonusDesc: { fontSize: 10, color: '#776230', marginTop: 2 },
 });

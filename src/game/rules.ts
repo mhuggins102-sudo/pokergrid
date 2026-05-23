@@ -5,5 +5,3 @@ export const TARGET_BY_DIFFICULTY: Record<Difficulty, number> = {
   medium: 300,
   hard: 400,
 };
-
-export const MODIFIERS_PER_RUN = 3;

@@ -1,14 +1,10 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../game/cards';
+import { applyLineEffects, BonusCard, LineContext } from '../../game/bonusCards';
 import { LineKind } from '../../game/grid';
 import { HandRank, evaluateLine } from '../../game/hands';
-import { Modifier, applyModifiers } from '../../game/modifiers';
-import {
-  ClubBonus,
-  HAND_BASE_VALUE,
-  clubMultiplier,
-} from '../../game/scoring';
+import { HAND_BASE_VALUE } from '../../game/scoring';
 import { CardTile } from './CardTile';
 
 interface Props {
@@ -17,8 +13,7 @@ interface Props {
   kind: LineKind;
   index: number; // 0-4
   cards: (Card | null)[];
-  clubs: ClubBonus;
-  modifiers: Modifier[];
+  bonusCards: BonusCard[];
 }
 
 const HAND_LABEL: Record<HandRank, string> = {
@@ -41,25 +36,23 @@ export const LineDetailModal = ({
   kind,
   index,
   cards,
-  clubs,
-  modifiers,
+  bonusCards,
 }: Props) => {
   const hand = evaluateLine(cards);
   const filledCount = cards.filter(c => c !== null).length;
   const title = kind === 'row' ? `Row ${index + 1}` : `Column ${index + 1}`;
 
   let base = 0;
-  let cMult = 1;
-  let mMult = 1;
+  let mult = 1;
   let flat = 0;
   let total = 0;
   if (hand) {
     base = HAND_BASE_VALUE[hand];
-    cMult = clubMultiplier(hand, clubs);
-    const m = applyModifiers({ kind, index, cards, hand }, modifiers);
-    mMult = m.multiplier;
-    flat = m.flat;
-    total = Math.ceil(base * cMult * mMult) + flat;
+    const ctx: LineContext = { kind, index, cards, hand };
+    const e = applyLineEffects(ctx, bonusCards);
+    mult = e.multiplier;
+    flat = e.flat;
+    total = Math.ceil(base * mult) + flat;
   }
 
   return (
@@ -91,18 +84,13 @@ export const LineDetailModal = ({
               </View>
 
               <View style={styles.breakdown}>
-                <BreakdownRow label="Base" value={`${base}`} />
-                <BreakdownRow
-                  label="♣ multiplier"
-                  value={cMult === 1 ? '—' : `× ${cMult.toFixed(2)}`}
-                  active={cMult !== 1}
+                <Row label="Base" value={`${base}`} />
+                <Row
+                  label="Multiplier"
+                  value={mult === 1 ? '—' : `× ${mult.toFixed(2)}`}
+                  active={mult !== 1}
                 />
-                <BreakdownRow
-                  label="Modifier multiplier"
-                  value={mMult === 1 ? '—' : `× ${mMult.toFixed(2)}`}
-                  active={mMult !== 1}
-                />
-                <BreakdownRow
+                <Row
                   label="Flat bonus"
                   value={flat === 0 ? '—' : `+ ${flat}`}
                   active={flat !== 0}
@@ -120,15 +108,7 @@ export const LineDetailModal = ({
   );
 };
 
-const BreakdownRow = ({
-  label,
-  value,
-  active,
-}: {
-  label: string;
-  value: string;
-  active?: boolean;
-}) => (
+const Row = ({ label, value, active }: { label: string; value: string; active?: boolean }) => (
   <View style={styles.breakdownRow}>
     <Text style={styles.breakdownLabel}>{label}</Text>
     <Text style={[styles.breakdownValue, active && styles.breakdownActive]}>{value}</Text>
@@ -158,12 +138,7 @@ const styles = StyleSheet.create({
   },
   title: { color: '#f4f5f9', fontSize: 16, fontWeight: '800' },
   closeBtn: { color: '#9aa0b2', fontSize: 24, fontWeight: '700', paddingHorizontal: 4 },
-  miniRow: {
-    flexDirection: 'row',
-    gap: 4,
-    justifyContent: 'center',
-    marginVertical: 10,
-  },
+  miniRow: { flexDirection: 'row', gap: 4, justifyContent: 'center', marginVertical: 10 },
   incomplete: {
     color: '#caa44a',
     textAlign: 'center',
@@ -182,11 +157,7 @@ const styles = StyleSheet.create({
   handLabel: { color: '#9aa0b2', fontSize: 12 },
   handValue: { color: '#f4f5f9', fontSize: 14, fontWeight: '700' },
   breakdown: { gap: 2 },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   breakdownLabel: { color: '#cfd2dd', fontSize: 12 },
   breakdownValue: { color: '#9aa0b2', fontSize: 12 },
   breakdownActive: { color: '#7cdca0' },

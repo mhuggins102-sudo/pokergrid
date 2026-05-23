@@ -1,48 +1,65 @@
-import { Card, StandardCard, isJoker } from './cards';
+import { Card, isJoker, StandardCard } from './cards';
 import { freshShuffledDeck, shuffle } from './deck';
-import { emptyGrid, Grid, isFull, placeAtLowest } from './grid';
+import { emptyGrid, Grid, isFull, nextSpiralSlot, placeAtSpiralNext } from './grid';
 import { HandRank } from './hands';
-import { Modifier, drawRandomModifiers } from './modifiers';
-import { ClubBonus } from './scoring';
 import {
-  Difficulty,
-  MODIFIERS_PER_RUN,
-  TARGET_BY_DIFFICULTY,
-} from './rules';
+  BonusCard,
+  BONUS_DECK_POOL,
+  BONUS_HAND_LIMIT,
+} from './bonusCards';
+import { Difficulty, TARGET_BY_DIFFICULTY } from './rules';
 import {
-  canExecuteClubs,
-  canExecuteDiamonds,
-  canExecuteHearts,
-  canExecuteSpades,
-  executeClubs,
-  executeHearts,
-  executeSpades,
-  SpadeMove,
-  validHeartsSwaps,
-  validSpadeMoves,
-  availableClubTargets,
+  canDrawBonus,
+  canDestroy,
+  canHop,
+  canSlide,
+  destroyableSlots,
+  executeDestroy,
+  executeHop,
+  executeSlide,
+  SlideMove,
+  slideDestinationsFrom,
+  validHopSwaps,
+  validSlideSources,
 } from './actions';
 
-export type TargetReturnTo = 'awaiting-action' | 'diamond-resolving';
+export type TargetReturnTo = 'awaiting-action';
 
 export type Phase =
   | { kind: 'awaiting-action' }
-  | { kind: 'awaiting-target-hearts'; pairs: [number, number][]; returnTo: TargetReturnTo }
-  | { kind: 'awaiting-target-spades'; moves: SpadeMove[]; returnTo: TargetReturnTo }
-  | { kind: 'awaiting-target-clubs'; targets: HandRank[]; returnTo: TargetReturnTo }
-  | { kind: 'diamond-choosing'; choices: [StandardCard, StandardCard] }
-  | { kind: 'diamond-resolving' }
-  | { kind: 'diamond-place-swap' }
+  | { kind: 'awaiting-target-hop'; pairs: [number, number][]; returnTo: TargetReturnTo }
+  | {
+      kind: 'awaiting-target-slide-source';
+      sources: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-target-slide-dest';
+      source: number;
+      moves: SlideMove[];
+      returnTo: TargetReturnTo;
+    }
+  | { kind: 'awaiting-target-destroy'; targets: number[]; returnTo: TargetReturnTo }
+  | {
+      kind: 'bonus-card-resolving';
+      drawn: BonusCard[]; // 1 or 2 cards
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'bonus-card-replacing';
+      drawn: BonusCard[];
+      pickedNew: number; // index into drawn
+      returnTo: TargetReturnTo;
+    }
   | { kind: 'game-over' };
 
 export interface GameState {
   deck: Card[];
-  discard: StandardCard[]; // jokers can never be discarded
-  trash: StandardCard[]; // cards permanently removed via suit actions or diamond-trash
+  trash: Card[];
+  bonusDeck: BonusCard[]; // depleting
+  bonusCards: BonusCard[]; // held (max BONUS_HAND_LIMIT)
   grid: Grid;
   drawn: Card | null;
-  clubs: ClubBonus;
-  modifiers: Modifier[];
   difficulty: Difficulty;
   target: number;
   phase: Phase;
@@ -51,14 +68,16 @@ export interface GameState {
 
 export type Action =
   | { type: 'PLACE' }
-  | { type: 'DISCARD_NONE' } // also "trash" while in diamond-resolving
+  | { type: 'DISCARD_NONE' } // sends drawn to trash (no discard pile)
   | { type: 'BEGIN_SUIT_ACTION' }
-  | { type: 'RESOLVE_HEARTS'; i: number; j: number }
-  | { type: 'RESOLVE_SPADES'; from: number; to: number }
-  | { type: 'RESOLVE_CLUBS'; hand: HandRank }
-  | { type: 'CHOOSE_DIAMOND'; idx: 0 | 1 }
-  | { type: 'BEGIN_DIAMOND_SWAP' }
-  | { type: 'RESOLVE_DIAMOND_SWAP'; slot: number }
+  | { type: 'RESOLVE_HOP'; i: number; j: number }
+  | { type: 'SLIDE_SELECT_SOURCE'; slot: number }
+  | { type: 'RESOLVE_SLIDE'; from: number; to: number }
+  | { type: 'RESOLVE_DESTROY'; slot: number }
+  | { type: 'BONUS_KEEP'; idx: number }
+  | { type: 'BONUS_SELECT_NEW'; idx: number }
+  | { type: 'BONUS_REPLACE'; oldIdx: number }
+  | { type: 'BONUS_DECLINE' }
   | { type: 'CANCEL_ACTION' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -77,7 +96,7 @@ const drawNext = (state: GameState): GameState => {
     }
     const [next, ...rest] = s.deck;
     if (isJoker(next)) {
-      const grid = placeAtLowest(s.grid, next);
+      const grid = placeAtSpiralNext(s.grid, next);
       s = log({ ...s, deck: rest, grid }, 'Joker auto-placed');
       continue;
     }
@@ -90,17 +109,16 @@ export const newGame = (
   rng: () => number = Math.random
 ): GameState => {
   const deck = freshShuffledDeck(rng);
-  const modifiers = drawRandomModifiers(MODIFIERS_PER_RUN, rng);
+  const bonusDeck = shuffle(BONUS_DECK_POOL, rng);
   const [first, ...rest] = deck;
-  const grid = placeAtLowest(emptyGrid(), first);
+  const grid = placeAtSpiralNext(emptyGrid(), first);
   const initial: GameState = {
     deck: rest,
-    discard: [],
     trash: [],
+    bonusDeck,
+    bonusCards: [],
     grid,
     drawn: null,
-    clubs: {},
-    modifiers,
     difficulty,
     target: TARGET_BY_DIFFICULTY[difficulty],
     phase: { kind: 'awaiting-action' },
@@ -109,199 +127,224 @@ export const newGame = (
   return drawNext(initial);
 };
 
-// ---------- internal helpers ----------
+// ---------- helpers ----------
 
-const pushDiscard = (s: GameState, card: Card): GameState => {
-  if (isJoker(card)) {
-    throw new Error('Joker cannot be discarded');
-  }
-  return { ...s, discard: [...s.discard, card] };
-};
-
-const pushTrash = (s: GameState, card: Card): GameState => {
-  if (isJoker(card)) {
-    throw new Error('Joker cannot be trashed');
-  }
-  return { ...s, trash: [...s.trash, card] };
-};
-
-const isLiveActionPhase = (k: Phase['kind']): k is 'awaiting-action' | 'diamond-resolving' =>
-  k === 'awaiting-action' || k === 'diamond-resolving';
+const pushTrash = (s: GameState, card: Card): GameState => ({
+  ...s,
+  trash: [...s.trash, card],
+});
 
 // ---------- action handlers ----------
 
 const handlePlace = (s: GameState): GameState => {
-  if (!isLiveActionPhase(s.phase.kind) || !s.drawn) return s;
-  const grid = placeAtLowest(s.grid, s.drawn);
+  if (s.phase.kind !== 'awaiting-action' || !s.drawn) return s;
+  const grid = placeAtSpiralNext(s.grid, s.drawn);
   return drawNext(log({ ...s, grid }, 'Place'));
 };
 
-// In awaiting-action: discards the drawn card. In diamond-resolving: trashes it.
 const handleDiscardNone = (s: GameState): GameState => {
-  if (!isLiveActionPhase(s.phase.kind) || !s.drawn) return s;
-  if (isJoker(s.drawn)) return s;
-  if (s.phase.kind === 'diamond-resolving') {
-    return drawNext(log(pushTrash(s, s.drawn), 'Trash diamond pick'));
-  }
-  return drawNext(log(pushDiscard(s, s.drawn), 'Discard (no action)'));
+  if (s.phase.kind !== 'awaiting-action' || !s.drawn || isJoker(s.drawn)) return s;
+  return drawNext(log(pushTrash(s, s.drawn), 'Discard (trashed)'));
 };
 
 const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
-  if (!isLiveActionPhase(s.phase.kind) || !s.drawn || isJoker(s.drawn)) return s;
+  if (s.phase.kind !== 'awaiting-action' || !s.drawn || isJoker(s.drawn)) return s;
   const drawn = s.drawn;
-  const returnTo: TargetReturnTo =
-    s.phase.kind === 'diamond-resolving' ? 'diamond-resolving' : 'awaiting-action';
-
   switch (drawn.suit) {
     case 'H': {
-      if (!canExecuteHearts(s.grid, drawn)) return s;
+      if (!canHop(s.grid)) return s;
       return {
         ...s,
         phase: {
-          kind: 'awaiting-target-hearts',
-          pairs: validHeartsSwaps(s.grid, drawn),
-          returnTo,
+          kind: 'awaiting-target-hop',
+          pairs: validHopSwaps(s.grid),
+          returnTo: 'awaiting-action',
         },
       };
     }
     case 'S': {
-      if (!canExecuteSpades(s.grid, drawn)) return s;
+      if (!canSlide(s.grid)) return s;
       return {
         ...s,
         phase: {
-          kind: 'awaiting-target-spades',
-          moves: validSpadeMoves(s.grid, drawn),
-          returnTo,
-        },
-      };
-    }
-    case 'C': {
-      if (!canExecuteClubs(s.clubs)) return s;
-      return {
-        ...s,
-        phase: {
-          kind: 'awaiting-target-clubs',
-          targets: availableClubTargets(s.clubs),
-          returnTo,
+          kind: 'awaiting-target-slide-source',
+          sources: validSlideSources(s.grid),
+          returnTo: 'awaiting-action',
         },
       };
     }
     case 'D': {
-      // Diamond chain is forbidden: the chosen pick from a diamond cannot
-      // re-trigger another diamond action.
-      if (s.phase.kind === 'diamond-resolving') return s;
-      if (!canExecuteDiamonds(s.discard.length)) return s;
-      if (s.discard.length === 1) {
-        // Only one card in discard: it auto-becomes the new drawn pick.
-        // The diamond card is trashed (suit-action use).
-        const sole = s.discard[0];
-        const afterDiamond = pushTrash({ ...s, discard: [] }, drawn);
-        return log(
-          { ...afterDiamond, drawn: sole, phase: { kind: 'diamond-resolving' } },
-          'Diamond auto-redraw'
-        );
-      }
-      const shuffled = shuffle(s.discard, rng);
-      const a = shuffled[0];
-      const b = shuffled[1];
-      const rest = shuffled.slice(2);
+      if (!canDestroy(s.grid)) return s;
       return {
         ...s,
-        discard: rest,
-        phase: { kind: 'diamond-choosing', choices: [a, b] },
+        phase: {
+          kind: 'awaiting-target-destroy',
+          targets: destroyableSlots(s.grid),
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+    case 'C': {
+      if (!canDrawBonus(s.bonusDeck.length)) return s;
+      // Draw up to 2 from the top of the bonus deck.
+      const drawCount = Math.min(2, s.bonusDeck.length);
+      const drawn = s.bonusDeck.slice(0, drawCount);
+      const remainingDeck = s.bonusDeck.slice(drawCount);
+      return {
+        ...s,
+        bonusDeck: remainingDeck,
+        phase: { kind: 'bonus-card-resolving', drawn, returnTo: 'awaiting-action' },
       };
     }
   }
 };
 
-const handleResolveHearts = (
+const handleResolveHop = (s: GameState, i: number, j: number): GameState => {
+  if (s.phase.kind !== 'awaiting-target-hop') return s;
+  if (!s.drawn || isJoker(s.drawn)) return s;
+  const grid = executeHop(s.grid, i, j);
+  return drawNext(log(pushTrash({ ...s, grid }, s.drawn), `Hop ${i}↔${j}`));
+};
+
+const handleSlideSelectSource = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-target-slide-source') return s;
+  if (!s.grid[slot]) return s;
+  const moves = slideDestinationsFrom(s.grid, slot);
+  if (moves.length === 0) return s;
+  return {
+    ...s,
+    phase: {
+      kind: 'awaiting-target-slide-dest',
+      source: slot,
+      moves,
+      returnTo: s.phase.returnTo,
+    },
+  };
+};
+
+const handleResolveSlide = (s: GameState, from: number, to: number): GameState => {
+  if (s.phase.kind !== 'awaiting-target-slide-dest') return s;
+  if (!s.drawn || isJoker(s.drawn)) return s;
+  const valid = s.phase.moves.find(m => m.from === from && m.to === to);
+  if (!valid) return s;
+  const grid = executeSlide(s.grid, from, to);
+  return drawNext(log(pushTrash({ ...s, grid }, s.drawn), `Slide ${from}→${to}`));
+};
+
+const handleResolveDestroy = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-target-destroy') return s;
+  if (!s.drawn || isJoker(s.drawn)) return s;
+  const { grid, removed } = executeDestroy(s.grid, slot);
+  const afterTarget = pushTrash({ ...s, grid }, removed);
+  return drawNext(log(pushTrash(afterTarget, s.drawn), `Destroy slot ${slot}`));
+};
+
+// ---------- bonus card handlers ----------
+
+// Send `drawn` cards back to bottom of bonus deck (in the given order), then
+// trash the club, then advance.
+const finishBonusFlow = (
   s: GameState,
-  i: number,
-  j: number
+  returningDrawn: BonusCard[],
+  newBonusCards: BonusCard[]
 ): GameState => {
-  if (s.phase.kind !== 'awaiting-target-hearts') return s;
   if (!s.drawn || isJoker(s.drawn)) return s;
-  const grid = executeHearts(s.grid, i, j);
-  // Suit-action card is trashed, not discarded.
-  const next = pushTrash({ ...s, grid }, s.drawn);
-  return drawNext(log(next, `Hearts swap ${i}↔${j}`));
-};
-
-const handleResolveSpades = (
-  s: GameState,
-  from: number,
-  to: number
-): GameState => {
-  if (s.phase.kind !== 'awaiting-target-spades') return s;
-  if (!s.drawn || isJoker(s.drawn)) return s;
-  const grid = executeSpades(s.grid, from, to);
-  const next = pushTrash({ ...s, grid }, s.drawn);
-  return drawNext(log(next, `Spades move ${from}→${to}`));
-};
-
-const handleResolveClubs = (s: GameState, hand: HandRank): GameState => {
-  if (s.phase.kind !== 'awaiting-target-clubs') return s;
-  if (!s.drawn || isJoker(s.drawn) || s.drawn.suit !== 'C') return s;
-  const clubs = executeClubs(s.clubs, s.drawn, hand);
-  const next = pushTrash({ ...s, clubs }, s.drawn);
-  return drawNext(log(next, `Clubs boost ${hand}`));
-};
-
-const handleChooseDiamond = (s: GameState, idx: 0 | 1): GameState => {
-  if (s.phase.kind !== 'diamond-choosing') return s;
-  if (!s.drawn || isJoker(s.drawn)) return s;
-  const [a, b] = s.phase.choices;
-  const chosen = idx === 0 ? a : b;
-  const other = idx === 0 ? b : a;
-  // Un-chosen card returns to discard. Original diamond is trashed.
-  const afterReturn = pushDiscard(s, other);
-  const afterDiamond = pushTrash(afterReturn, s.drawn);
-  return log(
-    { ...afterDiamond, drawn: chosen, phase: { kind: 'diamond-resolving' } },
-    `Diamond redraw choice ${idx}`
+  return drawNext(
+    log(
+      pushTrash(
+        {
+          ...s,
+          bonusDeck: [...s.bonusDeck, ...returningDrawn],
+          bonusCards: newBonusCards,
+        },
+        s.drawn
+      ),
+      'Bonus draw resolved'
+    )
   );
 };
 
-const handleBeginDiamondSwap = (s: GameState): GameState => {
-  if (s.phase.kind !== 'diamond-resolving') return s;
-  if (!s.drawn || isJoker(s.drawn)) return s;
-  // Need at least one non-joker grid card to swap with.
-  const hasTarget = s.grid.some(c => c !== null && !isJoker(c));
-  if (!hasTarget) return s;
-  return { ...s, phase: { kind: 'diamond-place-swap' } };
+const handleBonusKeep = (s: GameState, idx: number): GameState => {
+  if (s.phase.kind !== 'bonus-card-resolving') return s;
+  if (idx < 0 || idx >= s.phase.drawn.length) return s;
+  // Only valid when below the limit; at limit, use BONUS_SELECT_NEW + BONUS_REPLACE.
+  if (s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
+  const kept = s.phase.drawn[idx];
+  const returning = s.phase.drawn.filter((_, i) => i !== idx);
+  return finishBonusFlow(s, returning, [...s.bonusCards, kept]);
 };
 
-const handleResolveDiamondSwap = (s: GameState, slot: number): GameState => {
-  if (s.phase.kind !== 'diamond-place-swap') return s;
-  if (!s.drawn || isJoker(s.drawn)) return s;
-  if (slot < 0 || slot >= s.grid.length) return s;
-  const existing = s.grid[slot];
-  if (!existing || isJoker(existing)) return s; // can't displace empty or joker
-  const grid = s.grid.slice();
-  grid[slot] = s.drawn;
-  // Displaced card goes to discard (per rule).
-  const next = pushDiscard({ ...s, grid }, existing);
-  return drawNext(log(next, `Diamond swap-place @ slot ${slot}`));
+const handleBonusSelectNew = (s: GameState, idx: number): GameState => {
+  if (s.phase.kind !== 'bonus-card-resolving') return s;
+  if (idx < 0 || idx >= s.phase.drawn.length) return s;
+  if (s.bonusCards.length < BONUS_HAND_LIMIT) return s;
+  return {
+    ...s,
+    phase: {
+      kind: 'bonus-card-replacing',
+      drawn: s.phase.drawn,
+      pickedNew: idx,
+      returnTo: s.phase.returnTo,
+    },
+  };
+};
+
+const handleBonusReplace = (s: GameState, oldIdx: number): GameState => {
+  if (s.phase.kind !== 'bonus-card-replacing') return s;
+  const phase = s.phase;
+  if (oldIdx < 0 || oldIdx >= s.bonusCards.length) return s;
+  const newCard = phase.drawn[phase.pickedNew];
+  if (!newCard) return s;
+  const newHand = s.bonusCards.slice();
+  newHand[oldIdx] = newCard;
+  // The OTHER drawn card returns to the bottom of the bonus deck. The replaced
+  // bonus card is gone (we don't model a bonus-card trash explicitly).
+  const returningDrawn = phase.drawn.filter((_, i) => i !== phase.pickedNew);
+  return finishBonusFlow(s, returningDrawn, newHand);
+};
+
+const handleBonusDecline = (s: GameState): GameState => {
+  if (
+    s.phase.kind !== 'bonus-card-resolving' &&
+    s.phase.kind !== 'bonus-card-replacing'
+  ) {
+    return s;
+  }
+  return finishBonusFlow(s, s.phase.drawn, s.bonusCards);
 };
 
 const handleCancelAction = (s: GameState): GameState => {
   switch (s.phase.kind) {
     case 'awaiting-action':
     case 'game-over':
-    case 'diamond-choosing':
-    case 'diamond-resolving':
-      // Cannot cancel: terminal/in-flight states with no parent to return to.
       return s;
-    case 'diamond-place-swap':
-      return { ...s, phase: { kind: 'diamond-resolving' } };
-    case 'awaiting-target-hearts':
-    case 'awaiting-target-spades':
-    case 'awaiting-target-clubs':
-      return { ...s, phase: { kind: s.phase.returnTo } as Phase };
+    case 'awaiting-target-slide-dest':
+      // Back to source selection within the same slide flow.
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-target-slide-source',
+          sources: validSlideSources(s.grid),
+          returnTo: s.phase.returnTo,
+        },
+      };
+    case 'bonus-card-replacing':
+      // Back to the resolve-pick step.
+      return {
+        ...s,
+        phase: {
+          kind: 'bonus-card-resolving',
+          drawn: s.phase.drawn,
+          returnTo: s.phase.returnTo,
+        },
+      };
+    case 'awaiting-target-hop':
+    case 'awaiting-target-slide-source':
+    case 'awaiting-target-destroy':
+    case 'bonus-card-resolving':
+      return { ...s, phase: { kind: s.phase.returnTo } };
   }
 };
-
-// ---------- reducer ----------
 
 export const step = (
   state: GameState,
@@ -315,18 +358,22 @@ export const step = (
       return handleDiscardNone(state);
     case 'BEGIN_SUIT_ACTION':
       return handleBeginSuitAction(state, rng);
-    case 'RESOLVE_HEARTS':
-      return handleResolveHearts(state, action.i, action.j);
-    case 'RESOLVE_SPADES':
-      return handleResolveSpades(state, action.from, action.to);
-    case 'RESOLVE_CLUBS':
-      return handleResolveClubs(state, action.hand);
-    case 'CHOOSE_DIAMOND':
-      return handleChooseDiamond(state, action.idx);
-    case 'BEGIN_DIAMOND_SWAP':
-      return handleBeginDiamondSwap(state);
-    case 'RESOLVE_DIAMOND_SWAP':
-      return handleResolveDiamondSwap(state, action.slot);
+    case 'RESOLVE_HOP':
+      return handleResolveHop(state, action.i, action.j);
+    case 'SLIDE_SELECT_SOURCE':
+      return handleSlideSelectSource(state, action.slot);
+    case 'RESOLVE_SLIDE':
+      return handleResolveSlide(state, action.from, action.to);
+    case 'RESOLVE_DESTROY':
+      return handleResolveDestroy(state, action.slot);
+    case 'BONUS_KEEP':
+      return handleBonusKeep(state, action.idx);
+    case 'BONUS_SELECT_NEW':
+      return handleBonusSelectNew(state, action.idx);
+    case 'BONUS_REPLACE':
+      return handleBonusReplace(state, action.oldIdx);
+    case 'BONUS_DECLINE':
+      return handleBonusDecline(state);
     case 'CANCEL_ACTION':
       return handleCancelAction(state);
   }

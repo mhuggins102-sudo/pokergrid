@@ -1,14 +1,13 @@
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BonusCard, universalEffectFor, universalEffectSum } from '../../game/bonusCards';
 import { HandRank } from '../../game/hands';
-import { Modifier, universalEffectFor, universalEffectSum } from '../../game/modifiers';
-import { CLUB_PIP_MULTIPLIER, ClubBonus, HAND_BASE_VALUE, clubMultiplier } from '../../game/scoring';
+import { HAND_BASE_VALUE } from '../../game/scoring';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  clubs: ClubBonus;
-  modifiers: Modifier[];
+  bonusCards: BonusCard[];
 }
 
 const HAND_LABEL: Record<HandRank, string> = {
@@ -26,17 +25,8 @@ const HAND_LABEL: Record<HandRank, string> = {
 };
 
 const HAND_ORDER: HandRank[] = [
-  'HIGH_CARD',
-  'PAIR',
-  'TWO_PAIR',
-  'THREE_OF_A_KIND',
-  'STRAIGHT',
-  'FLUSH',
-  'FULL_HOUSE',
-  'FOUR_OF_A_KIND',
-  'STRAIGHT_FLUSH',
-  'FIVE_OF_A_KIND',
-  'ROYAL_FLUSH',
+  'HIGH_CARD', 'PAIR', 'TWO_PAIR', 'THREE_OF_A_KIND', 'STRAIGHT', 'FLUSH',
+  'FULL_HOUSE', 'FOUR_OF_A_KIND', 'STRAIGHT_FLUSH', 'FIVE_OF_A_KIND', 'ROYAL_FLUSH',
 ];
 
 const fmt = (n: number): string => {
@@ -44,35 +34,21 @@ const fmt = (n: number): string => {
   return s.replace(/\.?0+$/, '') || '0';
 };
 
-interface RowProps {
-  hand: HandRank;
-  clubs: ClubBonus;
-  modifiers: Modifier[];
-}
-
-const HandRow = ({ hand, clubs, modifiers }: RowProps) => {
+const HandRow = ({ hand, bonusCards }: { hand: HandRank; bonusCards: BonusCard[] }) => {
   const base = HAND_BASE_VALUE[hand];
-  const clubPip = clubs[hand];
-  const cMult = clubMultiplier(hand, clubs);
-  const { multiplier: modMult, flat: modFlat } = universalEffectSum(modifiers, hand);
-  const finalValue = Math.ceil(base * cMult * modMult) + modFlat;
-  const isModified = clubPip !== undefined || modMult !== 1 || modFlat !== 0;
-
+  const { multiplier, flat } = universalEffectSum(bonusCards, hand);
+  const finalValue = Math.ceil(base * multiplier) + flat;
+  const isModified = multiplier !== 1 || flat !== 0;
   const parts: string[] = [];
-  if (clubPip !== undefined) parts.push(`♣ +${clubPip * CLUB_PIP_MULTIPLIER}%`);
-  if (modMult !== 1) parts.push(`mod ×${fmt(modMult)}`);
-  if (modFlat !== 0) parts.push(`mod +${modFlat}`);
+  if (multiplier !== 1) parts.push(`×${fmt(multiplier)}`);
+  if (flat !== 0) parts.push(`+${flat}`);
 
   return (
     <View style={styles.row}>
       <View style={styles.handCol}>
-        <Text style={styles.handName} numberOfLines={1}>
-          {HAND_LABEL[hand]}
-        </Text>
+        <Text style={styles.handName} numberOfLines={1}>{HAND_LABEL[hand]}</Text>
         {isModified && (
-          <Text style={styles.bonusSub} numberOfLines={1}>
-            {parts.join(' · ')}
-          </Text>
+          <Text style={styles.bonusSub} numberOfLines={1}>{parts.join(' · ')}</Text>
         )}
       </View>
       {isModified ? (
@@ -88,11 +64,11 @@ const HandRow = ({ hand, clubs, modifiers }: RowProps) => {
   );
 };
 
-export const ScoringReferenceModal = ({ visible, onClose, clubs, modifiers }: Props) => {
-  // Modifiers that aren't universally applicable (suit / position conditional).
-  const conditionalMods = modifiers.filter(m =>
-    HAND_ORDER.every(h => universalEffectFor(m, h) === null)
+export const ScoringReferenceModal = ({ visible, onClose, bonusCards }: Props) => {
+  const conditional = bonusCards.filter(b =>
+    b.lineEffect && HAND_ORDER.every(h => universalEffectFor(b, h) === null)
   );
+  const gridLevel = bonusCards.filter(b => !!b.gridEffect);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -105,28 +81,36 @@ export const ScoringReferenceModal = ({ visible, onClose, clubs, modifiers }: Pr
             </Pressable>
           </View>
 
-          <ScrollView style={styles.table}>
+          <ScrollView style={styles.scroll}>
             {HAND_ORDER.map(h => (
-              <HandRow key={h} hand={h} clubs={clubs} modifiers={modifiers} />
+              <HandRow key={h} hand={h} bonusCards={bonusCards} />
             ))}
+
+            {conditional.length > 0 && (
+              <>
+                <View style={styles.divider} />
+                <Text style={styles.sectionLabel}>Conditional bonus cards</Text>
+                {conditional.map(b => (
+                  <Text key={b.id} style={styles.modLine}>• {b.description}</Text>
+                ))}
+              </>
+            )}
+
+            {gridLevel.length > 0 && (
+              <>
+                <View style={styles.divider} />
+                <Text style={styles.sectionLabel}>Grid achievements (multiply final total)</Text>
+                {gridLevel.map(b => (
+                  <Text key={b.id} style={styles.modLine}>• {b.description}</Text>
+                ))}
+              </>
+            )}
+
+            <Text style={styles.footnote}>
+              Per-line bonuses compose additively: total per line = ⌈base × (1 + Σ boosts)⌉ + flats.
+              Grid achievements multiply the summed total.
+            </Text>
           </ScrollView>
-
-          {conditionalMods.length > 0 && (
-            <>
-              <View style={styles.divider} />
-              <Text style={styles.sectionLabel}>Conditional modifiers</Text>
-              {conditionalMods.map(m => (
-                <Text key={m.id} style={styles.modLine}>
-                  • {m.description}
-                </Text>
-              ))}
-            </>
-          )}
-
-          <Text style={styles.footnote}>
-            Values shown assume the hand actually forms. Conditional modifiers only fire when their
-            condition (suit / position) is met.
-          </Text>
         </Pressable>
       </Pressable>
     </Modal>
@@ -157,7 +141,7 @@ const styles = StyleSheet.create({
   },
   title: { color: '#f4f5f9', fontSize: 16, fontWeight: '800' },
   closeBtn: { color: '#9aa0b2', fontSize: 24, fontWeight: '700', paddingHorizontal: 4 },
-  table: { maxHeight: 380 },
+  scroll: { maxHeight: 480 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -3,8 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { HandRank } from '../../game/hands';
 import { scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
+import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
-import { ModifierStrip } from '../components/ModifierStrip';
 
 interface Props {
   state: GameState;
@@ -27,10 +27,11 @@ const HAND_LABEL: Record<HandRank, string> = {
 };
 
 export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
-  const { lines: scoredLines, total } = useMemo(
-    () => scoreGrid(state.grid, state.clubs, state.modifiers),
-    [state.grid, state.clubs, state.modifiers]
+  const report = useMemo(
+    () => scoreGrid(state.grid, state.bonusCards),
+    [state.grid, state.bonusCards]
   );
+  const { lines: scoredLines, subtotal, gridMultiplier, gridFlat, total } = report;
   const won = total >= state.target;
 
   return (
@@ -42,7 +43,7 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
         </Text>
       </View>
 
-      <ModifierStrip modifiers={state.modifiers} />
+      <BonusCardStrip cards={state.bonusCards} />
       <GridView grid={state.grid} />
 
       <View style={styles.breakdownBlock}>
@@ -59,6 +60,19 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
             <Text style={styles.lineScore}>{line.total}</Text>
           </View>
         ))}
+        <View style={styles.subtotalRow}>
+          <Text style={styles.totalLabel}>Subtotal</Text>
+          <Text style={styles.subtotalValue}>{subtotal}</Text>
+        </View>
+        {(gridMultiplier !== 1 || gridFlat !== 0) && (
+          <View style={styles.subtotalRow}>
+            <Text style={styles.totalLabel}>Grid achievements</Text>
+            <Text style={styles.subtotalValue}>
+              {gridMultiplier !== 1 ? `× ${gridMultiplier.toFixed(2)}` : ''}
+              {gridFlat !== 0 ? ` + ${gridFlat}` : ''}
+            </Text>
+          </View>
+        )}
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalScore}>{total}</Text>
@@ -80,11 +94,7 @@ export const ResultScreen = ({ state, onReplay, onHome }: Props) => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#262c3a' },
   content: { paddingBottom: 40 },
-  banner: {
-    paddingVertical: 18,
-    alignItems: 'center',
-    backgroundColor: '#1d2331',
-  },
+  banner: { paddingVertical: 18, alignItems: 'center', backgroundColor: '#1d2331' },
   bannerWon: { backgroundColor: '#1c4a30' },
   bannerLost: { backgroundColor: '#1d2331' },
   bannerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
@@ -110,6 +120,14 @@ const styles = StyleSheet.create({
   lineLabel: { color: '#cfd2dd', fontSize: 12, width: 60 },
   lineHand: { color: '#cfd2dd', fontSize: 12, flex: 1 },
   lineScore: { color: '#f4f5f9', fontSize: 13, fontWeight: '700', width: 40, textAlign: 'right' },
+  subtotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  subtotalValue: { color: '#cfd2dd', fontSize: 13, fontWeight: '700' },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
