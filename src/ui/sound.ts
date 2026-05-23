@@ -1,21 +1,74 @@
+import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 import { useSettings } from './settings';
 
 // PokerGrid sound effects.
 //
-// All effects are synthesized at runtime via Web Audio (no bundled audio
-// files). On native, this currently no-ops — adding expo-audio + bundled
-// clips is a follow-up. Synthesis is good enough for the neon arcade
-// vibe: short clicks, sweeps, and arpeggios.
+// Both platforms are covered:
+//  - Native (iOS / Android via expo-audio): plays bundled WAV files from
+//    assets/sounds/. Each sound is a single cached AudioPlayer; we
+//    seek-to-zero on replay because expo-audio doesn't auto-rewind.
+//  - Web (browser): synthesizes the same SFX live via Web Audio. We do
+//    this to avoid asking the browser to fetch and decode small WAV blobs
+//    every tap, and to keep first-play latency near zero.
+
+export type SoundKey =
+  | 'tap'
+  | 'draw'
+  | 'place'
+  | 'swap'
+  | 'slide'
+  | 'destroy'
+  | 'bonus'
+  | 'win'
+  | 'lose';
+
+// ---------- Native (expo-audio + bundled WAVs) ----------
+
+// require() pulls the .wav files through Metro as static assets. The exact
+// shape of the returned value differs per platform (a number on native, a
+// URL-ish object on web), but expo-audio accepts both via createAudioPlayer.
+const ASSETS: Record<SoundKey, number> = {
+  tap: require('../../assets/sounds/tap.wav'),
+  draw: require('../../assets/sounds/draw.wav'),
+  place: require('../../assets/sounds/place.wav'),
+  swap: require('../../assets/sounds/swap.wav'),
+  slide: require('../../assets/sounds/slide.wav'),
+  destroy: require('../../assets/sounds/destroy.wav'),
+  bonus: require('../../assets/sounds/bonus.wav'),
+  win: require('../../assets/sounds/win.wav'),
+  lose: require('../../assets/sounds/lose.wav'),
+};
+
+const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
+
+const playNative = (k: SoundKey) => {
+  try {
+    let p = nativePlayers[k];
+    if (!p) {
+      p = createAudioPlayer(ASSETS[k]);
+      nativePlayers[k] = p;
+    } else {
+      // expo-audio doesn't auto-rewind; reset before replay so spammed taps
+      // restart the clip rather than no-op.
+      p.seekTo(0);
+    }
+    p.play();
+  } catch {
+    // Swallow — sound should never crash gameplay.
+  }
+};
+
+// ---------- Web (Web Audio synthesis) ----------
 
 type Note = {
   freq: number;
-  dur: number;       // seconds
+  dur: number;
   type?: OscillatorType;
-  vol?: number;      // peak gain (0..1)
-  delay?: number;    // seconds offset from "now"
-  endFreq?: number;  // for a frequency sweep
+  vol?: number;
+  delay?: number;
+  endFreq?: number;
 };
 
 let ctx: AudioContext | null = null;
@@ -35,7 +88,6 @@ const getCtx = (): { ctx: AudioContext; master: GainNode } | null => {
     masterGain.gain.value = 0.55;
     masterGain.connect(ctx.destination);
   }
-  // Browsers suspend the context until a user gesture; resume on every play.
   if (ctx.state === 'suspended') ctx.resume();
   return { ctx, master: masterGain! };
 };
@@ -67,7 +119,6 @@ const playNotes = (notes: Note[]) => {
   }
 };
 
-// A short burst of filtered noise (used for the destroy "explosion").
 const playNoise = (duration: number, opts?: { vol?: number; hz?: number }) => {
   const a = getCtx();
   if (!a) return;
@@ -92,59 +143,72 @@ const playNoise = (duration: number, opts?: { vol?: number; hz?: number }) => {
   src.stop(now + duration + 0.02);
 };
 
-// ---- The library ----
+const playWeb = (k: SoundKey) => {
+  switch (k) {
+    case 'tap':
+      return playNotes([{ freq: 1400, dur: 0.04, vol: 0.06, type: 'triangle' }]);
+    case 'draw':
+      return playNotes([
+        { freq: 660, dur: 0.06, type: 'sine', vol: 0.12 },
+        { freq: 880, dur: 0.08, delay: 0.04, type: 'sine', vol: 0.10 },
+      ]);
+    case 'place':
+      return playNotes([
+        { freq: 440, dur: 0.12, type: 'sine', vol: 0.18 },
+        { freq: 660, dur: 0.10, delay: 0.06, type: 'triangle', vol: 0.13 },
+      ]);
+    case 'swap':
+      return playNotes([
+        { freq: 523, dur: 0.10, type: 'triangle', vol: 0.16 },
+        { freq: 698, dur: 0.10, delay: 0.08, type: 'triangle', vol: 0.16 },
+        { freq: 523, dur: 0.10, delay: 0.18, type: 'triangle', vol: 0.13 },
+      ]);
+    case 'slide':
+      return playNotes([
+        { freq: 300, endFreq: 800, dur: 0.22, type: 'sawtooth', vol: 0.15 },
+      ]);
+    case 'destroy':
+      playNoise(0.32, { vol: 0.28, hz: 600 });
+      playNotes([
+        { freq: 220, endFreq: 70, dur: 0.32, type: 'square', vol: 0.18 },
+        { freq: 1400, endFreq: 200, dur: 0.18, delay: 0.02, type: 'sawtooth', vol: 0.10 },
+      ]);
+      return;
+    case 'bonus':
+      return playNotes([
+        { freq: 523, dur: 0.10, type: 'triangle' },
+        { freq: 659, dur: 0.10, delay: 0.10, type: 'triangle' },
+        { freq: 784, dur: 0.16, delay: 0.20, type: 'triangle' },
+      ]);
+    case 'win':
+      return playNotes([
+        { freq: 523, dur: 0.12 },
+        { freq: 659, dur: 0.12, delay: 0.12 },
+        { freq: 784, dur: 0.12, delay: 0.24 },
+        { freq: 1046, dur: 0.34, delay: 0.36, vol: 0.22 },
+      ]);
+    case 'lose':
+      return playNotes([
+        { freq: 440, dur: 0.18, type: 'triangle' },
+        { freq: 330, dur: 0.18, delay: 0.18, type: 'triangle' },
+        { freq: 196, dur: 0.42, delay: 0.36, type: 'sawtooth', vol: 0.16 },
+      ]);
+  }
+};
 
-export const sounds = {
-  tap:   () => playNotes([{ freq: 1400, dur: 0.04, vol: 0.06, type: 'triangle' }]),
-  draw:  () => playNotes([
-    { freq: 660, dur: 0.06, type: 'sine', vol: 0.12 },
-    { freq: 880, dur: 0.08, delay: 0.04, type: 'sine', vol: 0.10 },
-  ]),
-  place: () => playNotes([
-    { freq: 440, dur: 0.12, type: 'sine', vol: 0.18 },
-    { freq: 660, dur: 0.10, delay: 0.06, type: 'triangle', vol: 0.13 },
-  ]),
-  swap:  () => playNotes([
-    { freq: 523, dur: 0.10, type: 'triangle', vol: 0.16 },
-    { freq: 698, dur: 0.10, delay: 0.08, type: 'triangle', vol: 0.16 },
-    { freq: 523, dur: 0.10, delay: 0.18, type: 'triangle', vol: 0.13 },
-  ]),
-  slide: () => playNotes([
-    { freq: 300, endFreq: 800, dur: 0.22, type: 'sawtooth', vol: 0.15 },
-  ]),
-  destroy: () => {
-    playNoise(0.32, { vol: 0.28, hz: 600 });
-    playNotes([
-      { freq: 220, endFreq: 70, dur: 0.32, type: 'square', vol: 0.18 },
-      { freq: 1400, endFreq: 200, dur: 0.18, delay: 0.02, type: 'sawtooth', vol: 0.10 },
-    ]);
-  },
-  bonus: () => playNotes([
-    { freq: 523, dur: 0.10, type: 'triangle' },
-    { freq: 659, dur: 0.10, delay: 0.10, type: 'triangle' },
-    { freq: 784, dur: 0.16, delay: 0.20, type: 'triangle' },
-  ]),
-  win: () => playNotes([
-    { freq: 523, dur: 0.12 },
-    { freq: 659, dur: 0.12, delay: 0.12 },
-    { freq: 784, dur: 0.12, delay: 0.24 },
-    { freq: 1046, dur: 0.34, delay: 0.36, vol: 0.22 },
-  ]),
-  lose: () => playNotes([
-    { freq: 440, dur: 0.18, type: 'triangle' },
-    { freq: 330, dur: 0.18, delay: 0.18, type: 'triangle' },
-    { freq: 196, dur: 0.42, delay: 0.36, type: 'sawtooth', vol: 0.16 },
-  ]),
-} as const;
-
-export type SoundKey = keyof typeof sounds;
+// ---------- Public API ----------
 
 export const useSound = () => {
   const { settings } = useSettings();
   return useCallback(
     (k: SoundKey) => {
       if (!settings.sounds) return;
-      try { sounds[k](); } catch {}
+      try {
+        if (Platform.OS === 'web') playWeb(k);
+        else playNative(k);
+      } catch {
+        // never throw — sound is a nice-to-have
+      }
     },
     [settings.sounds]
   );

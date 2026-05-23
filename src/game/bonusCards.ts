@@ -239,15 +239,16 @@ const deckBank: BonusCard = {
 // ---------- The 30-card pool ----------
 
 export const BONUS_DECK_POOL: BonusCard[] = [
-  // Hand-type (8) — literal multipliers
+  // Hand-type (8) — literal multipliers. Straight+ are capped at 1.5 so the
+  // big hands aren't trivially doubled.
   handBoost('PAIR', 4),
   handBoost('TWO_PAIR', 3),
   handBoost('THREE_OF_A_KIND', 3),
-  handBoost('STRAIGHT', 2),
-  handBoost('FLUSH', 2),
-  handBoost('FULL_HOUSE', 2),
-  handBoost('FOUR_OF_A_KIND', 2),
-  handBoost('FIVE_OF_A_KIND', 2),
+  handBoost('STRAIGHT', 1.5),
+  handBoost('FLUSH', 1.5),
+  handBoost('FULL_HOUSE', 1.5),
+  handBoost('FOUR_OF_A_KIND', 1.5),
+  handBoost('FIVE_OF_A_KIND', 1.5),
 
   // Rows + Cols (10) — literal ×2
   rowBoost(0, 2),

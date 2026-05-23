@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Difficulty } from './src/game/rules';
 import { useGame } from './src/ui/hooks/useGame';
@@ -59,16 +60,18 @@ const AppShell = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <SettingsProvider>
-        <StatsProvider>
-          <View style={styles.app}>
-            <StatusBar style="light" />
-            <AppShell />
-          </View>
-        </StatsProvider>
-      </SettingsProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.app}>
+      <SafeAreaProvider>
+        <SettingsProvider>
+          <StatsProvider>
+            <View style={styles.app}>
+              <StatusBar style="light" />
+              <AppShell />
+            </View>
+          </StatsProvider>
+        </SettingsProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

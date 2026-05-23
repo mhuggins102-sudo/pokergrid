@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  runOnJS,
   useSharedValue,
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { suitActionAvailable } from '../../game/actions';
+import { slideDestinationsFrom, suitActionAvailable } from '../../game/actions';
 import { Card, isJoker } from '../../game/cards';
 import { BONUS_HAND_LIMIT } from '../../game/bonusCards';
-import { GRID_SIZE, LineKind, nextSpiralSlot, slideChain } from '../../game/grid';
+import { Direction, GRID_SIZE, LineKind, nextSpiralSlot, slideChain } from '../../game/grid';
 import { scoreGrid } from '../../game/scoring';
 import { Action, GameState } from '../../game/state';
 import {
@@ -133,6 +135,31 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
     performAnimated({ kind: 'place', card: state.drawn, toSlot: nextSlot }, { type: 'PLACE' });
   };
 
+  // Shared slide commit. Reused by the tap-on-dest path and the drag-release
+  // path so they produce identical animations and dispatches.
+  const commitSlide = (from: number, direction: Direction, distance: number) => {
+    const chainSlots = slideChain(state.grid, from, direction);
+    const step =
+      direction === 'up' ? -GRID_SIZE
+      : direction === 'down' ? GRID_SIZE
+      : direction === 'left' ? -1
+      : 1;
+    const cards = chainSlots
+      .map(slot => ({
+        card: state.grid[slot],
+        from: slot,
+        to: slot + step * distance,
+      }))
+      .filter((c): c is { card: Card; from: number; to: number } => c.card !== null);
+    haptic('medium');
+    playSound('slide');
+    performAnimated(
+      { kind: 'slide', cards },
+      { type: 'RESOLVE_SLIDE', from, direction, distance }
+    );
+    setSelectedSlot(null);
+  };
+
   const handleSlotPress = (idx: number) => {
     if (anim) return;
     const p = state.phase;
@@ -173,31 +200,7 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
     } else if (p.kind === 'awaiting-target-slide-dest') {
       const valid = p.moves.find(m => m.leadingDest === idx);
       if (valid) {
-        const chainSlots = slideChain(state.grid, valid.from, valid.direction);
-        const step =
-          valid.direction === 'up' ? -GRID_SIZE
-          : valid.direction === 'down' ? GRID_SIZE
-          : valid.direction === 'left' ? -1
-          : 1;
-        const cards = chainSlots
-          .map(slot => ({
-            card: state.grid[slot],
-            from: slot,
-            to: slot + step * valid.distance,
-          }))
-          .filter((c): c is { card: Card; from: number; to: number } => c.card !== null);
-        haptic('medium');
-        playSound('slide');
-        performAnimated(
-          { kind: 'slide', cards },
-          {
-            type: 'RESOLVE_SLIDE',
-            from: valid.from,
-            direction: valid.direction,
-            distance: valid.distance,
-          }
-        );
-        setSelectedSlot(null);
+        commitSlide(valid.from, valid.direction, valid.distance);
       }
     } else if (p.kind === 'awaiting-target-destroy') {
       if (p.targets.includes(idx)) {
@@ -263,6 +266,107 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
     prevDrawnSig.current = drawnKey;
   }, [drawnKey, playSound]);
 
+  // ---- Drag-to-slide ---------------------------------------------------
+  // Pan a valid source card and release in a direction; the chain commits.
+  // Quick taps fall through to the existing onSlotPress handler because Pan
+  // requires ≥6px of movement before activating.
+  const dragSourceRef = useRef<number | null>(null);
+  const clearDragRef = () => { dragSourceRef.current = null; };
+
+  // Inverse of slotXY() in AnimationLayer / GridView. Coords are relative to
+  // the GestureDetector's view (the grid stack).
+  const slotFromXY = (x: number, y: number): number | null => {
+    const HEADER = 20;
+    const CELL = 56;
+    const col = Math.floor((x - HEADER) / CELL);
+    const row = Math.floor((y - HEADER) / CELL);
+    if (row < 0 || row > 4 || col < 0 || col > 4) return null;
+    return row * 5 + col;
+  };
+
+  const onDragStart = (x: number, y: number) => {
+    const p = state.phase;
+    if (p.kind !== 'awaiting-target-slide-source' || anim) {
+      dragSourceRef.current = null;
+      return;
+    }
+    const slot = slotFromXY(x, y);
+    if (slot === null || !p.sources.includes(slot)) {
+      dragSourceRef.current = null;
+      return;
+    }
+    dragSourceRef.current = slot;
+    haptic('light');
+    playSound('tap');
+  };
+
+  const onDragEnd = (dx: number, dy: number) => {
+    const source = dragSourceRef.current;
+    dragSourceRef.current = null;
+    if (source === null) return;
+    if (state.phase.kind !== 'awaiting-target-slide-source') return;
+
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    // A small drag = tap; surface as source selection so the player can
+    // tap-tap from there.
+    if (absX < 18 && absY < 18) {
+      dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: source });
+      setSelectedSlot(source);
+      return;
+    }
+
+    const direction: Direction =
+      absX > absY
+        ? dx > 0 ? 'right' : 'left'
+        : dy > 0 ? 'down' : 'up';
+
+    const moves = slideDestinationsFrom(state.grid, source)
+      .filter(m => m.direction === direction);
+    if (moves.length === 0) {
+      // Bias toward a usable outcome: just select the source so the player
+      // can finish the move with a tap on a destination.
+      dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: source });
+      setSelectedSlot(source);
+      return;
+    }
+
+    const CELL = 56;
+    const draggedCells = Math.max(
+      1,
+      Math.round((direction === 'left' || direction === 'right' ? absX : absY) / CELL)
+    );
+    const exact = moves.find(m => m.distance === draggedCells);
+    const move =
+      exact ??
+      moves.reduce((max, m) => (m.distance > max.distance ? m : max));
+
+    commitSlide(move.from, move.direction, move.distance);
+  };
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-6, 6])
+        .activeOffsetY([-6, 6])
+        .onBegin(e => {
+          'worklet';
+          runOnJS(onDragStart)(e.x, e.y);
+        })
+        .onEnd(e => {
+          'worklet';
+          runOnJS(onDragEnd)(e.translationX, e.translationY);
+        })
+        .onFinalize(() => {
+          'worklet';
+          // Ensure stale refs don't survive a cancel.
+          runOnJS(clearDragRef)();
+        }),
+    // We intentionally rebuild the gesture per relevant state change so the
+    // onDragStart / onDragEnd closures see fresh values.
+    [state.phase, state.grid, anim]
+  );
+
   return (
     <View style={styles.root}>
       <ScoreBar
@@ -277,18 +381,20 @@ export const GameScreen = ({ state, dispatch, onHome }: Props) => {
       <BonusCardStrip cards={state.bonusCards} />
 
       <View style={styles.gridWrap}>
-        <View style={styles.gridStack}>
-          <GridView
-            grid={state.grid}
-            highlight={highlightedSlots}
-            hiddenSlots={hiddenSlotsFor(anim)}
-            selected={selectedSlot}
-            nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
-            onSlotPress={handleSlotPress}
-            onLinePress={(kind, index) => setInspectLine({ kind, index })}
-          />
-          <AnimationLayer anim={anim} />
-        </View>
+        <GestureDetector gesture={panGesture}>
+          <View style={styles.gridStack}>
+            <GridView
+              grid={state.grid}
+              highlight={highlightedSlots}
+              hiddenSlots={hiddenSlotsFor(anim)}
+              selected={selectedSlot}
+              nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
+              onSlotPress={handleSlotPress}
+              onLinePress={(kind, index) => setInspectLine({ kind, index })}
+            />
+            <AnimationLayer anim={anim} />
+          </View>
+        </GestureDetector>
       </View>
 
       <View style={styles.bottom}>
@@ -407,7 +513,9 @@ const renderBottom = (
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap a card to slide. Cards in front of it slide together.</Text>
+          <Text style={styles.hint}>
+            Tap a card and tap the destination, OR drag from a card in the direction you want.
+          </Text>
           <NeonButton
             label="Cancel"
             variant="secondary"

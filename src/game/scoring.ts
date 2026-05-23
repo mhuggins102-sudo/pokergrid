@@ -8,17 +8,17 @@ import { Grid, lines } from './grid';
 import { evaluateLine, HandRank } from './hands';
 
 export const HAND_BASE_VALUE: Record<HandRank, number> = {
-  HIGH_CARD: 1,
+  HIGH_CARD: 0,
   PAIR: 5,
   TWO_PAIR: 12,
   THREE_OF_A_KIND: 20,
   STRAIGHT: 30,
-  FLUSH: 35,
+  FLUSH: 40,
   FULL_HOUSE: 50,
-  FOUR_OF_A_KIND: 75,
-  STRAIGHT_FLUSH: 120,
+  FOUR_OF_A_KIND: 70,
+  STRAIGHT_FLUSH: 90,
+  ROYAL_FLUSH: 120,
   FIVE_OF_A_KIND: 150,
-  ROYAL_FLUSH: 200,
 };
 
 export const INCOMPLETE_LINE_PENALTY = -25;

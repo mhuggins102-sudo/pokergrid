@@ -25,9 +25,11 @@ const HAND_LABEL: Record<HandRank, string> = {
   ROYAL_FLUSH: 'Royal Flush',
 };
 
+// High Card is intentionally omitted — a 5-card line with no pair / straight /
+// flush scores 0, so listing it would just be noise in the chart.
 const HAND_ORDER: HandRank[] = [
-  'HIGH_CARD', 'PAIR', 'TWO_PAIR', 'THREE_OF_A_KIND', 'STRAIGHT', 'FLUSH',
-  'FULL_HOUSE', 'FOUR_OF_A_KIND', 'STRAIGHT_FLUSH', 'FIVE_OF_A_KIND', 'ROYAL_FLUSH',
+  'PAIR', 'TWO_PAIR', 'THREE_OF_A_KIND', 'STRAIGHT', 'FLUSH',
+  'FULL_HOUSE', 'FOUR_OF_A_KIND', 'STRAIGHT_FLUSH', 'ROYAL_FLUSH', 'FIVE_OF_A_KIND',
 ];
 
 const fmt = (n: number): string => {

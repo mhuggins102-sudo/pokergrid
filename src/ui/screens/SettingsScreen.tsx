@@ -106,7 +106,7 @@ export const SettingsScreen = ({ onBack }: Props) => {
       />
       <Toggle
         label="Color-blind assist"
-        desc="Boost contrast and emphasize suit glyphs over color (planned)."
+        desc="High-contrast rank text and bigger suit glyphs, plus a letter cue (H/S/D/C). Color is no longer the primary distinguisher."
         value={settings.colorBlindAssist}
         onChange={v => update({ colorBlindAssist: v })}
       />

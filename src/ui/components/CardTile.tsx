@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Card, isJoker, Suit } from '../../game/cards';
+import { useSettings } from '../settings';
 import { cardSize, colors, fonts, glow, radius, suitColor } from '../theme';
 
 interface Props {
@@ -12,10 +13,10 @@ interface Props {
 }
 
 const SIZES = {
-  xs: { side: 24, rank: 13, pip: 7, padding: 2 },
-  sm: { side: cardSize.sm, rank: 18, pip: 9, padding: 3 },
-  md: { side: cardSize.md, rank: 28, pip: 11, padding: 4 },
-  lg: { side: cardSize.lg, rank: 44, pip: 16, padding: 6 },
+  xs: { side: 24, rank: 13, pip: 7, pipCBA: 9, padding: 2 },
+  sm: { side: cardSize.sm, rank: 18, pip: 9, pipCBA: 12, padding: 3 },
+  md: { side: cardSize.md, rank: 28, pip: 11, pipCBA: 16, padding: 4 },
+  lg: { side: cardSize.lg, rank: 44, pip: 16, pipCBA: 22, padding: 6 },
 } as const;
 
 const SUIT_GLYPH: Record<Suit, string> = {
@@ -25,10 +26,19 @@ const SUIT_GLYPH: Record<Suit, string> = {
   C: '♣',
 };
 
+const SUIT_LETTER: Record<Suit, string> = {
+  H: 'H',
+  D: 'D',
+  S: 'S',
+  C: 'C',
+};
+
 const cardGlowColor = (card: Card): string =>
   isJoker(card) ? colors.joker : suitColor(card.suit);
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
+  const { settings } = useSettings();
+  const cba = settings.colorBlindAssist;
   const dim = SIZES[size];
   const square: ViewStyle = { width: dim.side, height: dim.side };
 
@@ -54,8 +64,19 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
   }
 
   const glowColor = cardGlowColor(card);
-  // The card body itself is a near-black glass panel with a thin neon border
-  // and an outer glow tinted by the suit.
+
+  // In color-blind-assist mode we:
+  //  - render the rank in plain white (no suit-colored text);
+  //  - bump the corner pip up so the SHAPE (♥♠♦♣) is the primary cue;
+  //  - put a small letter (H/S/D/C) in the opposite corner as a redundancy
+  //    signal — so users with any common color-vision difference can
+  //    distinguish suits via shape AND text.
+  // The card border still uses the suit color (for the neon look) but no
+  // longer carries discriminative information.
+  const rankColor = cba ? colors.textHi : glowColor;
+  const pipColor = cba ? colors.textHi : glowColor;
+  const pipSize = cba ? dim.pipCBA : dim.pip;
+
   const baseTile: ViewStyle = {
     ...styles.tile,
     ...square,
@@ -78,7 +99,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         <Text
           style={[
             styles.cornerTL,
-            { color: glowColor, fontSize: dim.pip, top: dim.padding, left: dim.padding + 1 },
+            { color: pipColor, fontSize: pipSize, top: dim.padding, left: dim.padding + 1 },
           ]}
         >
           ✦
@@ -88,10 +109,10 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
             fontFamily: fonts.mono,
             fontWeight: '800',
             fontSize: dim.rank * 0.72,
-            color: glowColor,
+            color: rankColor,
             letterSpacing: 1,
             textShadowColor: glowColor,
-            textShadowRadius: 6,
+            textShadowRadius: cba ? 2 : 6,
           }}
         >
           JK
@@ -99,7 +120,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         <Text
           style={[
             styles.cornerBR,
-            { color: glowColor, fontSize: dim.pip, bottom: dim.padding, right: dim.padding + 1 },
+            { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
           ]}
         >
           ✦
@@ -125,7 +146,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
       <Text
         style={[
           styles.cornerTL,
-          { color: glowColor, fontSize: dim.pip, top: dim.padding, left: dim.padding + 1 },
+          { color: pipColor, fontSize: pipSize, top: dim.padding, left: dim.padding + 1 },
         ]}
       >
         {SUIT_GLYPH[card.suit]}
@@ -133,25 +154,53 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
       <Text
         style={{
           fontFamily: fonts.mono,
-          color: glowColor,
+          color: rankColor,
           fontSize: rankSize,
           fontWeight: '800',
           letterSpacing: -1,
           lineHeight: rankSize * 1.05,
           textShadowColor: glowColor,
-          textShadowRadius: 5,
+          textShadowRadius: cba ? 2 : 5,
         }}
       >
         {card.rank}
       </Text>
-      <Text
-        style={[
-          styles.cornerBR,
-          { color: glowColor, fontSize: dim.pip, bottom: dim.padding, right: dim.padding + 1 },
-        ]}
-      >
-        {SUIT_GLYPH[card.suit]}
-      </Text>
+      {cba && size !== 'xs' ? (
+        // Suit letter top-right; pip glyph bottom-right.
+        <>
+          <Text
+            style={[
+              styles.cornerTR,
+              {
+                color: colors.textMid,
+                fontSize: dim.pip,
+                top: dim.padding,
+                right: dim.padding + 1,
+                fontFamily: fonts.mono,
+              },
+            ]}
+          >
+            {SUIT_LETTER[card.suit]}
+          </Text>
+          <Text
+            style={[
+              styles.cornerBR,
+              { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
+            ]}
+          >
+            {SUIT_GLYPH[card.suit]}
+          </Text>
+        </>
+      ) : (
+        <Text
+          style={[
+            styles.cornerBR,
+            { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
+          ]}
+        >
+          {SUIT_GLYPH[card.suit]}
+        </Text>
+      )}
     </View>
   );
 };
@@ -167,6 +216,11 @@ const styles = StyleSheet.create({
   cornerTL: {
     position: 'absolute',
     fontWeight: '800',
+  },
+  cornerTR: {
+    position: 'absolute',
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   cornerBR: {
     position: 'absolute',
