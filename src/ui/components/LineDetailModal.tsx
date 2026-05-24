@@ -1,7 +1,11 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../game/cards';
-import { applyLineEffects, BonusCard, LineContext } from '../../game/bonusCards';
+import {
+  BonusCard,
+  lineContributors,
+  LineContext,
+} from '../../game/bonusCards';
 import { LineKind } from '../../game/grid';
 import { HandRank, evaluateLine } from '../../game/hands';
 import { HAND_BASE_VALUE, INCOMPLETE_LINE_PENALTY } from '../../game/scoring';
@@ -31,6 +35,12 @@ const HAND_LABEL: Record<HandRank, string> = {
   ROYAL_FLUSH: 'Royal Flush',
 };
 
+const fmtMult = (n: number): string => {
+  // ×1.5 → "×1.5", ×1.331 → "×1.33", ×2 → "×2"
+  if (Number.isInteger(n)) return `×${n}`;
+  return `×${n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
+};
+
 export const LineDetailModal = ({
   visible,
   onClose,
@@ -43,18 +53,23 @@ export const LineDetailModal = ({
   const filledCount = cards.filter(c => c !== null).length;
   const title = kind === 'row' ? `Row ${index + 1}` : `Column ${index + 1}`;
 
-  let base = 0;
-  let mult = 1;
-  let flat = 0;
-  let total = 0;
-  if (hand) {
-    base = HAND_BASE_VALUE[hand];
-    const ctx: LineContext = { kind, index, cards, hand };
-    const e = applyLineEffects(ctx, bonusCards);
-    mult = e.multiplier;
-    flat = e.flat;
-    total = Math.ceil(base * mult) + flat;
-  }
+  // Per-bonus breakdown. Each contributor is applied in order; we track the
+  // running mult+flat the way scoreGrid composes them so the final step's
+  // displayed total matches the actual line score exactly.
+  const ctx: LineContext | null = hand ? { kind, index, cards, hand } : null;
+  const base = hand ? HAND_BASE_VALUE[hand] : 0;
+  const contributors = ctx ? lineContributors(ctx, bonusCards) : [];
+  let runningMult = 1;
+  let runningFlat = 0;
+  const steps = contributors.map(c => {
+    runningMult *= c.multiplier;
+    runningFlat += c.flat;
+    return {
+      ...c,
+      runningTotal: Math.ceil(base * runningMult) + runningFlat,
+    };
+  });
+  const total = Math.ceil(base * runningMult) + runningFlat;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -92,19 +107,28 @@ export const LineDetailModal = ({
               </View>
 
               <View style={styles.breakdown}>
-                <Row label="Base" value={`${base}`} />
-                <Row
-                  label="Multiplier"
-                  value={mult === 1 ? '—' : `× ${mult.toFixed(2)}`}
-                  active={mult !== 1}
-                />
-                <Row
-                  label="Flat bonus"
-                  value={flat === 0 ? '—' : `+ ${flat}`}
-                  active={flat !== 0}
-                />
+                <Row label={`Base · ${HAND_LABEL[hand]}`} value={`${base}`} />
+                {steps.length === 0 && contributors.length === 0 && (
+                  <Text style={styles.noBonus}>No bonuses apply to this line.</Text>
+                )}
+                {steps.map((s, i) => {
+                  const parts: string[] = [];
+                  if (s.multiplier !== 1) parts.push(fmtMult(s.multiplier));
+                  if (s.flat !== 0) parts.push(`${s.flat > 0 ? '+' : ''}${s.flat}`);
+                  const sigil = s.multiplier !== 1 ? '×' : '+';
+                  return (
+                    <View key={i} style={styles.stepRow}>
+                      <Text style={styles.stepBullet}>{sigil}</Text>
+                      <View style={styles.stepBody}>
+                        <Text style={styles.stepName} numberOfLines={1}>{s.card.name}</Text>
+                        <Text style={styles.stepFx}>{parts.join(' · ')}</Text>
+                      </View>
+                      <Text style={styles.stepValue}>= {s.runningTotal}</Text>
+                    </View>
+                  );
+                })}
                 <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={styles.totalLabel}>Line score</Text>
                   <Text style={styles.totalValue}>{total}</Text>
                 </View>
               </View>
@@ -116,10 +140,10 @@ export const LineDetailModal = ({
   );
 };
 
-const Row = ({ label, value, active }: { label: string; value: string; active?: boolean }) => (
+const Row = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.breakdownRow}>
     <Text style={styles.breakdownLabel}>{label}</Text>
-    <Text style={[styles.breakdownValue, active && styles.breakdownActive]}>{value}</Text>
+    <Text style={styles.breakdownValue}>{value}</Text>
   </View>
 );
 
@@ -205,8 +229,52 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   breakdownLabel: { color: colors.textMid, fontFamily: fonts.sans, fontSize: 12 },
-  breakdownValue: { color: colors.textLow, fontFamily: fonts.mono, fontSize: 12 },
-  breakdownActive: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 4 },
+  breakdownValue: { color: colors.textHi, fontFamily: fonts.mono, fontSize: 12, fontWeight: '700' },
+  noBonus: {
+    color: colors.textLow,
+    fontFamily: fonts.sans,
+    fontStyle: 'italic',
+    fontSize: 11,
+    paddingVertical: spacing.xs,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  stepBullet: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '800',
+    width: 14,
+    textAlign: 'center',
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
+  },
+  stepBody: { flex: 1, marginLeft: 4 },
+  stepName: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  stepFx: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  stepValue: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    textShadowColor: colors.success,
+    textShadowRadius: 3,
+  },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

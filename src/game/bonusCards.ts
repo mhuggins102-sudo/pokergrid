@@ -363,6 +363,30 @@ export const applyLineEffects = (
   return { multiplier: mult, flat };
 };
 
+// Each card whose line-effect actually fires on this line, returned in the
+// order it would be applied. Used by the LineDetailModal to show a step-by-
+// step math breakdown.
+export interface LineContributor {
+  card: BonusCard;
+  multiplier: number;
+  flat: number;
+}
+
+export const lineContributors = (
+  line: LineContext,
+  cards: readonly BonusCard[]
+): LineContributor[] => {
+  const out: LineContributor[] = [];
+  for (const bc of cards) {
+    if (!bc.lineEffect) continue;
+    const e = bc.lineEffect(line);
+    const mult = e.multiplier ?? 1;
+    const flat = e.flatAdd ?? 0;
+    if (mult !== 1 || flat !== 0) out.push({ card: bc, multiplier: mult, flat });
+  }
+  return out;
+};
+
 export const applyGridEffects = (
   snap: GridSnapshot,
   cards: readonly BonusCard[]
