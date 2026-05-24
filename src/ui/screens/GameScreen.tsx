@@ -18,7 +18,7 @@ import {
   slideChain,
   SPIRAL_ORDER,
 } from '../../game/grid';
-import { scoreGrid } from '../../game/scoring';
+import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
 import { Action, GameState } from '../../game/state';
 import {
   ANIM_DURATION,
@@ -157,25 +157,18 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
     [state.grid, state.bonusCards, state.deck.length, state.trash]
   );
 
-  // Marginal value of each held bonus card — what the live score drops by if
-  // that card is removed (all OTHER cards stay active). Recomputed whenever
-  // the grid, bonus set, deck size, or trash changes.
-  const bonusValues = useMemo(() => {
-    const opts = {
-      deckRemaining: state.deck.length,
-      ignoreIncompletePenalty: true,
-      trash: state.trash,
-    } as const;
-    const withAll = liveScore;
-    return state.bonusCards.map((_, i) => {
-      const withoutOne = scoreGrid(
-        state.grid,
-        state.bonusCards.filter((_, j) => j !== i),
-        opts
-      ).total;
-      return withAll - withoutOne;
-    });
-  }, [liveScore, state.grid, state.bonusCards, state.deck.length, state.trash]);
+  // Shapley-value attribution of the bonus contribution, so multiple cards
+  // stacking multiplicatively don't each "claim" the joint multiplier. Sum of
+  // these values = live score − live score with no bonuses (no double-count).
+  const bonusValues = useMemo(
+    () =>
+      bonusShapleyValues(state.grid, state.bonusCards, {
+        deckRemaining: state.deck.length,
+        ignoreIncompletePenalty: true,
+        trash: state.trash,
+      }),
+    [state.grid, state.bonusCards, state.deck.length, state.trash]
+  );
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
 

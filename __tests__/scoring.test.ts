@@ -6,7 +6,7 @@ import {
   universalEffectFor,
 } from '../src/game/bonusCards';
 import { emptyGrid, Grid, GRID_SLOTS } from '../src/game/grid';
-import { HAND_BASE_VALUE, scoreGrid } from '../src/game/scoring';
+import { bonusShapleyValues, HAND_BASE_VALUE, scoreGrid } from '../src/game/scoring';
 
 const C = (rank: Rank, suit: Suit): StandardCard => ({ kind: 'standard', rank, suit });
 
@@ -136,6 +136,41 @@ describe('incomplete-line penalty', () => {
     expect(row0.total).toBe(-25);
     expect(col0.total).toBe(-25);
     expect(report.incompletePenalty).toBe(-50);
+  });
+});
+
+describe('bonusShapleyValues attribution', () => {
+  test('sum of values equals the joint bonus contribution (no double-counting)', () => {
+    const pair4 = findCard('hand-pair-x4');
+    const row1 = findCard('row-1-x2');
+    const royal = findCard('royal-touch-x1_5');
+    const cards = [pair4, row1, royal];
+    // A grid where Row 1 contains a Pair AND an Ace — all three bonuses fire
+    // on that one line, which is exactly the case that breaks leave-one-out.
+    const line = [C('A', 'H'), C('A', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    const g = gridWithRow0(line);
+    const opts = {} as const;
+    const withAll = scoreGrid(g, cards, opts).total;
+    const withNone = scoreGrid(g, [], opts).total;
+    const shapley = bonusShapleyValues(g, cards, opts);
+
+    // The whole point of Shapley: shares add up exactly to the joint
+    // contribution (modulo per-card rounding, ≤ N points off).
+    const sum = shapley.reduce((a, b) => a + b, 0);
+    expect(Math.abs(sum - (withAll - withNone))).toBeLessThanOrEqual(cards.length);
+  });
+
+  test('a card that contributes nothing gets value 0', () => {
+    const pair4 = findCard('hand-pair-x4');
+    // Pair ×4 on a no-pair line contributes nothing.
+    const line = [C('A', 'H'), C('5', 'C'), C('8', 'D'), C('J', 'S'), C('K', 'H')];
+    const g = gridWithRow0(line);
+    const shapley = bonusShapleyValues(g, [pair4], {});
+    expect(shapley[0]).toBe(0);
+  });
+
+  test('empty hand returns empty array', () => {
+    expect(bonusShapleyValues(emptyGrid(), [], {})).toEqual([]);
   });
 });
 

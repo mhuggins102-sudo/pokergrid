@@ -53,6 +53,66 @@ export interface ScoreOptions {
   trash?: readonly Card[];
 }
 
+/**
+ * Shapley-value attribution of the bonus-card contribution.
+ *
+ * For each held bonus card, returns the fair share of the score it contributes
+ * given the other cards. The leave-one-out marginal (with-all minus
+ * without-this) double-counts when multiple bonuses multiplicatively stack on
+ * the same line — three ×2 cards on a Pair would each show ~5×(8-4)=20 even
+ * though the cards together only added 5×(8-1)=35 total.
+ *
+ * Shapley averages the marginal contribution across every order the cards
+ * could have been added. By construction:
+ *
+ *   sum(shapley) = scoreGrid(grid, allCards, options).total
+ *                - scoreGrid(grid, [],       options).total
+ *
+ * Returned values are rounded to the nearest integer; the tiny rounding drift
+ * is bounded by N (≤ 3 cards) so the displayed sum tracks the actual bonus
+ * contribution within a few points.
+ *
+ * Cost: 2^N scoreGrid evaluations. With N capped at 3 (BONUS_HAND_LIMIT) the
+ * worst case is 8 evaluations — fast.
+ */
+const popcount = (n: number): number => {
+  let c = 0;
+  while (n > 0) { c += n & 1; n >>= 1; }
+  return c;
+};
+
+export const bonusShapleyValues = (
+  grid: Grid,
+  cards: readonly BonusCard[],
+  options: ScoreOptions = {}
+): number[] => {
+  const N = cards.length;
+  if (N === 0) return [];
+
+  // Precompute total score for every subset of bonuses.
+  const subsetTotal: number[] = new Array(1 << N);
+  for (let mask = 0; mask < (1 << N); mask++) {
+    const subset = cards.filter((_, i) => (mask & (1 << i)) !== 0);
+    subsetTotal[mask] = scoreGrid(grid, subset, options).total;
+  }
+
+  const fact: number[] = [1];
+  for (let i = 1; i <= N; i++) fact.push(fact[i - 1] * i);
+
+  const values: number[] = [];
+  for (let i = 0; i < N; i++) {
+    let sh = 0;
+    for (let mask = 0; mask < (1 << N); mask++) {
+      if ((mask & (1 << i)) !== 0) continue; // S must NOT contain i
+      const k = popcount(mask);
+      const weight = (fact[k] * fact[N - k - 1]) / fact[N];
+      sh += weight * (subsetTotal[mask | (1 << i)] - subsetTotal[mask]);
+    }
+    values.push(Math.round(sh));
+  }
+  return values;
+};
+
 export const scoreGrid = (
   grid: Grid,
   bonusCards: readonly BonusCard[],

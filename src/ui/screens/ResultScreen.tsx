@@ -11,7 +11,7 @@ import type { PlayContext } from '../../../App';
 import { challengeWon, findChallenge } from '../../game/challenges';
 import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
-import { scoreGrid } from '../../game/scoring';
+import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
@@ -115,18 +115,14 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     [state.grid, state.bonusCards, state.deck.length, state.trash]
   );
 
-  const bonusValues = useMemo(() => {
-    const opts = { deckRemaining: state.deck.length, trash: state.trash } as const;
-    const withAll = report.total;
-    return state.bonusCards.map((_, i) => {
-      const withoutOne = scoreGrid(
-        state.grid,
-        state.bonusCards.filter((_, j) => j !== i),
-        opts
-      ).total;
-      return withAll - withoutOne;
-    });
-  }, [report.total, state.grid, state.bonusCards, state.deck.length, state.trash]);
+  const bonusValues = useMemo(
+    () =>
+      bonusShapleyValues(state.grid, state.bonusCards, {
+        deckRemaining: state.deck.length,
+        trash: state.trash,
+      }),
+    [state.grid, state.bonusCards, state.deck.length, state.trash]
+  );
   const {
     lines: scoredLines,
     subtotal,
