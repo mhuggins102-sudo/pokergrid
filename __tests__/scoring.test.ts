@@ -287,6 +287,102 @@ describe('new grid-wide bonuses', () => {
     expect(row0.multiplier).toBe(1.25);
     expect(row2.multiplier).toBe(1);
   });
+
+  test('Diagonal Run triggers per straight diagonal — none / one / both', () => {
+    const card = findCard('diagonal-run-x1_25');
+    // Filler grid with no diagonal straight.
+    const noDiagonal = filledNonPair();
+    expect(scoreGrid(noDiagonal, [card]).total).toBe(scoreGrid(noDiagonal, []).total);
+
+    // Main diagonal slots (0,6,12,18,24): place 5-6-7-8-9 so the main is a
+    // Straight, anti is not.
+    const oneDiag = filledNonPair();
+    oneDiag[0] = C('5','H');
+    oneDiag[6] = C('6','C');
+    oneDiag[12] = C('7','D');
+    oneDiag[18] = C('8','S');
+    oneDiag[24] = C('9','H');
+    const base1 = scoreGrid(oneDiag, []).total;
+    const with1 = scoreGrid(oneDiag, [card]).total;
+    expect(with1).toBe(Math.ceil(base1 * 1.25));
+
+    // Anti diagonal slots (4,8,12,16,20): also a straight. The center (slot
+    // 12) is shared with the main, but evaluateLine works on 5-card subsets
+    // independently — both diagonals can match the Straight constraint.
+    const twoDiag = filledNonPair();
+    // Main: 5,6,7,8,9 (Straight)
+    twoDiag[0] = C('5','H');
+    twoDiag[6] = C('6','C');
+    twoDiag[12] = C('7','D');
+    twoDiag[18] = C('8','S');
+    twoDiag[24] = C('9','H');
+    // Anti: 3,4,7,10,J (Straight 3-4-5-6-7 wouldn't reuse the 7 cleanly,
+    // so use 3,4,7,10,J for distinct Straight 7-10 not possible). Use
+    // 9,10,7,J,Q with the center already = 7. So anti = 9,10,7,J,Q. Hmm
+    // those aren't consecutive. Build a straight that includes 7 in the
+    // middle: 5,6,7,8,9 again would conflict. Use 7 in middle, plus 8,9
+    // on one side and 5,6 on the other — but that overlaps the main.
+    //
+    // Easier: clobber center to a card that lets both diagonals form
+    // straights. Choose center = 7 (shared), main 5,6,7,8,9, anti
+    // 9,8,7,6,5 (same ranks, doesn't matter that they overlap card-wise
+    // since each diagonal is its own 5 slots).
+    twoDiag[4] = C('9','D');
+    twoDiag[8] = C('8','H');
+    // twoDiag[12] is already '7','D'
+    twoDiag[16] = C('6','S');
+    twoDiag[20] = C('5','C');
+    const base2 = scoreGrid(twoDiag, []).total;
+    const with2 = scoreGrid(twoDiag, [card]).total;
+    expect(with2).toBe(Math.ceil(base2 * 1.25 * 1.25));
+  });
+
+  test('Symmetric Frame multiplies on matching row pairs / column pairs', () => {
+    const card = findCard('symmetric-frame-x1_2');
+
+    // Grid where R1 and R5 are both Pair (matching), C1 and C5 are not.
+    const g = emptyGrid();
+    // R1: Pair of 2s
+    g[0] = C('2','H'); g[1] = C('2','C'); g[2] = C('5','D'); g[3] = C('8','S'); g[4] = C('K','H');
+    // R5: Pair of 3s
+    g[20] = C('3','H'); g[21] = C('3','C'); g[22] = C('6','D'); g[23] = C('9','S'); g[24] = C('Q','H');
+    // R2-R4 filler, no pairs in columns 0 or 4
+    g[5] = C('4','D'); g[6] = C('7','S'); g[7] = C('10','H'); g[8] = C('J','D'); g[9] = C('A','C');
+    g[10] = C('6','S'); g[11] = C('9','H'); g[12] = C('Q','C'); g[13] = C('4','H'); g[14] = C('7','D');
+    g[15] = C('10','C'); g[16] = C('J','S'); g[17] = C('A','D'); g[18] = C('5','S'); g[19] = C('8','C');
+
+    const base = scoreGrid(g, []).total;
+    const with1 = scoreGrid(g, [card]).total;
+    // Only one axis matches (R1 / R5 both Pair); expect ×1.2.
+    expect(with1).toBe(Math.ceil(base * 1.2));
+  });
+
+  test('Burnout triggers at 8+ trash', () => {
+    const card = findCard('burnout-x1_3');
+    const g = filledNonPair();
+    const base = scoreGrid(g, [card]).total;
+    expect(base).toBe(scoreGrid(g, []).total); // 0 trash → inactive
+    const seven = Array(7).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { trash: seven }).total).toBe(base);
+    const eight = Array(8).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { trash: eight }).total).toBe(Math.ceil(base * 1.3));
+  });
+
+  test('Frugal triggers at ≤4 trash', () => {
+    const card = findCard('frugal-x1_3');
+    const g = filledNonPair();
+    const base = scoreGrid(g, [card]).total;
+    // 0 trash → triggers
+    expect(base).toBe(Math.ceil(scoreGrid(g, []).total * 1.3));
+    const four = Array(4).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { trash: four }).total).toBe(
+      Math.ceil(scoreGrid(g, [], { trash: four }).total * 1.3)
+    );
+    const five = Array(5).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { trash: five }).total).toBe(
+      scoreGrid(g, [], { trash: five }).total
+    );
+  });
 });
 
 describe('live-score ignore-penalty option', () => {

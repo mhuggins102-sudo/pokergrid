@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
   content: { paddingBottom: spacing.xxl, paddingHorizontal: spacing.md },
   banner: {
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,

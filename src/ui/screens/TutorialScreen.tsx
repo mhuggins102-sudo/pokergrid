@@ -323,7 +323,7 @@ const BonusVisual = () => (
       </View>
     </View>
     <Caption>
-      The bonus deck has 35 unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
+      The bonus deck has 39 unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
       to 3; at the cap, ♣ forces a swap.
     </Caption>
     <Text style={demoStyles.subsection}>What kinds?</Text>
@@ -549,17 +549,21 @@ const AchievementsVisual = () => {
     <View style={demoStyles.wrap}>
       <GridView grid={grid} />
       <Caption>
-        Eight grid-wide cards multiply the final total. Some reward grid shape —{' '}
-        <Text style={{ color: colors.success }}>Clean border ×1.5</Text> (no face cards on the
-        perimeter — satisfied above),{' '}
+        Twelve grid-wide cards multiply the final total. Some reward grid shape —{' '}
+        <Text style={{ color: colors.success }}>Clean border ×1.5</Text>,{' '}
         <Text style={{ color: colors.success }}>Monochrome border ×1.5</Text>,{' '}
         <Text style={{ color: colors.success }}>Rainbow corners ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Cozy joker ×1.15</Text>. Others reward
-        restraint — <Text style={{ color: colors.success }}>No Flushes ×1.25</Text>,{' '}
+        <Text style={{ color: colors.success }}>Cozy joker ×1.15</Text>,{' '}
+        <Text style={{ color: colors.success }}>Diagonal ×1.25</Text>,{' '}
+        <Text style={{ color: colors.success }}>Symmetric Frame ×1.2</Text>. Others reward
+        restraint —{' '}
+        <Text style={{ color: colors.success }}>No Flushes ×1.25</Text>,{' '}
         <Text style={{ color: colors.success }}>No Straights ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Trash Joker ×1.25</Text>. And{' '}
-        <Text style={{ color: colors.warn }}>×1.05 / deck card</Text> compounds with cards
-        left in the deck.
+        <Text style={{ color: colors.success }}>Trash Joker ×1.25</Text>,{' '}
+        <Text style={{ color: colors.success }}>Frugal ×1.3</Text>. And{' '}
+        <Text style={{ color: colors.warn }}>Burnout ×1.3</Text> +{' '}
+        <Text style={{ color: colors.warn }}>×1.05 / deck card</Text> reward the other end of
+        the curve.
       </Caption>
     </View>
   );

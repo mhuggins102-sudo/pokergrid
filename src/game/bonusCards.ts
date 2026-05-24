@@ -6,7 +6,7 @@ import {
   INNER_SLOTS,
   LineKind,
 } from './grid';
-import { HandRank } from './hands';
+import { evaluateLine, HandRank } from './hands';
 
 export interface LineContext {
   kind: LineKind;
@@ -294,7 +294,67 @@ const trashJoker: BonusCard = {
   },
 };
 
-// ---------- The 35-card pool ----------
+// ---- Spatial / pattern bonuses ----------------------------------------------
+
+// Main and anti diagonals each multiply the final total by 1.25 when the 5
+// cards on that diagonal form a Straight (including Straight Flush / Royal
+// Flush). Both diagonals can trigger simultaneously → 1.25 × 1.25 = 1.5625.
+const isStraightLine = (cards: (Card | null)[]): boolean => {
+  const h = evaluateLine(cards);
+  return h === 'STRAIGHT' || h === 'STRAIGHT_FLUSH' || h === 'ROYAL_FLUSH';
+};
+
+const diagonalRun: BonusCard = {
+  id: 'diagonal-run-x1_25',
+  name: 'Diagonal ×1.25',
+  description: 'Each grid diagonal that forms a Straight (or higher) multiplies the final score by 1.25. Both diagonals = ×1.5625.',
+  gridEffect: ({ grid }) => {
+    const main = [grid[0], grid[6], grid[12], grid[18], grid[24]];
+    const anti = [grid[4], grid[8], grid[12], grid[16], grid[20]];
+    let mult = 1;
+    if (isStraightLine(main)) mult *= 1.25;
+    if (isStraightLine(anti)) mult *= 1.25;
+    return mult > 1 ? { totalMultiplier: mult } : {};
+  },
+};
+
+// Mirror-symmetric scoring: R1 and R5 share a hand type → ×1.2, and again
+// C1 and C5 share one → ×1.2. Both at once = ×1.44. High Card is excluded
+// since matching "nothing" shouldn't pay out.
+const symmetricFrame: BonusCard = {
+  id: 'symmetric-frame-x1_2',
+  name: 'Symmetric Frame ×1.2',
+  description: 'R1 and R5 sharing a hand type multiplies final score ×1.2; C1 and C5 sharing one multiplies it ×1.2 again. High Card doesn\'t count.',
+  gridEffect: ({ lines }) => {
+    const handAt = (kind: 'row' | 'col', idx: number): HandRank | null =>
+      lines.find(l => l.kind === kind && l.index === idx)?.hand ?? null;
+    const matches = (a: HandRank | null, b: HandRank | null): boolean =>
+      a !== null && a !== 'HIGH_CARD' && a === b;
+    let mult = 1;
+    if (matches(handAt('row', 0), handAt('row', 4))) mult *= 1.2;
+    if (matches(handAt('col', 0), handAt('col', 4))) mult *= 1.2;
+    return mult > 1 ? { totalMultiplier: mult } : {};
+  },
+};
+
+// Trash-volume tells: did you spend lots of suit perks or hoard placements?
+const burnout: BonusCard = {
+  id: 'burnout-x1_3',
+  name: 'Burnout ×1.3',
+  description: '8 or more cards in the trash at game end (heavy suit-perk use): final score ×1.3.',
+  gridEffect: ({ trash }) =>
+    trash.length >= 8 ? { totalMultiplier: 1.3 } : {},
+};
+
+const frugal: BonusCard = {
+  id: 'frugal-x1_3',
+  name: 'Frugal ×1.3',
+  description: '4 or fewer cards in the trash at game end (mostly Placed): final score ×1.3.',
+  gridEffect: ({ trash }) =>
+    trash.length <= 4 ? { totalMultiplier: 1.3 } : {},
+};
+
+// ---------- The pool ----------
 
 export const BONUS_DECK_POOL: BonusCard[] = [
   // Hand-type (8) — Pair-through-Three of a Kind are big multipliers; the
@@ -333,7 +393,7 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   spiralCore,
   outerEdge,
 
-  // Grid-wide (8)
+  // Grid-wide (12)
   cleanBorder,
   monochromeBorder,
   rainbowCorners,
@@ -342,6 +402,10 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   noFlushes,
   noStraights,
   trashJoker,
+  diagonalRun,
+  symmetricFrame,
+  burnout,
+  frugal,
 ];
 
 export const BONUS_HAND_LIMIT = 3;
