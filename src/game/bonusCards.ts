@@ -26,9 +26,12 @@ export interface GridSnapshot {
   grid: Grid;
   // Cards remaining in the playing-card deck at scoring time.
   deckRemaining: number;
-  // The trash pile — playing cards that were either spent on a suit perk,
-  // discarded, or destroyed. Used by cards like "Trash Joker".
-  trash: readonly Card[];
+  // Playing cards taken out of play without using a perk: ditched via the
+  // Discard button or destroyed by a ♦. "Trash Joker" looks here.
+  discards: readonly Card[];
+  // Playing cards spent on a suit perk — the drawn ♥/♠/♦/♣ that triggered
+  // a Hop / Slide / Destroy / Bonus. Burnout / Frugal look here.
+  perkSpent: readonly Card[];
   // Per-line summaries (kind, index, hand). Computed once by the scorer and
   // passed in so grid-effect cards (e.g. "No Flushes") can inspect what
   // hands appeared on the board without re-evaluating.
@@ -287,10 +290,10 @@ const noStraights: BonusCard = {
 const trashJoker: BonusCard = {
   id: 'trash-joker-x1_25',
   name: 'Trash Joker ×1.25',
-  description: 'The joker was trashed during the game: final score ×1.25.',
-  gridEffect: ({ trash }) => {
-    const jokerTrashed = trash.some(c => isJoker(c));
-    return jokerTrashed ? { totalMultiplier: 1.25 } : {};
+  description: 'The joker was destroyed during the game: final score ×1.25.',
+  gridEffect: ({ discards }) => {
+    const jokerOut = discards.some(c => isJoker(c));
+    return jokerOut ? { totalMultiplier: 1.25 } : {};
   },
 };
 
@@ -337,21 +340,23 @@ const symmetricFrame: BonusCard = {
   },
 };
 
-// Trash-volume tells: did you spend lots of suit perks or hoard placements?
+// Perk-volume tells: how many suit perks did you spend across the run?
+// (Counts the ♥/♠/♦/♣ used to trigger a Hop / Slide / Destroy / Bonus.
+//  Plain Discards and destroyed targets DON'T count here — only perks.)
 const burnout: BonusCard = {
   id: 'burnout-x1_3',
   name: 'Burnout ×1.3',
-  description: '8 or more cards in the trash at game end (heavy suit-perk use): final score ×1.3.',
-  gridEffect: ({ trash }) =>
-    trash.length >= 8 ? { totalMultiplier: 1.3 } : {},
+  description: 'Spent 8 or more suit perks across the game: final score ×1.3.',
+  gridEffect: ({ perkSpent }) =>
+    perkSpent.length >= 8 ? { totalMultiplier: 1.3 } : {},
 };
 
 const frugal: BonusCard = {
   id: 'frugal-x1_3',
   name: 'Frugal ×1.3',
-  description: '4 or fewer cards in the trash at game end (mostly Placed): final score ×1.3.',
-  gridEffect: ({ trash }) =>
-    trash.length <= 4 ? { totalMultiplier: 1.3 } : {},
+  description: 'Spent 4 or fewer suit perks across the game: final score ×1.3.',
+  gridEffect: ({ perkSpent }) =>
+    perkSpent.length <= 4 ? { totalMultiplier: 1.3 } : {},
 };
 
 // ---------- The pool ----------

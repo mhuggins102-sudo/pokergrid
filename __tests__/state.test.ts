@@ -9,7 +9,8 @@ const emptyGrid25 = () => Array.from({ length: 25 }, () => null) as GameState['g
 
 const baseState = (overrides: Partial<GameState>): GameState => ({
   deck: [],
-  trash: [],
+  discards: [],
+  perkSpent: [],
   bonusDeck: [...BONUS_DECK_POOL],
   bonusCards: [],
   grid: emptyGrid25(),
@@ -36,7 +37,8 @@ describe('GameState — initial state', () => {
     const hard = newGame('hard', seededRng(1));
     expect(hard.bonusCards).toEqual([]);
     expect(hard.bonusDeck.length).toBe(BONUS_DECK_POOL.length);
-    expect(s.trash).toEqual([]);
+    expect(s.discards).toEqual([]);
+    expect(s.perkSpent).toEqual([]);
     expect(['awaiting-action', 'game-over']).toContain(s.phase.kind);
   });
 
@@ -51,16 +53,17 @@ describe('GameState — initial state', () => {
 });
 
 describe('GameState — discard is now trash (no discard pile)', () => {
-  test('DISCARD_NONE pushes the drawn card to TRASH', () => {
+  test('DISCARD_NONE pushes the drawn card to discards (not perkSpent)', () => {
     let s = newGame('easy', seededRng(3));
-    // Skip joker if it's drawn (joker can't be discarded).
     while (s.drawn && isJoker(s.drawn)) s = step(s, { type: 'PLACE' });
     if (s.phase.kind !== 'awaiting-action') return;
     const card = s.drawn!;
-    const trashBefore = s.trash.length;
+    const discardsBefore = s.discards.length;
+    const perksBefore = s.perkSpent.length;
     s = step(s, { type: 'DISCARD_NONE' });
-    expect(s.trash.length).toBe(trashBefore + 1);
-    expect(s.trash).toContainEqual(card);
+    expect(s.discards.length).toBe(discardsBefore + 1);
+    expect(s.discards).toContainEqual(card);
+    expect(s.perkSpent.length).toBe(perksBefore);
   });
 });
 
@@ -95,7 +98,7 @@ describe('GameState — suit perks', () => {
     const after = step(begun, { type: 'RESOLVE_HOP', i: 0, j: 3 });
     expect(after.grid[0]).toEqual(onGridB);
     expect(after.grid[3]).toEqual(onGridA);
-    expect(after.trash).toContainEqual(heart);
+    expect(after.perkSpent).toContainEqual(heart);
   });
 
   test('♠ Slide moves card to selected destination in chosen direction', () => {
@@ -117,7 +120,7 @@ describe('GameState — suit perks', () => {
     });
     expect(after.grid[10]).toBeNull();
     expect(after.grid[13]).toEqual(onGrid);
-    expect(after.trash).toContainEqual(spade);
+    expect(after.perkSpent).toContainEqual(spade);
   });
 
   test('♦ Destroy trashes both the diamond and the chosen grid card', () => {
@@ -131,8 +134,9 @@ describe('GameState — suit perks', () => {
     expect(begun.phase.kind).toBe('awaiting-target-destroy');
     const after = step(begun, { type: 'RESOLVE_DESTROY', slot: 12 });
     expect(after.grid[12]).toBeNull();
-    expect(after.trash).toContainEqual(target);
-    expect(after.trash).toContainEqual(diamond);
+    // Target → discards (collateral, no perk spent). Diamond → perkSpent.
+    expect(after.discards).toContainEqual(target);
+    expect(after.perkSpent).toContainEqual(diamond);
   });
 
   test('♦ Destroy can target a joker', () => {
@@ -144,7 +148,8 @@ describe('GameState — suit perks', () => {
     const begun = step(state, { type: 'BEGIN_SUIT_ACTION' });
     const after = step(begun, { type: 'RESOLVE_DESTROY', slot: 12 });
     expect(after.grid[12]).toBeNull();
-    expect(after.trash).toContainEqual({ kind: 'joker' });
+    // Destroyed joker is collateral — lands in discards, not perkSpent.
+    expect(after.discards).toContainEqual({ kind: 'joker' });
   });
 });
 
@@ -163,8 +168,8 @@ describe('GameState — ♣ Cards bonus draw', () => {
     expect(after.bonusCards).toEqual([kept]);
     // The un-chosen returned to the bottom of the bonus deck.
     expect(after.bonusDeck[after.bonusDeck.length - 1]).toEqual(otherDrawn);
-    // The club itself is trashed.
-    expect(after.trash).toContainEqual(club);
+    // The club itself was spent on a perk.
+    expect(after.perkSpent).toContainEqual(club);
   });
 
   test('at the limit (3 held), declining is a no-op — the player must swap', () => {

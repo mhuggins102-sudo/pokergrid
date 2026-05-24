@@ -122,7 +122,7 @@ export const GridView = ({
                       {positionNum}
                     </Text>
                   )}
-                  {isNext && <NextPulse size={CELL} />}
+                  {isNext && <NextPulse size={compact ? cardSize.sm : cardSize.md} />}
                 </View>
               </Pressable>
             );

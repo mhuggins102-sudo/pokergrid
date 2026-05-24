@@ -56,7 +56,14 @@ export type Phase =
 
 export interface GameState {
   deck: Card[];
-  trash: Card[];
+  // Cards taken out of play without being spent on a suit perk: either
+  // discarded by the player (Discard button) or destroyed by a ♦ on the
+  // grid. The "Trash Joker" bonus card checks this pile.
+  discards: Card[];
+  // Drawn playing cards that the player spent on a suit perk (♥ Swap,
+  // ♠ Slide, ♦ Destroy, ♣ Bonus). The Burnout / Frugal bonus cards check
+  // this pile's length.
+  perkSpent: Card[];
   bonusDeck: BonusCard[]; // depleting
   bonusCards: BonusCard[]; // held (max BONUS_HAND_LIMIT)
   grid: Grid;
@@ -69,7 +76,7 @@ export interface GameState {
 
 export type Action =
   | { type: 'PLACE' }
-  | { type: 'DISCARD_NONE' } // sends drawn to trash (no discard pile)
+  | { type: 'DISCARD_NONE' } // sends drawn to discards (no perk used)
   | { type: 'BEGIN_SUIT_ACTION' }
   | { type: 'RESOLVE_HOP'; i: number; j: number }
   | { type: 'SLIDE_SELECT_SOURCE'; slot: number }
@@ -131,7 +138,8 @@ export const newGame = (
   const grid = placeAtSpiralNext(emptyGrid(), first);
   const initial: GameState = {
     deck: rest,
-    trash: [],
+    discards: [],
+    perkSpent: [],
     bonusDeck,
     bonusCards,
     grid,
@@ -146,9 +154,18 @@ export const newGame = (
 
 // ---------- helpers ----------
 
-const pushTrash = (s: GameState, card: Card): GameState => ({
+// Cards that go to the discards pile (no perk usage): the Discard button,
+// and the target of a ♦ Destroy. The "Trash Joker" bonus card looks here.
+const pushDiscard = (s: GameState, card: Card): GameState => ({
   ...s,
-  trash: [...s.trash, card],
+  discards: [...s.discards, card],
+});
+
+// Cards spent on a suit perk: the drawn ♥/♠/♦/♣ that triggered the perk.
+// Burnout / Frugal look here.
+const pushPerkSpent = (s: GameState, card: Card): GameState => ({
+  ...s,
+  perkSpent: [...s.perkSpent, card],
 });
 
 // ---------- action handlers ----------
@@ -161,7 +178,7 @@ const handlePlace = (s: GameState): GameState => {
 
 const handleDiscardNone = (s: GameState): GameState => {
   if (s.phase.kind !== 'awaiting-action' || !s.drawn || isJoker(s.drawn)) return s;
-  return drawNext(log(pushTrash(s, s.drawn), 'Discard (trashed)'));
+  return drawNext(log(pushDiscard(s, s.drawn), 'Discard'));
 };
 
 const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
@@ -220,7 +237,7 @@ const handleResolveHop = (s: GameState, i: number, j: number): GameState => {
   if (s.phase.kind !== 'awaiting-target-hop') return s;
   if (!s.drawn || isJoker(s.drawn)) return s;
   const grid = executeHop(s.grid, i, j);
-  return drawNext(log(pushTrash({ ...s, grid }, s.drawn), `Hop ${i}↔${j}`));
+  return drawNext(log(pushPerkSpent({ ...s, grid }, s.drawn), `Hop ${i}↔${j}`));
 };
 
 const handleSlideSelectSource = (s: GameState, slot: number): GameState => {
@@ -253,7 +270,7 @@ const handleResolveSlide = (
   if (!valid) return s;
   const grid = executeSlide(s.grid, from, direction, distance);
   return drawNext(
-    log(pushTrash({ ...s, grid }, s.drawn), `Slide ${direction} × ${distance}`)
+    log(pushPerkSpent({ ...s, grid }, s.drawn), `Slide ${direction} × ${distance}`)
   );
 };
 
@@ -261,14 +278,16 @@ const handleResolveDestroy = (s: GameState, slot: number): GameState => {
   if (s.phase.kind !== 'awaiting-target-destroy') return s;
   if (!s.drawn || isJoker(s.drawn)) return s;
   const { grid, removed } = executeDestroy(s.grid, slot);
-  const afterTarget = pushTrash({ ...s, grid }, removed);
-  return drawNext(log(pushTrash(afterTarget, s.drawn), `Destroy slot ${slot}`));
+  // Target goes to discards (not a perk usage — collateral); the diamond
+  // itself goes to perkSpent.
+  const afterTarget = pushDiscard({ ...s, grid }, removed);
+  return drawNext(log(pushPerkSpent(afterTarget, s.drawn), `Destroy slot ${slot}`));
 };
 
 // ---------- bonus card handlers ----------
 
 // Send `drawn` cards back to bottom of bonus deck (in the given order), then
-// trash the club, then advance.
+// retire the club to perkSpent, then advance.
 const finishBonusFlow = (
   s: GameState,
   returningDrawn: BonusCard[],
@@ -277,7 +296,7 @@ const finishBonusFlow = (
   if (!s.drawn || isJoker(s.drawn)) return s;
   return drawNext(
     log(
-      pushTrash(
+      pushPerkSpent(
         {
           ...s,
           bonusDeck: [...s.bonusDeck, ...returningDrawn],

@@ -113,18 +113,32 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const report = useMemo(
     () => scoreGrid(state.grid, state.bonusCards, {
       deckRemaining: state.deck.length,
-      trash: state.trash,
+      discards: state.discards,
+      perkSpent: state.perkSpent,
     }),
-    [state.grid, state.bonusCards, state.deck.length, state.trash]
+    [
+      state.grid,
+      state.bonusCards,
+      state.deck.length,
+      state.discards,
+      state.perkSpent,
+    ]
   );
 
   const bonusValues = useMemo(
     () =>
       bonusShapleyValues(state.grid, state.bonusCards, {
         deckRemaining: state.deck.length,
-        trash: state.trash,
+        discards: state.discards,
+        perkSpent: state.perkSpent,
       }),
-    [state.grid, state.bonusCards, state.deck.length, state.trash]
+    [
+      state.grid,
+      state.bonusCards,
+      state.deck.length,
+      state.discards,
+      state.perkSpent,
+    ]
   );
   const {
     lines: scoredLines,

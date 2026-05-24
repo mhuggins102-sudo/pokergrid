@@ -10,7 +10,10 @@ interface Props {
   onClose: () => void;
   deck: readonly Card[];
   grid: Grid;
-  trash: readonly Card[];
+  // Cards that left play without a perk (Discard button or destroyed targets).
+  discards: readonly Card[];
+  // Drawn cards spent on a suit perk.
+  perkSpent: readonly Card[];
 }
 
 const SUIT_GLYPH: Record<Suit, string> = { H: '♥', S: '♠', D: '♦', C: '♣' };
@@ -31,7 +34,14 @@ const TWO_COLOR_SUIT: Record<Suit, string> = {
 
 const isStandard = (c: Card): c is StandardCard => !isJoker(c);
 
-export const RemainingDeckModal = ({ visible, onClose, deck, grid, trash }: Props) => {
+export const RemainingDeckModal = ({
+  visible,
+  onClose,
+  deck,
+  grid,
+  discards,
+  perkSpent,
+}: Props) => {
   const { settings } = useSettings();
 
   // Membership set keyed by "RankSuit" for every card still in the deck.
@@ -43,13 +53,14 @@ export const RemainingDeckModal = ({ visible, onClose, deck, grid, trash }: Prop
   const standardRemaining = Array.from(inDeck).length;
   const jokerInDeck = deck.some(isJoker);
   const jokerOnGrid = grid.some(c => c !== null && isJoker(c));
-  const jokerInTrash = trash.some(isJoker);
+  const jokerDestroyed =
+    discards.some(isJoker) || perkSpent.some(isJoker);
   const jokerStatus = jokerInDeck
     ? 'in the deck'
     : jokerOnGrid
     ? 'on the grid'
-    : jokerInTrash
-    ? 'trashed'
+    : jokerDestroyed
+    ? 'destroyed'
     : 'unknown';
 
   return (

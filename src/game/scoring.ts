@@ -48,9 +48,11 @@ export interface ScoreOptions {
   // For mid-game live previews: treat incomplete lines as 0 (not -25). The
   // penalty only matters at game end; showing it live can be misleading.
   ignoreIncompletePenalty?: boolean;
-  // Cards in the trash pile — used by cards like "Trash Joker" that activate
-  // based on what's been thrown away.
-  trash?: readonly Card[];
+  // Cards in the discards pile (no-perk ditches + destroyed targets).
+  // "Trash Joker" looks here.
+  discards?: readonly Card[];
+  // Drawn cards spent on suit perks. Burnout / Frugal look here.
+  perkSpent?: readonly Card[];
 }
 
 /**
@@ -120,7 +122,8 @@ export const scoreGrid = (
 ): ScoreReport => {
   const deckRemaining = options.deckRemaining ?? 0;
   const ignorePenalty = options.ignoreIncompletePenalty ?? false;
-  const trash = options.trash ?? [];
+  const discards = options.discards ?? [];
+  const perkSpent = options.perkSpent ?? [];
   const scored: ScoredLine[] = lines(grid).map(l => {
     const filled = l.cards.filter(c => c !== null).length;
     const incomplete = filled < 5;
@@ -144,7 +147,7 @@ export const scoreGrid = (
     .filter(s => s.incomplete)
     .reduce((sum, s) => sum + s.total, 0);
   const { multiplier: gridMultiplier, flat: gridFlat } = applyGridEffects(
-    { grid, deckRemaining, trash, lines: scored },
+    { grid, deckRemaining, discards, perkSpent, lines: scored },
     bonusCards
   );
   const total = Math.ceil(subtotal * gridMultiplier) + gridFlat;

@@ -243,7 +243,7 @@ describe('new grid-wide bonuses', () => {
     const card = findCard('trash-joker-x1_25');
     const g = filledNonPair();
     const baseline = scoreGrid(g, [card]).total;
-    const withJoker = scoreGrid(g, [card], { trash: [{ kind: 'joker' }] }).total;
+    const withJoker = scoreGrid(g, [card], { discards: [{ kind: 'joker' }] }).total;
     expect(withJoker).toBe(Math.ceil(baseline * 1.25));
   });
 
@@ -357,30 +357,41 @@ describe('new grid-wide bonuses', () => {
     expect(with1).toBe(Math.ceil(base * 1.2));
   });
 
-  test('Burnout triggers at 8+ trash', () => {
+  test('Burnout triggers at 8+ perks spent', () => {
     const card = findCard('burnout-x1_3');
     const g = filledNonPair();
     const base = scoreGrid(g, [card]).total;
-    expect(base).toBe(scoreGrid(g, []).total); // 0 trash → inactive
-    const seven = Array(7).fill(C('2','H'));
-    expect(scoreGrid(g, [card], { trash: seven }).total).toBe(base);
-    const eight = Array(8).fill(C('2','H'));
-    expect(scoreGrid(g, [card], { trash: eight }).total).toBe(Math.ceil(base * 1.3));
+    expect(base).toBe(scoreGrid(g, []).total); // 0 perks → inactive
+    // Plain discards never count toward Burnout, no matter how many.
+    const lotsOfDiscards = Array(20).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { discards: lotsOfDiscards }).total).toBe(base);
+    // 7 perks → still inactive.
+    const sevenPerks = Array(7).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { perkSpent: sevenPerks }).total).toBe(base);
+    // 8 perks → ×1.3.
+    const eightPerks = Array(8).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { perkSpent: eightPerks }).total).toBe(Math.ceil(base * 1.3));
   });
 
-  test('Frugal triggers at ≤4 trash', () => {
+  test('Frugal triggers at ≤4 perks spent', () => {
     const card = findCard('frugal-x1_3');
     const g = filledNonPair();
-    const base = scoreGrid(g, [card]).total;
-    // 0 trash → triggers
-    expect(base).toBe(Math.ceil(scoreGrid(g, []).total * 1.3));
+    // 0 perks → triggers (perkSpent is the empty array by default).
+    expect(scoreGrid(g, [card]).total).toBe(Math.ceil(scoreGrid(g, []).total * 1.3));
+    // 4 perks → still triggers.
     const four = Array(4).fill(C('2','H'));
-    expect(scoreGrid(g, [card], { trash: four }).total).toBe(
-      Math.ceil(scoreGrid(g, [], { trash: four }).total * 1.3)
+    expect(scoreGrid(g, [card], { perkSpent: four }).total).toBe(
+      Math.ceil(scoreGrid(g, [], { perkSpent: four }).total * 1.3)
     );
+    // 5 perks → doesn't trigger.
     const five = Array(5).fill(C('2','H'));
-    expect(scoreGrid(g, [card], { trash: five }).total).toBe(
-      scoreGrid(g, [], { trash: five }).total
+    expect(scoreGrid(g, [card], { perkSpent: five }).total).toBe(
+      scoreGrid(g, [], { perkSpent: five }).total
+    );
+    // Discards don't affect Frugal.
+    const manyDiscards = Array(20).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { discards: manyDiscards }).total).toBe(
+      Math.ceil(scoreGrid(g, [], { discards: manyDiscards }).total * 1.3)
     );
   });
 });

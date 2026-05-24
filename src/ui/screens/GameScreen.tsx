@@ -67,11 +67,15 @@ const DrawnArea = ({
   drawnKey,
   children,
   deckCount,
+  perkCount,
   onDeckPress,
 }: {
   drawnKey: string;
   children: React.ReactNode;
   deckCount?: number;
+  // Number of playing cards the player has spent on suit perks across the run.
+  // Surfaced for Burnout / Frugal bonus card thresholds.
+  perkCount?: number;
   // When provided, tapping anywhere on the drawn card area opens the
   // remaining-deck preview (Easy difficulty only).
   onDeckPress?: () => void;
@@ -103,6 +107,9 @@ const DrawnArea = ({
         >
           {deckLabel}{onDeckPress ? ' ⓘ' : ''}
         </Text>
+      )}
+      {perkCount !== undefined && (
+        <Text style={styles.perkUnderDrawn}>perks {perkCount}</Text>
       )}
     </Animated.View>
   );
@@ -174,9 +181,16 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
       scoreGrid(state.grid, state.bonusCards, {
         deckRemaining: state.deck.length,
         ignoreIncompletePenalty: true,
-        trash: state.trash,
+        discards: state.discards,
+        perkSpent: state.perkSpent,
       }).total,
-    [state.grid, state.bonusCards, state.deck.length, state.trash]
+    [
+      state.grid,
+      state.bonusCards,
+      state.deck.length,
+      state.discards,
+      state.perkSpent,
+    ]
   );
 
   // Shapley-value attribution of the bonus contribution, so multiple cards
@@ -187,9 +201,16 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
       bonusShapleyValues(state.grid, state.bonusCards, {
         deckRemaining: state.deck.length,
         ignoreIncompletePenalty: true,
-        trash: state.trash,
+        discards: state.discards,
+        perkSpent: state.perkSpent,
       }),
-    [state.grid, state.bonusCards, state.deck.length, state.trash]
+    [
+      state.grid,
+      state.bonusCards,
+      state.deck.length,
+      state.discards,
+      state.perkSpent,
+    ]
   );
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
@@ -533,7 +554,8 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
         onClose={() => setDeckPreviewOpen(false)}
         deck={state.deck}
         grid={state.grid}
-        trash={state.trash}
+        discards={state.discards}
+        perkSpent={state.perkSpent}
       />
     </View>
   );
@@ -559,7 +581,12 @@ const renderBottom = (
     const suit = !isJk ? (state.drawn as any).suit : null;
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length} onDeckPress={onDeckPress}>
+        <DrawnArea
+          drawnKey={drawnKey}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
           <Text style={styles.drawnLabel}>Drawn</Text>
           {animating ? (
             <View style={{ width: 88, height: 88 }} />
@@ -590,7 +617,7 @@ const renderBottom = (
           )}
           {!isJk && (
             <NeonButton
-              label="Trash"
+              label="Discard"
               variant="secondary"
               disabled={disabled}
               onPress={() => {
@@ -610,7 +637,12 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-hop') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-hop'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
+        <DrawnArea
+          drawnKey={drawnKey + '-hop'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
           <Text style={[styles.drawnLabel, { color: colors.suitH }]}>♥ Swap</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -630,7 +662,12 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-slide-source') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-slide'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
+        <DrawnArea
+          drawnKey={drawnKey + '-slide'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -652,7 +689,12 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-slide-dest') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-slide-dest'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
+        <DrawnArea
+          drawnKey={drawnKey + '-slide-dest'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -672,12 +714,17 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-destroy') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-destroy'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
+        <DrawnArea
+          drawnKey={drawnKey + '-destroy'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
           <Text style={[styles.drawnLabel, { color: colors.suitD }]}>♦ Destroy</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
         <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap any card on the grid to trash it.</Text>
+          <Text style={styles.hint}>Tap any card on the grid to destroy it.</Text>
           <NeonButton
             label="Cancel"
             variant="secondary"
@@ -816,6 +863,15 @@ const styles = StyleSheet.create({
     color: colors.accent,
     textShadowColor: colors.accent,
     textShadowRadius: 3,
+  },
+  perkUnderDrawn: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 2,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: -2,
   },
   drawnLabel: {
     color: colors.textLow,
