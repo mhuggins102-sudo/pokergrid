@@ -106,6 +106,7 @@ const BannerHero = ({
 export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
+  const [linesExpanded, setLinesExpanded] = useState(false);
   const { record, recordTargetsUp, recordChallenge } = useStats();
   const recorded = useRef(false);
 
@@ -213,8 +214,21 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       </View>
 
       <View style={styles.breakdownBlock}>
-        <Text style={styles.sectionLabel}>Per-line</Text>
-        {scoredLines.map(line => (
+        <Text style={styles.sectionLabel}>Score Breakdown</Text>
+
+        <Pressable
+          style={styles.accordionHeader}
+          onPress={() => setLinesExpanded(v => !v)}
+        >
+          <Text style={styles.accordionLabel}>
+            {linesExpanded ? '▼' : '▶'} Per-line scores
+          </Text>
+          <Text style={styles.accordionHint}>
+            {scoredLines.filter(l => l.total !== 0).length} of 10 scoring
+          </Text>
+        </Pressable>
+
+        {linesExpanded && scoredLines.map(line => (
           <Pressable
             key={`${line.kind}-${line.index}`}
             onPress={() => setInspectLine({ kind: line.kind, index: line.index })}
@@ -241,6 +255,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
             </Text>
           </Pressable>
         ))}
+
         <View style={styles.subtotalRow}>
           <Text style={styles.totalLabel}>Subtotal</Text>
           <Text style={styles.subtotalValue}>{subtotal}</Text>
@@ -382,7 +397,41 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontWeight: '800',
   },
-  breakdownBlock: { marginTop: spacing.md },
+  // Narrower than the rest of the page so the breakdown reads less like a
+  // full-screen sheet. The button row uses the same maxWidth so it visually
+  // pairs with the breakdown block beneath the grid.
+  breakdownBlock: {
+    marginTop: spacing.md,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgPanel,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+  },
+  accordionLabel: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  accordionHint: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
   lineRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -483,9 +532,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  // Mirror the breakdownBlock width so the buttons sit directly beneath it.
   btnRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.lg,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
   },
 });
