@@ -297,7 +297,7 @@ const DestroyVisual = () => {
         sound="destroy"
       />
       <Caption>
-        ♦ trashes any one card. Use sparingly — a slot left empty at game end costs{' '}
+        ♦ destroys any one card. Use sparingly — a slot left empty at game end costs{' '}
         <Text style={{ color: colors.danger }}>−25</Text> for the row AND another{' '}
         <Text style={{ color: colors.danger }}>−25</Text> for the column.
       </Caption>
@@ -584,7 +584,7 @@ const PenaltyVisual = () => {
       <Caption>
         Slot 11 is empty at game end. Row 2 has 4 cards — <Text style={{ color: colors.danger }}>
         −25</Text>. Column 2 has 4 cards — another <Text style={{ color: colors.danger }}>−25</Text>.
-        Total cost: 50. Trash freely, but think twice about destroys you can't refill.
+        Total cost: 50. Discard freely, but think twice about destroys you can't refill.
       </Caption>
     </View>
   );
@@ -629,14 +629,14 @@ const STEPS: Slide[] = [
   {
     kicker: '02 · PLACE',
     title: 'A spiral from the center',
-    copy: 'Each turn you can place the drawn card, trash it, or spend it on its suit perk. Placing puts it in the next spiral slot — center first, then clockwise outward. The cyan-pulsing slot marks where the next card lands.',
+    copy: 'Each turn you can place the drawn card, discard it, or spend it on its suit perk. Placing puts it in the next spiral slot — center first, then clockwise outward. The cyan-pulsing slot marks where the next card lands.',
     accent: colors.accent,
     Visual: SpiralVisual,
   },
   {
     kicker: '03 · ♥ SWAP',
     title: 'Hearts trade two cards',
-    copy: 'Spend a heart to swap any two cards that share a row or a column. The heart goes to trash. Use it to rebuild a near-miss flush or move the joker.',
+    copy: 'Spend a heart to swap any two cards that share a row or a column. The heart itself is spent. Use it to rebuild a near-miss flush or move the joker.',
     accent: colors.suitH,
     Visual: SwapVisual,
   },
@@ -650,7 +650,7 @@ const STEPS: Slide[] = [
   {
     kicker: '05 · ♦ DESTROY',
     title: 'Diamonds blow it up',
-    copy: 'Trash any one card on the grid — even the joker. Both the diamond AND the targeted card go to trash. Powerful but expensive: empty slots cost points at game end.',
+    copy: 'Destroy any one card on the grid — even the joker. Both the diamond AND the targeted card leave play. Powerful but expensive: empty slots cost points at game end.',
     accent: colors.suitD,
     Visual: DestroyVisual,
   },
@@ -664,7 +664,7 @@ const STEPS: Slide[] = [
   {
     kicker: '07 · THE JOKER',
     title: 'The joker is wild',
-    copy: "There's exactly one joker in the deck. It can't be trashed and auto-places into the next spiral slot. On the grid it takes whatever rank and suit make the best hand — independently for its row and its column.",
+    copy: "There's exactly one joker in the deck. It can't be discarded and auto-places into the next spiral slot. On the grid it takes whatever rank and suit make the best hand — independently for its row and its column.",
     accent: colors.joker,
     Visual: JokerVisual,
   },

@@ -52,7 +52,7 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
         <Text style={styles.body}>
           A card is drawn for you. You can <Text style={styles.bodyHi}>place</Text> it (it lands
           in the next spiral slot, starting at the center of the grid and expanding clockwise
-          outward), <Text style={styles.bodyHi}>trash</Text> it (it's gone), or spend it on its{' '}
+          outward), <Text style={styles.bodyHi}>discard</Text> it (it's gone), or spend it on its{' '}
           <Text style={styles.bodyHi}>suit perk</Text>. A pulsing cyan ring marks the next slot
           a placed card will land in.
         </Text>
@@ -75,7 +75,7 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
           symbol="♦"
           color={colors.suitD}
           name="Destroy"
-          desc="Trash any one card on the grid — even the joker. Use sparingly: empty slots cost points at game end."
+          desc="Destroy any one card on the grid — even the joker. Use sparingly: empty slots cost points at game end."
         />
         <Perk
           symbol="♣"
@@ -84,7 +84,7 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
           desc="Draw two bonus cards from the bonus deck and keep one. Hold up to 3 in your hand; at the cap, ♣ forces a swap."
         />
         <Text style={styles.footnoteInSection}>
-          The drawn card is trashed after a suit perk. If a perk has no legal target, its button
+          The drawn card is spent after a suit perk. If a perk has no legal target, its button
           is hidden.
         </Text>
       </Section>
@@ -102,7 +102,7 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
       <Section label="The joker">
         <Text style={styles.body}>
           The joker is auto-placed when drawn — you don't get to choose where, and it can't be
-          trashed initially. On the grid it's a wild, taking whatever rank and suit make the
+          discarded initially. On the grid it's a wild, taking whatever rank and suit make the
           best hand in its row, and independently in its column. A ♦ Destroy can remove it
           mid-game (and triggers the "Trash Joker" bonus card if you hold it).
         </Text>

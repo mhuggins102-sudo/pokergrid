@@ -831,9 +831,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   // Stacked column of action buttons on the right of the drawn card. The
-  // three buttons (Place, suit perk, Trash) all use this style so they share
-  // an identical height — previously Trash used size="sm" and was visibly
-  // shorter.
+  // three buttons (Place, suit perk, Discard) all share this style so their
+  // heights match.
   btnCol: {
     flex: 1,
     gap: spacing.xs,
