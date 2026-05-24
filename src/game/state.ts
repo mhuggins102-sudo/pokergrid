@@ -105,20 +105,35 @@ const drawNext = (state: GameState): GameState => {
   }
 };
 
+// Easy and Medium players start with one random bonus card already in hand;
+// Hard begins empty. Easy also gets to peek the remaining-deck composition
+// during play (wired in the UI; see RemainingDeckModal).
+export const STARTER_BONUS_BY_DIFFICULTY: Record<Difficulty, number> = {
+  easy: 1,
+  medium: 1,
+  hard: 0,
+};
+
+export const canPreviewDeck = (difficulty: Difficulty): boolean =>
+  difficulty === 'easy';
+
 export const newGame = (
   difficulty: Difficulty,
   rng: () => number = Math.random,
   targetOverride?: number
 ): GameState => {
   const deck = freshShuffledDeck(rng);
-  const bonusDeck = shuffle(BONUS_DECK_POOL, rng);
+  const shuffledBonus = shuffle(BONUS_DECK_POOL, rng);
+  const starterCount = STARTER_BONUS_BY_DIFFICULTY[difficulty];
+  const bonusCards = shuffledBonus.slice(0, starterCount);
+  const bonusDeck = shuffledBonus.slice(starterCount);
   const [first, ...rest] = deck;
   const grid = placeAtSpiralNext(emptyGrid(), first);
   const initial: GameState = {
     deck: rest,
     trash: [],
     bonusDeck,
-    bonusCards: [],
+    bonusCards,
     grid,
     drawn: null,
     difficulty,

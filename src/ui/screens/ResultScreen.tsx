@@ -13,6 +13,7 @@ import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
+import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
@@ -104,6 +105,7 @@ const BannerHero = ({
 
 export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
+  const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const { record, recordTargetsUp, recordChallenge } = useStats();
   const recorded = useRef(false);
 
@@ -197,7 +199,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         <Text style={styles.modeNote}>{challenge!.goal}</Text>
       )}
 
-      <BonusCardStrip cards={state.bonusCards} values={bonusValues} />
+      <BonusCardStrip
+        cards={state.bonusCards}
+        values={bonusValues}
+        onCardPress={i => setBonusDetailIdx(i)}
+      />
       <View style={styles.gridArea}>
         <GridView
           grid={state.grid}
@@ -301,6 +307,12 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           bonusCards={state.bonusCards}
         />
       )}
+      <BonusCardDetailModal
+        visible={bonusDetailIdx !== null}
+        card={bonusDetailIdx !== null ? state.bonusCards[bonusDetailIdx] ?? null : null}
+        currentValue={bonusDetailIdx !== null ? bonusValues[bonusDetailIdx] : undefined}
+        onClose={() => setBonusDetailIdx(null)}
+      />
     </ScrollView>
   );
 };

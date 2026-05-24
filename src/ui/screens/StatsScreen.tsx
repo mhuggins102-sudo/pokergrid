@@ -1,22 +1,42 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { Difficulty } from '../../game/rules';
 import { NeonButton } from '../components/NeonButton';
-import { useStats } from '../stats';
-import { colors, fonts, radius, spacing } from '../theme';
+import { DifficultyStat, useStats } from '../stats';
+import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   onBack: () => void;
 }
 
-const Difficulties: ('easy' | 'medium' | 'hard')[] = ['easy', 'medium', 'hard'];
+const Difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+
+type Metric = 'best' | 'average' | 'streak';
 
 const fmtDate = (ts: number): string => {
   const d = new Date(ts);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
+const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boolean } => {
+  switch (m) {
+    case 'best':
+      return s.best === null
+        ? { value: '—', isEmpty: true }
+        : { value: `${s.best}`, isEmpty: false };
+    case 'average':
+      if (s.totalRuns === 0) return { value: '—', isEmpty: true };
+      return { value: `${Math.round(s.totalScore / s.totalRuns)}`, isEmpty: false };
+    case 'streak':
+      return s.bestStreak === 0
+        ? { value: '—', isEmpty: true }
+        : { value: `${s.bestStreak}`, isEmpty: false };
+  }
+};
+
 export const StatsScreen = ({ onBack }: Props) => {
   const { stats } = useStats();
+  const [metric, setMetric] = useState<Metric>('best');
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -25,28 +45,49 @@ export const StatsScreen = ({ onBack }: Props) => {
         <NeonButton label="Back" variant="ghost" size="sm" onPress={onBack} />
       </View>
 
-      <View style={styles.summaryRow}>
-        <SummaryCell label="Wins" value={`${stats.wins}`} accent={colors.success} />
-        <SummaryCell label="Losses" value={`${stats.losses}`} accent={colors.danger} />
-        <SummaryCell label="Streak" value={`${stats.streak}`} accent={colors.accent} />
-        <SummaryCell label="Best ⤴" value={`${stats.longestStreak}`} accent={colors.warn} />
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionLabel}>Difficulty</Text>
+        <View style={styles.toggle}>
+          {(['best', 'average', 'streak'] as Metric[]).map(m => {
+            const active = metric === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setMetric(m)}
+                style={[styles.toggleBtn, active && styles.toggleBtnActive]}
+              >
+                <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
+                  {m === 'best' ? 'Best' : m === 'average' ? 'Avg' : 'Streak'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      <Text style={styles.sectionLabel}>Best by difficulty</Text>
-      <View style={styles.bestBlock}>
+      <View style={styles.diffList}>
         {Difficulties.map(d => {
-          const best = stats.best[d];
+          const s = stats.byDifficulty[d];
+          const { value, isEmpty } = valueFor(s, metric);
+          const showActiveStreak = metric === 'streak' && s.currentStreak > 0;
           return (
-            <View key={d} style={styles.bestRow}>
-              <Text style={styles.bestLabel}>{d.toUpperCase()}</Text>
-              <Text
-                style={[
-                  styles.bestScore,
-                  best !== null && styles.bestScoreActive,
-                ]}
-              >
-                {best ?? '—'}
-              </Text>
+            <View key={d} style={styles.diffRow}>
+              <Text style={styles.diffLabel}>{d.toUpperCase()}</Text>
+              <View style={styles.diffRight}>
+                {showActiveStreak && (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>ON {s.currentStreak}</Text>
+                  </View>
+                )}
+                <Text
+                  style={[
+                    styles.diffValue,
+                    !isEmpty && styles.diffValueActive,
+                  ]}
+                >
+                  {value}
+                </Text>
+              </View>
             </View>
           );
         })}
@@ -54,7 +95,7 @@ export const StatsScreen = ({ onBack }: Props) => {
 
       <Text style={styles.sectionLabel}>Recent runs</Text>
       {stats.recent.length === 0 ? (
-        <Text style={styles.empty}>No runs yet. Start a game to begin tracking.</Text>
+        <Text style={styles.empty}>No runs yet. Start a Free Play game to begin tracking.</Text>
       ) : (
         <View style={styles.recentBlock}>
           {stats.recent.map((r, i) => (
@@ -81,23 +122,6 @@ export const StatsScreen = ({ onBack }: Props) => {
   );
 };
 
-const SummaryCell = ({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-}) => (
-  <View style={[styles.summaryCell, { borderColor: accent }]}>
-    <Text style={styles.summaryLabel}>{label}</Text>
-    <Text style={[styles.summaryValue, { color: accent, textShadowColor: accent }]}>
-      {value}
-    </Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
@@ -115,32 +139,12 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
   },
-  summaryRow: {
+  sectionHeader: {
     flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  summaryCell: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.bgPanel,
-  },
-  summaryLabel: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    color: colors.textLow,
-    letterSpacing: 1.5,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  summaryValue: {
-    fontFamily: fonts.mono,
-    fontSize: 22,
-    fontWeight: '900',
-    marginTop: 2,
-    textShadowRadius: 6,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
   sectionLabel: {
     color: colors.textMid,
@@ -152,8 +156,38 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  bestBlock: { gap: 4 },
-  bestRow: {
+  toggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    padding: 2,
+  },
+  toggleBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  toggleBtnActive: {
+    backgroundColor: 'rgba(107, 214, 255, 0.15)',
+    ...glow(colors.accent, 4, 0.4),
+  },
+  toggleLabel: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  toggleLabelActive: {
+    color: colors.accent,
+    textShadowColor: colors.accent,
+    textShadowRadius: 3,
+  },
+  diffList: { gap: 4 },
+  diffRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -164,23 +198,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineSoft,
   },
-  bestLabel: {
+  diffLabel: {
     fontFamily: fonts.mono,
     color: colors.textMid,
     fontSize: 12,
     letterSpacing: 1.5,
     fontWeight: '700',
   },
-  bestScore: {
+  diffRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  diffValue: {
     fontFamily: fonts.mono,
     color: colors.textLow,
     fontSize: 18,
     fontWeight: '800',
+    minWidth: 50,
+    textAlign: 'right',
   },
-  bestScoreActive: {
+  diffValueActive: {
     color: colors.success,
     textShadowColor: colors.success,
     textShadowRadius: 6,
+  },
+  activeBadge: {
+    backgroundColor: 'rgba(255, 183, 74, 0.18)',
+    borderWidth: 1,
+    borderColor: colors.warn,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    ...glow(colors.warn, 4, 0.6),
+  },
+  activeBadgeText: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
   },
   empty: {
     color: colors.textLow,

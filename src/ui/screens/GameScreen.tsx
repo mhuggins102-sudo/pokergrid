@@ -19,14 +19,16 @@ import {
   SPIRAL_ORDER,
 } from '../../game/grid';
 import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
-import { Action, GameState } from '../../game/state';
+import { Action, canPreviewDeck, GameState } from '../../game/state';
 import {
   ANIM_DURATION,
   AnimationLayer,
   AnimSpec,
   hiddenSlotsFor,
 } from '../components/AnimationLayer';
+import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
+import { RemainingDeckModal } from '../components/RemainingDeckModal';
 import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
@@ -65,10 +67,14 @@ const DrawnArea = ({
   drawnKey,
   children,
   deckCount,
+  onDeckPress,
 }: {
   drawnKey: string;
   children: React.ReactNode;
   deckCount?: number;
+  // When provided, the "deck N" text becomes tappable (used on Easy to
+  // reveal the remaining-deck composition).
+  onDeckPress?: () => void;
 }) => {
   const { settings } = useSettings();
   const opacity = useSharedValue(1);
@@ -84,11 +90,20 @@ const DrawnArea = ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
   }));
+  const deckLabel = deckCount !== undefined ? `deck ${deckCount}` : null;
   return (
     <Animated.View style={[styles.drawnBlock, style]}>
       {children}
-      {deckCount !== undefined && (
-        <Text style={styles.deckUnderDrawn}>deck {deckCount}</Text>
+      {deckLabel !== null && (
+        onDeckPress ? (
+          <Pressable onPress={onDeckPress} hitSlop={6}>
+            <Text style={[styles.deckUnderDrawn, styles.deckUnderDrawnLink]}>
+              {deckLabel} ⓘ
+            </Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.deckUnderDrawn}>{deckLabel}</Text>
+        )
       )}
     </Animated.View>
   );
@@ -97,6 +112,9 @@ const DrawnArea = ({
 export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
+  const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
+  const [deckPreviewOpen, setDeckPreviewOpen] = useState(false);
+  const deckPeekAllowed = canPreviewDeck(state.difficulty);
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -448,7 +466,11 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
         onHomePress={onHome}
         kicker={kicker}
       />
-      <BonusCardStrip cards={state.bonusCards} values={bonusValues} />
+      <BonusCardStrip
+        cards={state.bonusCards}
+        values={bonusValues}
+        onCardPress={i => setBonusDetailIdx(i)}
+      />
 
       <View style={styles.gridWrap}>
         <GestureDetector gesture={panGesture}>
@@ -468,7 +490,17 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
       </View>
 
       <View style={styles.bottom}>
-        {renderBottom(state, handlePlace, dispatch, haptic, playSound, suitOK, drawnKey, !!anim)}
+        {renderBottom(
+          state,
+          handlePlace,
+          dispatch,
+          haptic,
+          playSound,
+          suitOK,
+          drawnKey,
+          !!anim,
+          deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined
+        )}
       </View>
 
       <ScoringReferenceModal
@@ -486,6 +518,19 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
           bonusCards={state.bonusCards}
         />
       )}
+      <BonusCardDetailModal
+        visible={bonusDetailIdx !== null}
+        card={bonusDetailIdx !== null ? state.bonusCards[bonusDetailIdx] ?? null : null}
+        currentValue={bonusDetailIdx !== null ? bonusValues[bonusDetailIdx] : undefined}
+        onClose={() => setBonusDetailIdx(null)}
+      />
+      <RemainingDeckModal
+        visible={deckPreviewOpen}
+        onClose={() => setDeckPreviewOpen(false)}
+        deck={state.deck}
+        grid={state.grid}
+        trash={state.trash}
+      />
     </View>
   );
 };
@@ -498,7 +543,8 @@ const renderBottom = (
   playSound: (k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus') => void,
   suitOK: boolean,
   drawnKey: string,
-  animating: boolean
+  animating: boolean,
+  onDeckPress?: () => void
 ) => {
   const p = state.phase;
   const disabled = animating;
@@ -509,7 +555,7 @@ const renderBottom = (
     const suit = !isJk ? (state.drawn as any).suit : null;
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
+        <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length} onDeckPress={onDeckPress}>
           <Text style={styles.drawnLabel}>Drawn</Text>
           {animating ? (
             <View style={{ width: 88, height: 88 }} />
@@ -560,7 +606,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-hop') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-hop'} deckCount={state.deck.length}>
+        <DrawnArea drawnKey={drawnKey + '-hop'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
           <Text style={[styles.drawnLabel, { color: colors.suitH }]}>♥ Swap</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -580,7 +626,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-slide-source') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-slide'} deckCount={state.deck.length}>
+        <DrawnArea drawnKey={drawnKey + '-slide'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -602,7 +648,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-slide-dest') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-slide-dest'} deckCount={state.deck.length}>
+        <DrawnArea drawnKey={drawnKey + '-slide-dest'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -622,7 +668,7 @@ const renderBottom = (
   if (p.kind === 'awaiting-target-destroy') {
     return (
       <View style={styles.actionRow}>
-        <DrawnArea drawnKey={drawnKey + '-destroy'} deckCount={state.deck.length}>
+        <DrawnArea drawnKey={drawnKey + '-destroy'} deckCount={state.deck.length} onDeckPress={onDeckPress}>
           <Text style={[styles.drawnLabel, { color: colors.suitD }]}>♦ Destroy</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
@@ -761,6 +807,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     marginTop: 2,
+  },
+  deckUnderDrawnLink: {
+    color: colors.accent,
+    textShadowColor: colors.accent,
+    textShadowRadius: 3,
   },
   drawnLabel: {
     color: colors.textLow,

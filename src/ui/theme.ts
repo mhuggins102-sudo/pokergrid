@@ -116,10 +116,11 @@ export const radius = {
 } as const;
 
 // Card geometry. We pick sizes that fit a 5x5 grid on a 360–430-wide phone
-// with breathing room for axis labels.
+// with breathing room for axis labels. md was previously 56; bumped to 64
+// so the in-game grid uses more of the available width without crowding.
 export const cardSize = {
   sm: 40,
-  md: 56,
+  md: 64,
   lg: 88,
 } as const;
 

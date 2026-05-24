@@ -58,12 +58,14 @@ export const BonusCardsScreen = ({ onBack }: Props) => {
             <Text style={styles.groupLabel}>
               {groupName} <Text style={styles.groupCount}>· {cards.length}</Text>
             </Text>
-            {cards.map(c => (
-              <View key={c.id} style={styles.card}>
-                <Text style={styles.cardName}>{c.name}</Text>
-                <Text style={styles.cardDesc}>{c.description}</Text>
-              </View>
-            ))}
+            <View style={styles.cardGrid}>
+              {cards.map(c => (
+                <View key={c.id} style={styles.card}>
+                  <Text style={styles.cardName}>{c.name}</Text>
+                  <Text style={styles.cardDesc}>{c.description}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         );
       })}
@@ -109,13 +111,21 @@ const styles = StyleSheet.create({
     color: colors.textLow,
     fontWeight: '600',
   },
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
   card: {
+    // Two cards per row, accounting for the row's gap.
+    flexBasis: '48%',
+    flexGrow: 1,
     backgroundColor: colors.bgPanel,
     borderColor: colors.warn,
     borderWidth: 1,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     ...glow(colors.warn, 4, 0.18),
   },
   cardName: {

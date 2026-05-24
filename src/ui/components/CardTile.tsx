@@ -24,7 +24,7 @@ interface Props {
 const SIZES = {
   xs: { side: 24, rank: 13, pip: 7, pipCBA: 9, padding: 2 },
   sm: { side: cardSize.sm, rank: 18, pip: 9, pipCBA: 12, padding: 3 },
-  md: { side: cardSize.md, rank: 28, pip: 11, pipCBA: 16, padding: 4 },
+  md: { side: cardSize.md, rank: 32, pip: 13, pipCBA: 18, padding: 5 },
   lg: { side: cardSize.lg, rank: 44, pip: 16, pipCBA: 22, padding: 6 },
 } as const;
 

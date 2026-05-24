@@ -116,6 +116,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgGlass,
     justifyContent: 'center',
     flex: 1,
+    // Match the visual height of a filled chip (name + 2 lines of desc + pad)
+    // so empty slots don't visibly collapse.
+    minHeight: 50,
   },
   empty: {
     backgroundColor: 'transparent',

@@ -28,8 +28,14 @@ describe('GameState — initial state', () => {
     expect(s.target).toBe(300);
     // Center slot is filled first (spiral position 1 = slot 12).
     expect(s.grid[12]).not.toBeNull();
-    expect(s.bonusCards).toEqual([]);
-    expect(s.bonusDeck.length).toBe(BONUS_DECK_POOL.length);
+    // Easy and Medium each seed 1 starter bonus card from the shuffled deck.
+    expect(s.bonusCards).toHaveLength(1);
+    expect(s.bonusDeck.length).toBe(BONUS_DECK_POOL.length - 1);
+
+    // Hard still starts empty.
+    const hard = newGame('hard', seededRng(1));
+    expect(hard.bonusCards).toEqual([]);
+    expect(hard.bonusDeck.length).toBe(BONUS_DECK_POOL.length);
     expect(s.trash).toEqual([]);
     expect(['awaiting-action', 'game-over']).toContain(s.phase.kind);
   });

@@ -99,8 +99,8 @@ export const ScoreBar = ({
 const styles = StyleSheet.create({
   bar: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
     backgroundColor: colors.bgPanel,
     borderBottomWidth: 1,
     borderBottomColor: colors.outlineSoft,
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 40,
+    minHeight: 56,
   },
   iconBtn: {
     width: 32,
@@ -133,13 +133,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   kicker: {
-    color: colors.textLow,
+    color: colors.textMid,
     fontFamily: fonts.mono,
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: 2,
     fontWeight: '800',
     textTransform: 'uppercase',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   scoreLine: {
     flexDirection: 'row',
