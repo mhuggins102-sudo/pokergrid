@@ -1,10 +1,20 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback } from 'react';
-import { Platform } from 'react-native';
 import { useSettings } from './settings';
 
 // Type of feedback. We map to expo-haptics' impact / notification API
 // internally so callers don't need to know which is appropriate.
+//
+// expo-haptics handles platform differences itself:
+//   - iOS / Android Expo Go: uses native Taptic / vibration motor
+//   - Web: falls back to navigator.vibrate (works on mobile browsers
+//     that support the Vibration API; desktop browsers no-op)
+//
+// Earlier versions of this file had a hand-rolled `webVibrate` branch that
+// short-circuited expo-haptics on web. That meant on iOS Safari (no
+// Vibration API) we silently did nothing and on native we were going through
+// the right path — so removing it doesn't change observable behavior, just
+// cuts code. The current version trusts the SDK on every platform.
 export type HapticKind =
   | 'light'    // tap, button press
   | 'medium'   // place card, draw
@@ -13,26 +23,7 @@ export type HapticKind =
   | 'warning'  // attempt invalid action
   | 'error';   // loss
 
-// Web fallback: vibrate via the Vibration API. Desktop browsers ignore it,
-// but mobile browsers (Chrome on Android, some others) honor it.
-const webVibrate = (pattern: number | number[]) => {
-  if (typeof navigator === 'undefined') return;
-  const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
-  if (typeof nav.vibrate === 'function') nav.vibrate(pattern);
-};
-
-const trigger = (kind: HapticKind) => {
-  if (Platform.OS === 'web') {
-    switch (kind) {
-      case 'light':   return webVibrate(10);
-      case 'medium':  return webVibrate(20);
-      case 'heavy':   return webVibrate(40);
-      case 'success': return webVibrate([10, 40, 10]);
-      case 'warning': return webVibrate([20, 20]);
-      case 'error':   return webVibrate([40, 30, 40]);
-    }
-    return;
-  }
+export const trigger = (kind: HapticKind) => {
   switch (kind) {
     case 'light': return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     case 'medium': return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});

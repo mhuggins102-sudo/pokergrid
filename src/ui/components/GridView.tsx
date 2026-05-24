@@ -23,9 +23,13 @@ interface Props {
   nextSlotHint?: number | null;
   onSlotPress?: (idx: number) => void;
   onLinePress?: (kind: LineKind, index: number) => void;
+  // Render with smaller cells + sm cards. Used by ResultScreen to keep the
+  // whole results page visible without scrolling.
+  compact?: boolean;
 }
 
-const CELL = gridCellSize;
+const FULL_CELL = gridCellSize;
+const COMPACT_CELL = cardSize.sm + 4;
 const HEADER = 20;
 
 // Subtle infinite pulse on the next-fill cell so the user's eye is drawn to it.
@@ -61,7 +65,10 @@ export const GridView = ({
   nextSlotHint,
   onSlotPress,
   onLinePress,
+  compact,
 }: Props) => {
+  const CELL = compact ? COMPACT_CELL : FULL_CELL;
+  const cardSizeKey = compact ? 'sm' : 'md';
   return (
     <View style={styles.outer}>
       <View style={styles.colHeaderRow}>
@@ -102,11 +109,12 @@ export const GridView = ({
                 onPress={onSlotPress ? () => onSlotPress(idx) : undefined}
               >
                 <View style={styles.slotInner}>
-                  <CardTile card={cardHere} highlighted={isHighlighted} size="md" />
+                  <CardTile card={cardHere} highlighted={isHighlighted} size={cardSizeKey} />
                   {isEmpty && (
                     <Text
                       style={[
                         styles.posNum,
+                        compact && styles.posNumCompact,
                         isNext && styles.posNumNext,
                       ]}
                       pointerEvents="none"
@@ -166,6 +174,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     opacity: 0.4,
   },
+  posNumCompact: { fontSize: 11 },
   posNumNext: {
     color: colors.accent,
     opacity: 1,

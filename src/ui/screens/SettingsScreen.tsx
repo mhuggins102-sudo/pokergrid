@@ -6,7 +6,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { NeonButton } from '../components/NeonButton';
+import { trigger } from '../haptics';
 import { useSettings } from '../settings';
+import { useSound } from '../sound';
 import { useStats } from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -76,6 +78,7 @@ const Toggle = ({
 export const SettingsScreen = ({ onBack }: Props) => {
   const { settings, update } = useSettings();
   const { reset } = useStats();
+  const playSound = useSound();
   const [confirmReset, setConfirmReset] = useState(false);
 
   return (
@@ -88,16 +91,32 @@ export const SettingsScreen = ({ onBack }: Props) => {
       <Text style={styles.sectionLabel}>Feel</Text>
       <Toggle
         label="Haptics"
-        desc="Vibration feedback on actions (mobile only)."
+        desc="Vibration feedback on actions. Native iOS / Android: Taptic / vibration motor. Mobile browsers: Web Vibration API (desktop browsers ignore this)."
         value={settings.haptics}
         onChange={v => update({ haptics: v })}
       />
+      {settings.haptics && (
+        <Pressable
+          style={styles.tryBtn}
+          onPress={() => trigger('medium')}
+        >
+          <Text style={styles.tryBtnLabel}>Try a haptic</Text>
+        </Pressable>
+      )}
       <Toggle
         label="Sounds"
         desc="Sound effects on draw, place, score reveal."
         value={settings.sounds}
         onChange={v => update({ sounds: v })}
       />
+      {settings.sounds && (
+        <Pressable
+          style={styles.tryBtn}
+          onPress={() => playSound('place')}
+        >
+          <Text style={styles.tryBtnLabel}>Try a sound</Text>
+        </Pressable>
+      )}
       <Toggle
         label="Reduce motion"
         desc="Disable animations and pulsing. Improves readability."
@@ -217,6 +236,25 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
+  },
+  tryBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    marginTop: 4,
+    marginBottom: spacing.xs,
+    backgroundColor: 'rgba(107, 214, 255, 0.04)',
+  },
+  tryBtnLabel: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   divider: { height: 1, backgroundColor: colors.outlineSoft, marginVertical: spacing.lg },
   copy: {

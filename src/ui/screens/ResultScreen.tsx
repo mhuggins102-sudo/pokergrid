@@ -208,6 +208,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         <GridView
           grid={state.grid}
           onLinePress={(kind, index) => setInspectLine({ kind, index })}
+          compact
         />
       </View>
 
@@ -321,10 +322,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
   content: { paddingBottom: spacing.xxl, paddingHorizontal: spacing.md },
   banner: {
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
     backgroundColor: colors.bgPanel,
     borderWidth: 2,
@@ -358,10 +359,10 @@ const styles = StyleSheet.create({
   },
   bannerScore: {
     fontFamily: fonts.mono,
-    fontSize: 48,
+    fontSize: 36,
     fontWeight: '900',
     letterSpacing: 2,
-    textShadowRadius: 18,
+    textShadowRadius: 14,
   },
   bannerTarget: {
     fontFamily: fonts.mono,
@@ -386,11 +387,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.sm,
     backgroundColor: colors.bgPanel,
-    marginBottom: 3,
+    marginBottom: 2,
     borderWidth: 1,
     borderColor: colors.outlineSoft,
   },

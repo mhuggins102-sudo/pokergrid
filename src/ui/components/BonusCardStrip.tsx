@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BonusCard, BONUS_HAND_LIMIT } from '../../game/bonusCards';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -36,11 +36,7 @@ const ValueBadge = ({ value }: { value: number | undefined }) => {
 
 export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Props) => (
   <View style={styles.wrap}>
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.strip}
-    >
+    <View style={styles.strip}>
       {Array.from({ length: BONUS_HAND_LIMIT }, (_, i) => {
         const c = cards[i];
         const filled = !!c;
@@ -67,7 +63,7 @@ export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Prop
           </View>
         );
       })}
-    </ScrollView>
+    </View>
   </View>
 );
 
@@ -79,8 +75,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: 'stretch',
   },
+  // Each slot now shares the available width equally so 3 chips always fit
+  // the viewport, no horizontal scroll required.
   slot: {
-    width: 124,
+    flex: 1,
     alignItems: 'stretch',
   },
   valueBadge: {

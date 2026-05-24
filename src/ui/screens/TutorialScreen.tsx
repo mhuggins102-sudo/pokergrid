@@ -14,6 +14,7 @@ import {
 import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
 import { NeonButton } from '../components/NeonButton';
+import { SoundKey, useSound } from '../sound';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 const TUTORIAL_SEEN_KEY = 'pokergrid:tutorial-seen:v1';
@@ -50,20 +51,27 @@ const DemoGrid = ({
   afterAnim,
   highlight,
   selected,
+  sound,
 }: {
   initialGrid: Grid;
   animSpec: AnimSpec;
   afterAnim: Grid;
   highlight?: Set<number>;
   selected?: number | null;
+  // Fires when the player taps Play, in sync with the animation start. Use
+  // the SoundKey that matches the in-game action so the tutorial feels like
+  // the real thing.
+  sound?: SoundKey;
 }) => {
   const [grid, setGrid] = useState<Grid>(initialGrid);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
+  const playSound = useSound();
 
   const play = () => {
     if (anim) return;
     setGrid(initialGrid);
     setAnim(animSpec);
+    if (sound) playSound(sound);
     setTimeout(() => {
       setAnim(null);
       setGrid(afterAnim);
@@ -129,6 +137,7 @@ const SpiralVisual = () => {
   const [anim, setAnim] = React.useState<AnimSpec | null>(null);
   const [nextHint, setNextHint] = React.useState<number | null>(12);
   const timers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+  const playSound = useSound();
 
   const stop = () => {
     timers.current.forEach(clearTimeout);
@@ -139,11 +148,12 @@ const SpiralVisual = () => {
     stop();
     setGrid(emptyGrid());
     setAnim(null);
-    // Run through the spiral one card at a time.
+    // Run through the spiral one card at a time, with the place sound on each.
     SPIRAL_DEMO.forEach(({ slot, card }, i) => {
       timers.current.push(
         setTimeout(() => {
           setAnim({ kind: 'place', card, toSlot: slot });
+          playSound('place');
           // The cyan pulse should point at the NEXT slot once this one lands.
           const next = SPIRAL_DEMO[i + 1]?.slot ?? null;
           setNextHint(next);
@@ -216,6 +226,7 @@ const SwapVisual = () => {
         animSpec={{ kind: 'swap', cardA: a, slotA: 10, cardB: b, slotB: 14 }}
         afterAnim={after}
         highlight={new Set([10, 14])}
+        sound="swap"
       />
       <Caption>
         Spend a ♥ to trade any two cards sharing a row or column. Useful for fixing a near-miss
@@ -255,6 +266,7 @@ const SlideVisual = () => {
         afterAnim={after}
         selected={18}
         highlight={new Set([3])}
+        sound="slide"
       />
       <Caption>
         Tap the back of the chain (R4 here) — every card in front slides together. Tap a
@@ -282,6 +294,7 @@ const DestroyVisual = () => {
         animSpec={{ kind: 'destroy', card: target, slot: 12 }}
         afterAnim={after}
         highlight={new Set([12])}
+        sound="destroy"
       />
       <Caption>
         ♦ trashes any one card. Use sparingly — a slot left empty at game end costs{' '}
