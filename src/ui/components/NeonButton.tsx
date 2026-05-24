@@ -65,6 +65,7 @@ export const NeonButton = ({
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       disabled={disabled}
+      style={style}
     >
       <Animated.View
         style={[
@@ -78,7 +79,6 @@ export const NeonButton = ({
           variant !== 'ghost' && !disabled && glow(tint.border, 8, 0.4),
           disabled && styles.disabled,
           animStyle,
-          style,
         ]}
       >
         <Text
@@ -101,6 +101,7 @@ export const NeonButton = ({
 
 const styles = StyleSheet.create({
   btn: {
+    alignSelf: 'stretch', // fill the Pressable so flex / width from outside works
     borderRadius: radius.md,
     borderWidth: 1.5,
     alignItems: 'center',

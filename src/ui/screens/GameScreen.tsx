@@ -508,7 +508,7 @@ const renderBottom = (
     const isJk = isJoker(state.drawn);
     const suit = !isJk ? (state.drawn as any).suit : null;
     return (
-      <View style={styles.actionRow}>
+      <View style={styles.actionCol}>
         <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
           <Text style={styles.drawnLabel}>Drawn</Text>
           {animating ? (
@@ -517,12 +517,13 @@ const renderBottom = (
             <CardTile card={state.drawn} size="lg" />
           )}
         </DrawnArea>
-        <View style={styles.btnCol}>
+        <View style={styles.btnRowHoriz}>
           <NeonButton
             label="Place"
             variant="primary"
             disabled={disabled}
             onPress={onPlace}
+            style={styles.flexBtn}
           />
           {!isJk && suitOK && suit && (
             <NeonButton
@@ -534,105 +535,98 @@ const renderBottom = (
                 playSound('tap');
                 dispatch({ type: 'BEGIN_SUIT_ACTION' });
               }}
+              style={styles.flexBtn}
             />
           )}
           {!isJk && (
             <NeonButton
               label="Trash"
               variant="secondary"
-              size="sm"
               disabled={disabled}
               onPress={() => {
                 haptic('light');
                 playSound('tap');
                 dispatch({ type: 'DISCARD_NONE' });
               }}
+              style={styles.flexBtn}
             />
           )}
-          {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
         </View>
+        {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-hop') {
     return (
-      <View style={styles.actionRow}>
+      <View style={styles.actionCol}>
         <DrawnArea drawnKey={drawnKey + '-hop'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitH }]}>♥ Swap</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap two cards that share a row or column.</Text>
-          <NeonButton
-            label="Cancel"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
-        </View>
+        <Text style={styles.hintCenter}>Tap two cards that share a row or column.</Text>
+        <NeonButton
+          label="Cancel"
+          variant="secondary"
+          size="sm"
+          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+        />
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-slide-source') {
     return (
-      <View style={styles.actionRow}>
+      <View style={styles.actionCol}>
         <DrawnArea drawnKey={drawnKey + '-slide'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <View style={styles.btnCol}>
-          <Text style={styles.hint}>
-            Tap a card and tap the destination, OR drag from a card in the direction you want.
-          </Text>
-          <NeonButton
-            label="Cancel"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
-        </View>
+        <Text style={styles.hintCenter}>
+          Tap a card and tap the destination, OR drag from a card in the direction you want.
+        </Text>
+        <NeonButton
+          label="Cancel"
+          variant="secondary"
+          size="sm"
+          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+        />
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-slide-dest') {
     return (
-      <View style={styles.actionRow}>
+      <View style={styles.actionCol}>
         <DrawnArea drawnKey={drawnKey + '-slide-dest'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap a glowing destination.</Text>
-          <NeonButton
-            label="Pick a different card"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
-        </View>
+        <Text style={styles.hintCenter}>Tap a glowing destination.</Text>
+        <NeonButton
+          label="Pick a different card"
+          variant="secondary"
+          size="sm"
+          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+        />
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-destroy') {
     return (
-      <View style={styles.actionRow}>
+      <View style={styles.actionCol}>
         <DrawnArea drawnKey={drawnKey + '-destroy'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitD }]}>♦ Destroy</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <View style={styles.btnCol}>
-          <Text style={styles.hint}>Tap any card on the grid to trash it.</Text>
-          <NeonButton
-            label="Cancel"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
-        </View>
+        <Text style={styles.hintCenter}>Tap any card on the grid to trash it.</Text>
+        <NeonButton
+          label="Cancel"
+          variant="secondary"
+          size="sm"
+          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+        />
       </View>
     );
   }
@@ -725,12 +719,27 @@ const styles = StyleSheet.create({
   gridWrap: { alignItems: 'center', paddingVertical: spacing.xs },
   gridStack: { position: 'relative' },
   bottom: { flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  actionRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
+  actionCol: {
+    gap: spacing.sm,
     alignItems: 'center',
+    paddingTop: spacing.sm,
   },
-  actionCol: { gap: spacing.sm, alignItems: 'stretch' },
+  btnRowHoriz: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignSelf: 'stretch',
+    paddingHorizontal: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  flexBtn: { flex: 1 },
+  hintCenter: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+  },
   drawnBlock: { alignItems: 'center', gap: spacing.xs },
   deckUnderDrawn: {
     color: colors.textLow,
@@ -749,7 +758,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
   },
-  btnCol: { flex: 1, gap: spacing.xs, justifyContent: 'center' },
   hint: {
     color: colors.textMid,
     fontFamily: fonts.sans,
