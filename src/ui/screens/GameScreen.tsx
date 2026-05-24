@@ -38,7 +38,7 @@ import { ScoringReferenceModal } from '../components/ScoringReferenceModal';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
-import { colors, fonts, glow, radius, spacing } from '../theme';
+import { colors, fonts, glow, gridCellSize, radius, spacing } from '../theme';
 
 interface Props {
   state: GameState;
@@ -72,8 +72,8 @@ const DrawnArea = ({
   drawnKey: string;
   children: React.ReactNode;
   deckCount?: number;
-  // When provided, the "deck N" text becomes tappable (used on Easy to
-  // reveal the remaining-deck composition).
+  // When provided, tapping anywhere on the drawn card area opens the
+  // remaining-deck preview (Easy difficulty only).
   onDeckPress?: () => void;
 }) => {
   const { settings } = useSettings();
@@ -91,21 +91,25 @@ const DrawnArea = ({
     transform: [{ scale: scale.value }],
   }));
   const deckLabel = deckCount !== undefined ? `deck ${deckCount}` : null;
-  return (
+  const body = (
     <Animated.View style={[styles.drawnBlock, style]}>
       {children}
       {deckLabel !== null && (
-        onDeckPress ? (
-          <Pressable onPress={onDeckPress} hitSlop={6}>
-            <Text style={[styles.deckUnderDrawn, styles.deckUnderDrawnLink]}>
-              {deckLabel} ⓘ
-            </Text>
-          </Pressable>
-        ) : (
-          <Text style={styles.deckUnderDrawn}>{deckLabel}</Text>
-        )
+        <Text
+          style={[
+            styles.deckUnderDrawn,
+            onDeckPress && styles.deckUnderDrawnLink,
+          ]}
+        >
+          {deckLabel}{onDeckPress ? ' ⓘ' : ''}
+        </Text>
       )}
     </Animated.View>
+  );
+  return onDeckPress ? (
+    <Pressable onPress={onDeckPress}>{body}</Pressable>
+  ) : (
+    body
   );
 };
 
@@ -367,7 +371,7 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
   // the GestureDetector's view (the grid stack).
   const slotFromXY = (x: number, y: number): number | null => {
     const HEADER = 20;
-    const CELL = 56;
+    const CELL = gridCellSize;
     const col = Math.floor((x - HEADER) / CELL);
     const row = Math.floor((y - HEADER) / CELL);
     if (row < 0 || row > 4 || col < 0 || col > 4) return null;
@@ -421,7 +425,7 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
       return;
     }
 
-    const CELL = 56;
+    const CELL = gridCellSize;
     const draggedCells = Math.max(
       1,
       Math.round((direction === 'left' || direction === 'right' ? absX : absY) / CELL)

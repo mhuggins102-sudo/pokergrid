@@ -124,6 +124,11 @@ export const cardSize = {
   lg: 88,
 } as const;
 
+// In-grid slot size — slightly larger than the md card so adjacent cards
+// don't share borders. The 4px difference yields ~2px breathing room on each
+// side of every cell (≈ 4px between neighboring cards).
+export const gridCellSize = cardSize.md + 4;
+
 // Easing / durations for Reanimated.
 export const motion = {
   quick: 140,

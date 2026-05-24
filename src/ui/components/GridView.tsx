@@ -10,7 +10,7 @@ import Animated, {
 import { Card } from '../../game/cards';
 import { GRID_SIZE, LineKind, SPIRAL_POSITION } from '../../game/grid';
 import { useSettings } from '../settings';
-import { cardSize, colors, fonts, glow, radius, spacing } from '../theme';
+import { cardSize, colors, fonts, glow, gridCellSize, radius, spacing } from '../theme';
 import { CardTile } from './CardTile';
 
 interface Props {
@@ -25,7 +25,7 @@ interface Props {
   onLinePress?: (kind: LineKind, index: number) => void;
 }
 
-const CELL = cardSize.md;
+const CELL = gridCellSize;
 const HEADER = 20;
 
 // Subtle infinite pulse on the next-fill cell so the user's eye is drawn to it.

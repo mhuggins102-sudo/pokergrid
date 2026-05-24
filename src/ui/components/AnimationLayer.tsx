@@ -9,11 +9,11 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Card } from '../../game/cards';
-import { cardSize, colors, glow } from '../theme';
+import { colors, glow, gridCellSize } from '../theme';
 import { CardTile } from './CardTile';
 
 // Grid geometry constants. Must stay in sync with GridView.
-const CELL = cardSize.md;
+const CELL = gridCellSize;
 const HEADER = 20;
 
 const slotXY = (slot: number) => {

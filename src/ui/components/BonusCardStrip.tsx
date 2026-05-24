@@ -59,10 +59,7 @@ export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Prop
               onPress={pressable ? () => onCardPress!(i) : undefined}
             >
               {filled ? (
-                <>
-                  <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
-                  <Text style={styles.desc} numberOfLines={2}>{c.description}</Text>
-                </>
+                <Text style={styles.name} numberOfLines={2}>{c.name}</Text>
               ) : (
                 <Text style={styles.emptyText}>· empty ·</Text>
               )}
@@ -114,10 +111,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     backgroundColor: colors.bgGlass,
+    // Center the title both vertically and horizontally — chips now show
+    // only the "main" yellow text; the full description is in the popup.
+    alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    // Match the visual height of a filled chip (name + 2 lines of desc + pad)
-    // so empty slots don't visibly collapse.
     minHeight: 50,
   },
   empty: {
@@ -139,18 +137,13 @@ const styles = StyleSheet.create({
   },
   name: {
     fontFamily: fonts.mono,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: colors.warn,
     letterSpacing: 0.5,
     textShadowColor: colors.warn,
     textShadowRadius: 4,
-  },
-  desc: {
-    fontFamily: fonts.sans,
-    fontSize: 9,
-    color: colors.textMid,
-    marginTop: 2,
-    lineHeight: 12,
+    textAlign: 'center',
+    lineHeight: 15,
   },
 });
