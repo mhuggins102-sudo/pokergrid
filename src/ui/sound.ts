@@ -21,6 +21,7 @@ export type SoundKey =
   | 'slide'
   | 'destroy'
   | 'bonus'
+  | 'joker'
   | 'win'
   | 'lose';
 
@@ -37,6 +38,7 @@ const ASSETS: Record<SoundKey, number> = {
   slide: require('../../assets/sounds/slide.wav'),
   destroy: require('../../assets/sounds/destroy.wav'),
   bonus: require('../../assets/sounds/bonus.wav'),
+  joker: require('../../assets/sounds/joker.wav'),
   win: require('../../assets/sounds/win.wav'),
   lose: require('../../assets/sounds/lose.wav'),
 };
@@ -179,6 +181,17 @@ const playWeb = (k: SoundKey) => {
         { freq: 523, dur: 0.10, type: 'triangle' },
         { freq: 659, dur: 0.10, delay: 0.10, type: 'triangle' },
         { freq: 784, dur: 0.16, delay: 0.20, type: 'triangle' },
+      ]);
+    case 'joker':
+      // Magical ascending Cmaj7 arpeggio with a high shimmer overlay. Matches
+      // assets/sounds/joker.wav on native, synthesized live here on the web.
+      return playNotes([
+        { freq: 523.25, dur: 0.50, type: 'sine', vol: 0.16 },
+        { freq: 659.25, dur: 0.50, delay: 0.10, type: 'sine', vol: 0.16 },
+        { freq: 783.99, dur: 0.50, delay: 0.20, type: 'sine', vol: 0.16 },
+        { freq: 987.77, dur: 0.42, delay: 0.30, type: 'sine', vol: 0.18 },
+        { freq: 1567.98, dur: 0.42, delay: 0.30, type: 'triangle', vol: 0.07 },
+        { freq: 1975.53, dur: 0.32, delay: 0.40, type: 'triangle', vol: 0.06 },
       ]);
     case 'win':
       return playNotes([

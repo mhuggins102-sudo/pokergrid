@@ -29,6 +29,7 @@ const slotXY = (slot: number) => {
 
 export type AnimSpec =
   | { kind: 'place'; card: Card; toSlot: number }
+  | { kind: 'joker-place'; card: Card; toSlot: number }
   | {
       kind: 'swap';
       cardA: Card;
@@ -44,6 +45,7 @@ export type AnimSpec =
 
 export const ANIM_DURATION = {
   place: 480,
+  'joker-place': 900,
   swap: 480,
   slide: 360,
   destroy: 640,
@@ -56,6 +58,11 @@ export const hiddenSlotsFor = (anim: AnimSpec | null): Set<number> => {
   switch (anim.kind) {
     case 'place':
       return new Set();
+    case 'joker-place':
+      // The reducer has already dropped the joker into the grid by the time
+      // the UI plays this animation, so we hide the static cell while the
+      // overlay performs the entrance.
+      return new Set([anim.toSlot]);
     case 'swap':
       return new Set([anim.slotA, anim.slotB]);
     case 'slide':
@@ -98,6 +105,100 @@ const PlaceAnim = ({ card, toSlot }: { card: Card; toSlot: number }) => {
       style={[styles.absolute, { left: x, top: y, width: CELL, height: CELL }]}
     >
       <Animated.View style={[styles.ring, ringStyle]} />
+      <Animated.View style={cardStyle}>
+        <CardTile card={card} size="md" />
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
+// Joker auto-place: slower, more dramatic than a normal place. The card
+// spirals in with a full rotation, a violet glow burst, and six radiating
+// sparkles. Used both for the mid-game auto-place and in the intro animation
+// when a joker was seeded before the first interactive turn.
+const JOKER_GLOW = '#d18bff';
+const JOKER_SPARKLE_COLORS = ['#ffd86b', '#ff5577', '#7ff0ff', '#d18bff'];
+
+const JokerSparkle = ({ angle, color, delay }: { angle: number; color: string; delay: number }) => {
+  const t = useSharedValue(0);
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 80 }));
+    t.value = withDelay(delay, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }));
+    opacity.value = withDelay(delay + 80, withTiming(0, { duration: 540 }));
+  }, [t, opacity, delay]);
+  const style = useAnimatedStyle(() => {
+    const dist = 42 * t.value;
+    return {
+      transform: [
+        { translateX: Math.cos(angle) * dist },
+        { translateY: Math.sin(angle) * dist },
+        { scale: 1 - t.value * 0.5 },
+      ],
+      opacity: opacity.value,
+    };
+  });
+  return (
+    <Animated.View
+      style={[
+        styles.sparkle,
+        { backgroundColor: color, shadowColor: color },
+        glow(color, 6, 0.95),
+        style,
+      ]}
+    />
+  );
+};
+
+const JokerPlaceAnim = ({ card, toSlot }: { card: Card; toSlot: number }) => {
+  const { x, y } = slotXY(toSlot);
+  const D = ANIM_DURATION['joker-place'];
+  const scale = useSharedValue(0.2);
+  const opacity = useSharedValue(0);
+  const rotate = useSharedValue(-180);
+  const ringScale = useSharedValue(0.4);
+  const ringOpacity = useSharedValue(0.85);
+  const ring2Scale = useSharedValue(0.4);
+  const ring2Opacity = useSharedValue(0.7);
+
+  useEffect(() => {
+    scale.value = withTiming(1, { duration: D, easing: EASE });
+    opacity.value = withTiming(1, { duration: D * 0.4, easing: EASE });
+    rotate.value = withTiming(0, { duration: D, easing: Easing.out(Easing.cubic) });
+    ringScale.value = withDelay(160, withTiming(2.0, { duration: D - 200, easing: Easing.out(Easing.cubic) }));
+    ringOpacity.value = withDelay(160, withTiming(0, { duration: D - 200, easing: Easing.out(Easing.cubic) }));
+    ring2Scale.value = withDelay(320, withTiming(2.6, { duration: D - 360, easing: Easing.out(Easing.cubic) }));
+    ring2Opacity.value = withDelay(320, withTiming(0, { duration: D - 360, easing: Easing.out(Easing.cubic) }));
+  }, [scale, opacity, rotate, ringScale, ringOpacity, ring2Scale, ring2Opacity, D]);
+
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
+    opacity: opacity.value,
+  }));
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ringScale.value }],
+    opacity: ringOpacity.value,
+  }));
+  const ring2Style = useAnimatedStyle(() => ({
+    transform: [{ scale: ring2Scale.value }],
+    opacity: ring2Opacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[styles.absolute, { left: x, top: y, width: CELL, height: CELL }]}
+    >
+      <Animated.View style={[styles.jokerRing, ringStyle]} />
+      <Animated.View style={[styles.jokerRing, ring2Style]} />
+      {Array.from({ length: 6 }).map((_, i) => (
+        <View key={i} style={styles.particleAnchor}>
+          <JokerSparkle
+            angle={(i / 6) * Math.PI * 2 - Math.PI / 2}
+            color={JOKER_SPARKLE_COLORS[i % JOKER_SPARKLE_COLORS.length]}
+            delay={200 + i * 30}
+          />
+        </View>
+      ))}
       <Animated.View style={cardStyle}>
         <CardTile card={card} size="md" />
       </Animated.View>
@@ -280,6 +381,7 @@ export const AnimationLayer = ({ anim }: { anim: AnimSpec | null }) => {
   return (
     <View style={styles.layer} pointerEvents="none">
       {anim.kind === 'place' && <PlaceAnim card={anim.card} toSlot={anim.toSlot} />}
+      {anim.kind === 'joker-place' && <JokerPlaceAnim card={anim.card} toSlot={anim.toSlot} />}
       {anim.kind === 'swap' && (
         <SwapAnim
           cardA={anim.cardA}
@@ -336,5 +438,19 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  jokerRing: {
+    position: 'absolute',
+    width: CELL,
+    height: CELL,
+    borderRadius: CELL / 2,
+    borderWidth: 2,
+    borderColor: JOKER_GLOW,
+    ...glow(JOKER_GLOW, 18, 0.9),
+  },
+  sparkle: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
 });

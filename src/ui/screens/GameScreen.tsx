@@ -162,11 +162,17 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
     let delay = 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
     placed.forEach(({ slot, card }) => {
+      const isJk = isJoker(card);
+      const spec: AnimSpec = isJk
+        ? { kind: 'joker-place', card, toSlot: slot }
+        : { kind: 'place', card, toSlot: slot };
+      const sound: 'place' | 'joker' = isJk ? 'joker' : 'place';
+      const dur = ANIM_DURATION[spec.kind];
       timers.push(setTimeout(() => {
-        playSound('place');
-        setAnim({ kind: 'place', card, toSlot: slot });
+        playSound(sound);
+        setAnim(spec);
       }, delay));
-      delay += ANIM_DURATION.place + 80;
+      delay += dur + 80;
     });
     // Clear the overlay after the last animation finishes.
     timers.push(setTimeout(() => setAnim(null), delay));
@@ -175,6 +181,39 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
     // render that updates state.grid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Mid-game joker auto-place: the reducer's drawNext silently lands the
+  // joker on the spiral and continues drawing, so the UI never sees a
+  // "joker drawn" beat. Watch the grid for a freshly arrived joker and
+  // play the special animation + sound on top of the (already updated) cell.
+  // hiddenSlotsFor('joker-place') hides the static cell while the overlay
+  // performs the entrance.
+  const prevJokerSlotRef = useRef<number | null | 'uninit'>('uninit');
+  useEffect(() => {
+    let current: number | null = null;
+    for (let i = 0; i < state.grid.length; i++) {
+      const c = state.grid[i];
+      if (c && isJoker(c)) {
+        current = i;
+        break;
+      }
+    }
+    const prev = prevJokerSlotRef.current;
+    prevJokerSlotRef.current = current;
+    // First run: just record the starting slot. The intro effect handles any
+    // joker that was seeded at mount time.
+    if (prev === 'uninit') return;
+    // Only fire when a joker just appeared at a NEW slot.
+    if (current === null || current === prev) return;
+    if (settings.reduceMotion) return;
+    const card = state.grid[current];
+    if (!card) return;
+    playSound('joker');
+    haptic('medium');
+    setAnim({ kind: 'joker-place', card, toSlot: current });
+    if (animTimer.current) clearTimeout(animTimer.current);
+    animTimer.current = setTimeout(() => setAnim(null), ANIM_DURATION['joker-place']);
+  }, [state.grid, settings.reduceMotion, playSound, haptic]);
 
   const liveScore = useMemo(
     () =>
