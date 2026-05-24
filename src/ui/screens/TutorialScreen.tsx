@@ -560,7 +560,7 @@ const AchievementsVisual = () => {
         <Text style={{ color: colors.success }}>No Flushes ×1.25</Text>,{' '}
         <Text style={{ color: colors.success }}>No Straights ×1.25</Text>,{' '}
         <Text style={{ color: colors.success }}>Trash Joker ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Frugal ×1.3</Text>. And{' '}
+        <Text style={{ color: colors.success }}>Frugal ×1.5</Text>. And{' '}
         <Text style={{ color: colors.warn }}>Burnout ×1.3</Text> +{' '}
         <Text style={{ color: colors.warn }}>×1.05 / deck card</Text> reward the other end of
         the curve.

@@ -346,17 +346,17 @@ const symmetricFrame: BonusCard = {
 const burnout: BonusCard = {
   id: 'burnout-x1_3',
   name: 'Burnout ×1.3',
-  description: 'Spent 8 or more suit perks across the game: final score ×1.3.',
+  description: 'Spent 18 or more suit perks across the game: final score ×1.3.',
   gridEffect: ({ perkSpent }) =>
-    perkSpent.length >= 8 ? { totalMultiplier: 1.3 } : {},
+    perkSpent.length >= 18 ? { totalMultiplier: 1.3 } : {},
 };
 
 const frugal: BonusCard = {
-  id: 'frugal-x1_3',
-  name: 'Frugal ×1.3',
-  description: 'Spent 4 or fewer suit perks across the game: final score ×1.3.',
+  id: 'frugal-x1_5',
+  name: 'Frugal ×1.5',
+  description: 'Spent 12 or fewer suit perks across the game: final score ×1.5.',
   gridEffect: ({ perkSpent }) =>
-    perkSpent.length <= 4 ? { totalMultiplier: 1.3 } : {},
+    perkSpent.length <= 12 ? { totalMultiplier: 1.5 } : {},
 };
 
 // ---------- The pool ----------
