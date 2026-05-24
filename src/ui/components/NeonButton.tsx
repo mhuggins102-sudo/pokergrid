@@ -101,7 +101,10 @@ export const NeonButton = ({
 
 const styles = StyleSheet.create({
   btn: {
-    alignSelf: 'stretch', // fill the Pressable so flex / width from outside works
+    // Fill the Pressable in both axes so explicit `height` / `width` /
+    // `flex` props from the consumer reach the visual button.
+    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: radius.md,
     borderWidth: 1.5,
     alignItems: 'center',

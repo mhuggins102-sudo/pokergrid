@@ -46,10 +46,10 @@ interface Props {
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
-  H: 'Swap (♥)',
-  S: 'Slide (♠)',
-  D: 'Destroy (♦)',
-  C: 'Bonus (♣)',
+  H: 'Swap',
+  S: 'Slide',
+  D: 'Destroy',
+  C: 'Bonus',
 };
 
 const SUIT_PERK_VARIANT: Record<string, 'primary' | 'warn' | 'danger'> = {
@@ -507,52 +507,56 @@ const renderBottom = (
     if (!state.drawn) return null;
     const isJk = isJoker(state.drawn);
     const suit = !isJk ? (state.drawn as any).suit : null;
+    const showSuit = !isJk && suitOK && !!suit;
     return (
       <View style={styles.actionCol}>
-        <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
-          <Text style={styles.drawnLabel}>Drawn</Text>
-          {animating ? (
-            <View style={{ width: 88, height: 88 }} />
-          ) : (
-            <CardTile card={state.drawn} size="lg" />
-          )}
-        </DrawnArea>
-        <View style={styles.btnRowHoriz}>
+        <View style={styles.cardRow}>
+          <NeonButton
+            label="Trash"
+            variant="secondary"
+            disabled={disabled || isJk}
+            onPress={() => {
+              haptic('light');
+              playSound('tap');
+              dispatch({ type: 'DISCARD_NONE' });
+            }}
+            style={styles.sideBtn}
+          />
+          <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
+            <Text style={styles.drawnLabel}>Drawn</Text>
+            {animating ? (
+              <View style={{ width: 88, height: 88 }} />
+            ) : (
+              <CardTile card={state.drawn} size="lg" />
+            )}
+          </DrawnArea>
           <NeonButton
             label="Place"
             variant="primary"
             disabled={disabled}
             onPress={onPlace}
-            style={styles.flexBtn}
+            style={styles.sideBtn}
           />
-          {!isJk && suitOK && suit && (
-            <NeonButton
-              label={SUIT_PERK_LABEL[suit]}
-              variant={SUIT_PERK_VARIANT[suit]}
-              disabled={disabled}
-              onPress={() => {
-                haptic('light');
-                playSound('tap');
-                dispatch({ type: 'BEGIN_SUIT_ACTION' });
-              }}
-              style={styles.flexBtn}
-            />
-          )}
-          {!isJk && (
-            <NeonButton
-              label="Trash"
-              variant="secondary"
-              disabled={disabled}
-              onPress={() => {
-                haptic('light');
-                playSound('tap');
-                dispatch({ type: 'DISCARD_NONE' });
-              }}
-              style={styles.flexBtn}
-            />
-          )}
         </View>
-        {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
+        {showSuit && suit ? (
+          <NeonButton
+            label={SUIT_PERK_LABEL[suit]}
+            variant={SUIT_PERK_VARIANT[suit]}
+            disabled={disabled}
+            onPress={() => {
+              haptic('light');
+              playSound('tap');
+              dispatch({ type: 'BEGIN_SUIT_ACTION' });
+            }}
+            style={styles.bottomBtn}
+          />
+        ) : (
+          // Reserve the same vertical space whether the perk is available
+          // or not, so the card row doesn't jump as draws come and go.
+          <View style={styles.bottomBtnSpacer}>
+            {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
+          </View>
+        )}
       </View>
     );
   }
@@ -724,14 +728,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: spacing.sm,
   },
-  btnRowHoriz: {
+  cardRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'center',
     alignSelf: 'stretch',
     paddingHorizontal: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
-  flexBtn: { flex: 1 },
+  // Trash | Drawn | Place — flanking the card; the suit-perk button below.
+  // All three share the same height so the action area reads as a single
+  // unit. "A bit taller than the old md size" → 72px.
+  sideBtn: {
+    flex: 1,
+    height: 72,
+  },
+  bottomBtn: {
+    alignSelf: 'stretch',
+    height: 72,
+    marginHorizontal: spacing.sm,
+  },
+  bottomBtnSpacer: {
+    alignSelf: 'stretch',
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: spacing.sm,
+  },
   hintCenter: {
     color: colors.textMid,
     fontFamily: fonts.sans,
