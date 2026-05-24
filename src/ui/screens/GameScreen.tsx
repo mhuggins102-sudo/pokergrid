@@ -507,130 +507,134 @@ const renderBottom = (
     if (!state.drawn) return null;
     const isJk = isJoker(state.drawn);
     const suit = !isJk ? (state.drawn as any).suit : null;
-    const showSuit = !isJk && suitOK && !!suit;
     return (
-      <View style={styles.actionCol}>
-        <View style={styles.cardRow}>
-          <NeonButton
-            label="Trash"
-            variant="secondary"
-            disabled={disabled || isJk}
-            onPress={() => {
-              haptic('light');
-              playSound('tap');
-              dispatch({ type: 'DISCARD_NONE' });
-            }}
-            style={styles.sideBtn}
-          />
-          <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
-            <Text style={styles.drawnLabel}>Drawn</Text>
-            {animating ? (
-              <View style={{ width: 88, height: 88 }} />
-            ) : (
-              <CardTile card={state.drawn} size="lg" />
-            )}
-          </DrawnArea>
+      <View style={styles.actionRow}>
+        <DrawnArea drawnKey={drawnKey} deckCount={state.deck.length}>
+          <Text style={styles.drawnLabel}>Drawn</Text>
+          {animating ? (
+            <View style={{ width: 88, height: 88 }} />
+          ) : (
+            <CardTile card={state.drawn} size="lg" />
+          )}
+        </DrawnArea>
+        <View style={styles.btnCol}>
           <NeonButton
             label="Place"
             variant="primary"
             disabled={disabled}
             onPress={onPlace}
-            style={styles.sideBtn}
+            style={styles.stackedBtn}
           />
+          {!isJk && suitOK && suit && (
+            <NeonButton
+              label={SUIT_PERK_LABEL[suit]}
+              variant={SUIT_PERK_VARIANT[suit]}
+              disabled={disabled}
+              onPress={() => {
+                haptic('light');
+                playSound('tap');
+                dispatch({ type: 'BEGIN_SUIT_ACTION' });
+              }}
+              style={styles.stackedBtn}
+            />
+          )}
+          {!isJk && (
+            <NeonButton
+              label="Trash"
+              variant="secondary"
+              disabled={disabled}
+              onPress={() => {
+                haptic('light');
+                playSound('tap');
+                dispatch({ type: 'DISCARD_NONE' });
+              }}
+              style={styles.stackedBtn}
+            />
+          )}
+          {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
         </View>
-        {showSuit && suit ? (
-          <NeonButton
-            label={SUIT_PERK_LABEL[suit]}
-            variant={SUIT_PERK_VARIANT[suit]}
-            disabled={disabled}
-            onPress={() => {
-              haptic('light');
-              playSound('tap');
-              dispatch({ type: 'BEGIN_SUIT_ACTION' });
-            }}
-            style={styles.bottomBtn}
-          />
-        ) : (
-          // Reserve the same vertical space whether the perk is available
-          // or not, so the card row doesn't jump as draws come and go.
-          <View style={styles.bottomBtnSpacer}>
-            {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
-          </View>
-        )}
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-hop') {
     return (
-      <View style={styles.actionCol}>
+      <View style={styles.actionRow}>
         <DrawnArea drawnKey={drawnKey + '-hop'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitH }]}>♥ Swap</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <Text style={styles.hintCenter}>Tap two cards that share a row or column.</Text>
-        <NeonButton
-          label="Cancel"
-          variant="secondary"
-          size="sm"
-          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-        />
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>Tap two cards that share a row or column.</Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-slide-source') {
     return (
-      <View style={styles.actionCol}>
+      <View style={styles.actionRow}>
         <DrawnArea drawnKey={drawnKey + '-slide'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <Text style={styles.hintCenter}>
-          Tap a card and tap the destination, OR drag from a card in the direction you want.
-        </Text>
-        <NeonButton
-          label="Cancel"
-          variant="secondary"
-          size="sm"
-          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-        />
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap a card and tap the destination, OR drag from a card in the direction you want.
+          </Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-slide-dest') {
     return (
-      <View style={styles.actionCol}>
+      <View style={styles.actionRow}>
         <DrawnArea drawnKey={drawnKey + '-slide-dest'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitS }]}>♠ Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <Text style={styles.hintCenter}>Tap a glowing destination.</Text>
-        <NeonButton
-          label="Pick a different card"
-          variant="secondary"
-          size="sm"
-          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-        />
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>Tap a glowing destination.</Text>
+          <NeonButton
+            label="Pick a different card"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
       </View>
     );
   }
 
   if (p.kind === 'awaiting-target-destroy') {
     return (
-      <View style={styles.actionCol}>
+      <View style={styles.actionRow}>
         <DrawnArea drawnKey={drawnKey + '-destroy'} deckCount={state.deck.length}>
           <Text style={[styles.drawnLabel, { color: colors.suitD }]}>♦ Destroy</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
-        <Text style={styles.hintCenter}>Tap any card on the grid to trash it.</Text>
-        <NeonButton
-          label="Cancel"
-          variant="secondary"
-          size="sm"
-          onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-        />
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>Tap any card on the grid to trash it.</Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
       </View>
     );
   }
@@ -723,44 +727,30 @@ const styles = StyleSheet.create({
   gridWrap: { alignItems: 'center', paddingVertical: spacing.xs },
   gridStack: { position: 'relative' },
   bottom: { flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  actionCol: {
-    gap: spacing.sm,
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-  },
-  cardRow: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'stretch',
+    gap: spacing.md,
     paddingHorizontal: spacing.sm,
-    gap: spacing.sm,
   },
-  // Trash | Drawn | Place — flanking the card; the suit-perk button below.
-  // All three share the same height so the action area reads as a single
-  // unit. "A bit taller than the old md size" → 72px.
-  sideBtn: {
+  // Stacked column of action buttons on the right of the drawn card. The
+  // three buttons (Place, suit perk, Trash) all use this style so they share
+  // an identical height — previously Trash used size="sm" and was visibly
+  // shorter.
+  btnCol: {
     flex: 1,
-    height: 72,
-  },
-  bottomBtn: {
-    alignSelf: 'stretch',
-    height: 72,
-    marginHorizontal: spacing.sm,
-  },
-  bottomBtnSpacer: {
-    alignSelf: 'stretch',
-    height: 72,
-    alignItems: 'center',
+    gap: spacing.xs,
     justifyContent: 'center',
-    marginHorizontal: spacing.sm,
   },
-  hintCenter: {
-    color: colors.textMid,
-    fontFamily: fonts.sans,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-    paddingHorizontal: spacing.lg,
+  stackedBtn: {
+    height: 48,
+  },
+  // Used by the bonus-card-resolving and bonus-card-replacing flows. Bonus
+  // choice cards stack vertically beneath a title.
+  actionCol: {
+    gap: spacing.sm,
+    alignItems: 'stretch',
+    paddingHorizontal: spacing.md,
   },
   drawnBlock: { alignItems: 'center', gap: spacing.xs },
   deckUnderDrawn: {
