@@ -99,6 +99,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
   };
 
   if (isJoker(card)) {
+    const starSize = dim.rank * 1.55;
     return (
       <View
         style={[
@@ -115,11 +116,20 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
             // No corner glyphs on the joker (it has no suit to encode), so the
             // center star gets the whole tile. Bumped well past the rank size
             // so it reads as the focal element on the grid.
-            fontSize: dim.rank * 1.55,
+            fontSize: starSize,
             color: rankColor,
             textShadowColor: glowColor,
             textShadowRadius: cba ? 2 : 10,
-            lineHeight: dim.rank * 1.55,
+            // Span the full cell so vertical alignment is independent of the
+            // parent's flex centering, then nudge down ~10% of fontSize: the
+            // ★ glyph sits on the baseline, so its visual center sits above
+            // the line-box center until we shift it.
+            width: dim.side,
+            height: dim.side,
+            lineHeight: dim.side,
+            textAlign: 'center',
+            textAlignVertical: 'center',
+            transform: [{ translateY: starSize * 0.1 }],
           }}
         >
           ★
