@@ -21,6 +21,7 @@ const baseState = (overrides: Partial<GameState>): GameState => ({
   history: [],
   past: [],
   undoCount: 0,
+  swappedBonus: false,
   ...overrides,
 });
 
@@ -231,6 +232,8 @@ describe('GameState — ♣ Cards bonus draw', () => {
     expect(after.bonusCards[0]).toEqual(held[0]);
     expect(after.bonusCards[1]).toEqual(begun.phase.drawn[0]);
     expect(after.bonusCards[2]).toEqual(held[2]);
+    // swappedBonus is set so the No Swap challenge can detect it.
+    expect(after.swappedBonus).toBe(true);
   });
 });
 
@@ -259,6 +262,18 @@ describe('GameState — spiral placement order', () => {
     for (const slot of expected) {
       expect(s.grid[slot]).not.toBeNull();
     }
+  });
+});
+
+describe('GameState — short deck (challenge mode)', () => {
+  test('newGame respects deckLimit by truncating the shuffled deck', () => {
+    const full = newGame('hard', seededRng(1));
+    const short = newGame('hard', seededRng(1), undefined, 45);
+    // 53-card source deck → 52 in deck after auto-placing 1 (or fewer if a
+    // joker auto-place chain consumed more). With deckLimit=45, after the
+    // first card placement + any joker chain, there should be 8 fewer cards
+    // available than the full deck case.
+    expect(short.deck.length).toBe(full.deck.length - 8);
   });
 });
 

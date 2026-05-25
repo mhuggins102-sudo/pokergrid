@@ -31,7 +31,7 @@ const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boole
   switch (m) {
     case 'wl':
       if (s.totalRuns === 0) return { value: '—', isEmpty: true };
-      return { value: `${s.wins} / ${s.totalRuns - s.wins}`, isEmpty: false };
+      return { value: `${s.wins}-${s.totalRuns - s.wins}`, isEmpty: false };
     case 'best':
       return s.best === null
         ? { value: '—', isEmpty: true }

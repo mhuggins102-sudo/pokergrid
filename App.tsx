@@ -199,9 +199,18 @@ const contextMaxUndos = (ctx: PlayContext): number => {
   }
 };
 
+const contextDeckLimit = (ctx: PlayContext): number | undefined => {
+  if (ctx.mode !== 'challenge') return undefined;
+  return findChallenge(ctx.id).deckLimit;
+};
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
-  const { state, dispatch } = useGame(contextDifficulty(context), target);
+  const { state, dispatch } = useGame(
+    contextDifficulty(context),
+    target,
+    contextDeckLimit(context)
+  );
   if (state.phase.kind === 'game-over') {
     return (
       <ResultScreen

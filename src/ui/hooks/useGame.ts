@@ -11,11 +11,15 @@ type Reducer = (s: GameState, a: Action) => GameState;
 
 const reducer: Reducer = (s, a) => step(s, a);
 
-export const useGame = (difficulty: Difficulty, target?: number): GameApi => {
+export const useGame = (
+  difficulty: Difficulty,
+  target?: number,
+  deckLimit?: number
+): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
     undefined as unknown as GameState,
-    () => newGame(difficulty, undefined, target)
+    () => newGame(difficulty, undefined, target, deckLimit)
   );
 
   const dispatch = useCallback((a: Action) => rawDispatch(a), [rawDispatch]);

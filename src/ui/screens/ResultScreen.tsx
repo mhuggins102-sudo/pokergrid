@@ -155,7 +155,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   //    condition is met.
   const challenge = context.mode === 'challenge' ? findChallenge(context.id) : null;
   const won = challenge
-    ? challengeWon(challenge, state.grid, report)
+    ? challengeWon(challenge, state, report)
     : total >= state.target;
 
   const kicker =

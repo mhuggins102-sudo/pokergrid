@@ -1,16 +1,26 @@
 import { isJoker } from './cards';
 import { Grid } from './grid';
 import { ScoreReport } from './scoring';
+import type { GameState } from './state';
 
 // ============================================================================
 // Challenge definitions.
 //
 // Each challenge has a target score AND a structural constraint on the final
-// grid / score. They share the same in-game loop as Free Play; the difference
-// is only in how we evaluate "won" at the end and how we present the goal.
+// run (grid + report + game-state history). They share the same in-game loop
+// as Free Play; the difference is only in how we evaluate "won" at the end
+// and how we present the goal. Some also override game-start parameters
+// (e.g. deck size) via `deckLimit`.
 // ============================================================================
 
-export type ChallengeId = 'balanced' | 'dynamite' | 'jokerless';
+export type ChallengeId =
+  | 'balanced'
+  | 'dynamite'
+  | 'jokerless'
+  | 'no-swap'
+  | 'grid-only'
+  | 'line-only'
+  | 'short-deck';
 
 export interface Challenge {
   id: ChallengeId;
@@ -18,8 +28,10 @@ export interface Challenge {
   goal: string;
   // Total score that must be reached (in addition to the structural constraint).
   scoreTarget: number;
-  // True if the structural condition is met by the final grid + report.
-  conditionMet: (grid: Grid, report: ScoreReport) => boolean;
+  // True if the structural condition is met by the final state + report.
+  conditionMet: (state: GameState, report: ScoreReport) => boolean;
+  // Optional: override the deck size at game start. Used by short-deck.
+  deckLimit?: number;
 }
 
 export const CHALLENGES: Challenge[] = [
@@ -28,24 +40,57 @@ export const CHALLENGES: Challenge[] = [
     name: 'Balanced',
     goal: 'Score 500+ without any single row or column worth 100+.',
     scoreTarget: 500,
-    conditionMet: (_grid, report) =>
+    conditionMet: (_state, report) =>
       report.lines.every(l => l.total < 100),
   },
   {
     id: 'dynamite',
     name: 'Dynamite',
-    goal: 'Score 500+ with at least one row or column worth 200+.',
+    goal: 'Score 500+ with at least one row or column worth 300+.',
     scoreTarget: 500,
-    conditionMet: (_grid, report) =>
-      report.lines.some(l => l.total >= 200),
+    conditionMet: (_state, report) =>
+      report.lines.some(l => l.total >= 300),
   },
   {
     id: 'jokerless',
     name: 'Jokerless',
     goal: 'Score 500+ with no joker on the grid at game end.',
     scoreTarget: 500,
-    conditionMet: (grid) =>
-      !grid.some(c => c !== null && isJoker(c)),
+    conditionMet: (state) =>
+      !state.grid.some(c => c !== null && isJoker(c)),
+  },
+  {
+    id: 'no-swap',
+    name: 'No Swap',
+    goal: 'Score 500+ without swapping out a bonus card at the cap.',
+    scoreTarget: 500,
+    conditionMet: (state) => !state.swappedBonus,
+  },
+  {
+    id: 'grid-only',
+    name: 'Grid Only',
+    goal: 'Score 500+ holding only end-of-game multiplier bonus cards.',
+    scoreTarget: 500,
+    conditionMet: (state) =>
+      state.bonusCards.length > 0 &&
+      state.bonusCards.every(c => !c.lineEffect),
+  },
+  {
+    id: 'line-only',
+    name: 'Line Only',
+    goal: 'Score 500+ holding no end-of-game multiplier bonus cards.',
+    scoreTarget: 500,
+    conditionMet: (state) =>
+      state.bonusCards.length > 0 &&
+      state.bonusCards.every(c => !c.gridEffect),
+  },
+  {
+    id: 'short-deck',
+    name: 'Short Deck',
+    goal: 'Score 500+ with a 45-card deck (8 cards held out at random).',
+    scoreTarget: 500,
+    deckLimit: 45,
+    conditionMet: () => true,
   },
 ];
 
@@ -55,8 +100,12 @@ export const findChallenge = (id: ChallengeId): Challenge => {
   return c;
 };
 
-export const challengeWon = (challenge: Challenge, grid: Grid, report: ScoreReport): boolean =>
-  report.total >= challenge.scoreTarget && challenge.conditionMet(grid, report);
+export const challengeWon = (
+  challenge: Challenge,
+  state: GameState,
+  report: ScoreReport
+): boolean =>
+  report.total >= challenge.scoreTarget && challenge.conditionMet(state, report);
 
 // ============================================================================
 // Targets Up — Levels mode.

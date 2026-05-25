@@ -80,6 +80,9 @@ export interface GameState {
   // decide whether to count the run for stats; the GameScreen reads it to
   // enforce per-mode caps (challenges = 0, targets-up = 1, free = unlimited).
   undoCount: number;
+  // True once the player has used BONUS_REPLACE to swap out a held bonus card
+  // (only possible at the cap). The "No Swap" challenge checks this.
+  swappedBonus: boolean;
 }
 
 export type Action =
@@ -136,9 +139,16 @@ export const canPreviewDeck = (difficulty: Difficulty): boolean =>
 export const newGame = (
   difficulty: Difficulty,
   rng: () => number = Math.random,
-  targetOverride?: number
+  targetOverride?: number,
+  // Optional: cap the playing deck to this many cards (after shuffle, before
+  // the first card is placed). Used by the Short Deck challenge to remove 8
+  // random cards from circulation.
+  deckLimit?: number
 ): GameState => {
-  const deck = freshShuffledDeck(rng);
+  let deck = freshShuffledDeck(rng);
+  if (deckLimit !== undefined && deckLimit < deck.length) {
+    deck = deck.slice(0, deckLimit);
+  }
   const shuffledBonus = shuffle(BONUS_DECK_POOL, rng);
   const starterCount = STARTER_BONUS_BY_DIFFICULTY[difficulty];
   const bonusCards = shuffledBonus.slice(0, starterCount);
@@ -159,6 +169,7 @@ export const newGame = (
     history: ['Game start'],
     past: [],
     undoCount: 0,
+    swappedBonus: false,
   };
   return drawNext(initial);
 };
@@ -356,7 +367,8 @@ const handleBonusReplace = (s: GameState, oldIdx: number): GameState => {
   // The OTHER drawn card returns to the bottom of the bonus deck. The replaced
   // bonus card is gone (we don't model a bonus-card trash explicitly).
   const returningDrawn = phase.drawn.filter((_, i) => i !== phase.pickedNew);
-  return finishBonusFlow(s, returningDrawn, newHand);
+  // Mark that a forced-swap happened — the No Swap challenge looks at this.
+  return finishBonusFlow({ ...s, swappedBonus: true }, returningDrawn, newHand);
 };
 
 const handleBonusDecline = (s: GameState): GameState => {
