@@ -122,9 +122,11 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   card: {
-    // Two cards per row, accounting for the row's gap.
+    // Two cards per row, accounting for the row's gap. flexGrow stays at 0
+    // so a lone card in an odd-count category keeps the same width as the
+    // pair above it rather than stretching to fill the row.
     flexBasis: '48%',
-    flexGrow: 1,
+    flexGrow: 0,
     backgroundColor: colors.bgPanel,
     borderColor: colors.warn,
     borderWidth: 1,

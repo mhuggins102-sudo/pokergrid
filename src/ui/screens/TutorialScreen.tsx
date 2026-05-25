@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Card, Rank, StandardCard, Suit } from '../../game/cards';
+import { BONUS_DECK_POOL } from '../../game/bonusCards';
 import { Grid } from '../../game/grid';
 import { scoreGrid, HAND_BASE_VALUE } from '../../game/scoring';
 import {
@@ -318,12 +319,12 @@ const BonusVisual = () => (
         <Text style={demoStyles.bonusDesc}>Multiplies row 3's total by 2.</Text>
       </View>
       <View style={[demoStyles.bonusChip, glow(colors.warn, 8, 0.45)]}>
-        <Text style={demoStyles.bonusName}>×1.05 / deck card</Text>
-        <Text style={demoStyles.bonusDesc}>Compounds 1.05 per deck card remaining at game end.</Text>
+        <Text style={demoStyles.bonusName}>Speedrun</Text>
+        <Text style={demoStyles.bonusDesc}>×1.05 per playing card left in the deck at game end.</Text>
       </View>
     </View>
     <Caption>
-      The bonus deck has 39 unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
+      The bonus deck has {BONUS_DECK_POOL.length} unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
       to 3; at the cap, ♣ forces a swap.
     </Caption>
     <Text style={demoStyles.subsection}>What kinds?</Text>
