@@ -11,7 +11,16 @@ interface Props {
 
 const Difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
 
-type Metric = 'best' | 'average' | 'streak';
+type Metric = 'wl' | 'best' | 'average' | 'streak';
+
+const METRIC_ORDER: Metric[] = ['wl', 'best', 'average', 'streak'];
+
+const METRIC_LABEL: Record<Metric, string> = {
+  wl: 'W/L',
+  best: 'Best',
+  average: 'Avg',
+  streak: 'Streak',
+};
 
 const fmtDate = (ts: number): string => {
   const d = new Date(ts);
@@ -20,6 +29,9 @@ const fmtDate = (ts: number): string => {
 
 const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boolean } => {
   switch (m) {
+    case 'wl':
+      if (s.totalRuns === 0) return { value: '—', isEmpty: true };
+      return { value: `${s.wins} / ${s.totalRuns - s.wins}`, isEmpty: false };
     case 'best':
       return s.best === null
         ? { value: '—', isEmpty: true }
@@ -36,7 +48,7 @@ const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boole
 
 export const StatsScreen = ({ onBack }: Props) => {
   const { stats } = useStats();
-  const [metric, setMetric] = useState<Metric>('best');
+  const [metric, setMetric] = useState<Metric>('wl');
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -48,7 +60,7 @@ export const StatsScreen = ({ onBack }: Props) => {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionLabel}>Difficulty</Text>
         <View style={styles.toggle}>
-          {(['best', 'average', 'streak'] as Metric[]).map(m => {
+          {METRIC_ORDER.map(m => {
             const active = metric === m;
             return (
               <Pressable
@@ -57,7 +69,7 @@ export const StatsScreen = ({ onBack }: Props) => {
                 style={[styles.toggleBtn, active && styles.toggleBtnActive]}
               >
                 <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
-                  {m === 'best' ? 'Best' : m === 'average' ? 'Avg' : 'Streak'}
+                  {METRIC_LABEL[m]}
                 </Text>
               </Pressable>
             );

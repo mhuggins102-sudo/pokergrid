@@ -17,6 +17,7 @@ export interface DifficultyStat {
   best: number | null;       // best score across all runs at this difficulty
   totalScore: number;        // sum of scores — used to derive the average
   totalRuns: number;
+  wins: number;              // count of won runs (losses = totalRuns - wins)
   bestStreak: number;        // longest run of consecutive wins
   currentStreak: number;     // currently active streak (resets on loss)
 }
@@ -25,6 +26,7 @@ const emptyDifficultyStat = (): DifficultyStat => ({
   best: null,
   totalScore: 0,
   totalRuns: 0,
+  wins: 0,
   bestStreak: 0,
   currentStreak: 0,
 });
@@ -110,6 +112,7 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
     best: newBest,
     totalScore: diffPrev.totalScore + run.score,
     totalRuns: diffPrev.totalRuns + 1,
+    wins: diffPrev.wins + (run.won ? 1 : 0),
     currentStreak: newCurrentStreak,
     bestStreak: Math.max(diffPrev.bestStreak, newCurrentStreak),
   };
