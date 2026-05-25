@@ -31,7 +31,8 @@ export type ChallengeId =
   | 'grid-only'
   | 'line-only'
   | 'short-deck'
-  | 'low-hands';
+  | 'low-hands'
+  | 'high-hands';
 
 export interface Challenge {
   id: ChallengeId;
@@ -46,14 +47,9 @@ export interface Challenge {
 }
 
 export const CHALLENGES: Challenge[] = [
-  {
-    id: 'balanced',
-    name: 'Balanced',
-    goal: 'Score 500+ without any single row or column worth 100+.',
-    scoreTarget: 500,
-    conditionMet: (_state, report) =>
-      report.lines.every(l => l.total < 100),
-  },
+  // Ordered easiest → hardest (rough gut feel; the score target is the same
+  // 500 for everyone, so the ordering reflects how restrictive the
+  // structural rule is in practice).
   {
     id: 'dynamite',
     name: 'Dynamite',
@@ -61,6 +57,32 @@ export const CHALLENGES: Challenge[] = [
     scoreTarget: 500,
     conditionMet: (_state, report) =>
       report.lines.some(l => l.total >= 300),
+  },
+  {
+    id: 'line-only',
+    name: 'Line Only',
+    goal: 'Score 500+ holding no end-of-game multiplier bonus cards.',
+    scoreTarget: 500,
+    conditionMet: (state) =>
+      state.bonusCards.length > 0 &&
+      state.bonusCards.every(c => !c.gridEffect),
+  },
+  {
+    id: 'grid-only',
+    name: 'Grid Only',
+    goal: 'Score 500+ holding only end-of-game multiplier bonus cards.',
+    scoreTarget: 500,
+    conditionMet: (state) =>
+      state.bonusCards.length > 0 &&
+      state.bonusCards.every(c => !c.lineEffect),
+  },
+  {
+    id: 'balanced',
+    name: 'Balanced',
+    goal: 'Score 500+ without any single row or column worth 100+.',
+    scoreTarget: 500,
+    conditionMet: (_state, report) =>
+      report.lines.every(l => l.total < 100),
   },
   {
     id: 'jokerless',
@@ -78,30 +100,20 @@ export const CHALLENGES: Challenge[] = [
     conditionMet: (state) => !state.swappedBonus,
   },
   {
-    id: 'grid-only',
-    name: 'Grid Only',
-    goal: 'Score 500+ holding only end-of-game multiplier bonus cards.',
-    scoreTarget: 500,
-    conditionMet: (state) =>
-      state.bonusCards.length > 0 &&
-      state.bonusCards.every(c => !c.lineEffect),
-  },
-  {
-    id: 'line-only',
-    name: 'Line Only',
-    goal: 'Score 500+ holding no end-of-game multiplier bonus cards.',
-    scoreTarget: 500,
-    conditionMet: (state) =>
-      state.bonusCards.length > 0 &&
-      state.bonusCards.every(c => !c.gridEffect),
-  },
-  {
     id: 'short-deck',
     name: 'Short Deck',
     goal: 'Score 500+ with a 45-card deck (8 cards held out at random).',
     scoreTarget: 500,
     deckLimit: 45,
     conditionMet: () => true,
+  },
+  {
+    id: 'high-hands',
+    name: 'High Hands',
+    goal: 'Score 500+ with every scoring line a Three of a Kind or higher (High Card lines don\'t count against).',
+    scoreTarget: 500,
+    conditionMet: (_state, report) =>
+      report.lines.every(l => l.hand !== 'PAIR' && l.hand !== 'TWO_PAIR'),
   },
   {
     id: 'low-hands',
