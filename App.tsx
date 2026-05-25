@@ -188,6 +188,17 @@ const contextKicker = (ctx: PlayContext): string | undefined => {
   }
 };
 
+// Per-mode undo cap. Challenge runs are honor-only: no undo. Targets Up lets
+// the player erase one misclick per run. Free play is unrestricted (each undo
+// taints the run for stats purposes).
+const contextMaxUndos = (ctx: PlayContext): number => {
+  switch (ctx.mode) {
+    case 'free': return Infinity;
+    case 'targets-up': return 1;
+    case 'challenge': return 0;
+  }
+};
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
   const { state, dispatch } = useGame(contextDifficulty(context), target);
@@ -208,6 +219,7 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
       dispatch={dispatch}
       onHome={onHome}
       kicker={contextKicker(context)}
+      maxUndos={contextMaxUndos(context)}
     />
   );
 };

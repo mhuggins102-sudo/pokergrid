@@ -9,11 +9,17 @@ import Animated, {
 import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
+export type UndoState = 'hidden' | 'available' | 'unavailable';
+
 interface Props {
   target: number;
   liveScore?: number;
   onInfoPress?: () => void;
   onHomePress?: () => void;
+  onUndoPress?: () => void;
+  // 'hidden' = challenge mode (no undo at all). 'available' = pressable.
+  // 'unavailable' = greyed out (no snapshots, or per-mode cap reached).
+  undoState?: UndoState;
   // Optional kicker shown above the score (e.g. "level 3", "balanced").
   kicker?: string;
 }
@@ -70,8 +76,12 @@ export const ScoreBar = ({
   liveScore,
   onInfoPress,
   onHomePress,
+  onUndoPress,
+  undoState = 'hidden',
   kicker,
 }: Props) => {
+  const showUndo = undoState !== 'hidden';
+  const undoActive = undoState === 'available';
   return (
     <View style={styles.bar}>
       <View style={styles.topRow}>
@@ -86,6 +96,16 @@ export const ScoreBar = ({
             <ScoreReadout score={liveScore} target={target} />
           )}
         </View>
+        {showUndo && (
+          <Pressable
+            onPress={undoActive ? onUndoPress : undefined}
+            hitSlop={10}
+            disabled={!undoActive}
+            style={[styles.iconBtn, !undoActive && styles.iconBtnDisabled]}
+          >
+            <Text style={[styles.iconText, !undoActive && styles.iconTextDisabled]}>↶</Text>
+          </Pressable>
+        )}
         {onInfoPress && (
           <Pressable onPress={onInfoPress} hitSlop={10} style={styles.iconBtn}>
             <Text style={styles.iconText}>ⓘ</Text>
@@ -126,6 +146,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fonts.mono,
     fontWeight: '800',
+  },
+  iconBtnDisabled: {
+    borderColor: colors.outlineSoft,
+    opacity: 0.4,
+  },
+  iconTextDisabled: {
+    color: colors.textLow,
+    textShadowRadius: 0,
   },
   scoreBlock: {
     flex: 1,

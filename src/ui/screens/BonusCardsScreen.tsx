@@ -61,7 +61,12 @@ export const BonusCardsScreen = ({ onBack }: Props) => {
             <View style={styles.cardGrid}>
               {cards.map(c => (
                 <View key={c.id} style={styles.card}>
-                  <Text style={styles.cardName}>{c.name}</Text>
+                  <Text style={styles.cardTitle} numberOfLines={1} adjustsFontSizeToFit>
+                    {c.title}
+                  </Text>
+                  <Text style={styles.cardMult} numberOfLines={1} adjustsFontSizeToFit>
+                    {c.mult}
+                  </Text>
                   <Text style={styles.cardDesc}>{c.description}</Text>
                 </View>
               ))}
@@ -128,7 +133,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     ...glow(colors.warn, 4, 0.18),
   },
-  cardName: {
+  cardTitle: {
     color: colors.warn,
     fontFamily: fonts.mono,
     fontSize: 12,
@@ -136,12 +141,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textShadowColor: colors.warn,
     textShadowRadius: 3,
+    textAlign: 'center',
+  },
+  cardMult: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textShadowColor: colors.success,
+    textShadowRadius: 3,
+    textAlign: 'center',
+    marginTop: 2,
   },
   cardDesc: {
     color: colors.textMid,
     fontFamily: fonts.sans,
     fontSize: 11,
     lineHeight: 15,
-    marginTop: 3,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
 });

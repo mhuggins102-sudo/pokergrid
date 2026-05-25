@@ -13,6 +13,10 @@ export interface Settings {
   // When true, use the standard 2-color playing-card palette (red for ♥/♦,
   // pale-white for ♠/♣) instead of the default 4-color neon palette.
   twoColorDeck: boolean;
+  // True once the player has acknowledged the first-time undo warning
+  // ("undoing taints the run for stats"). Persists so we only show the
+  // confirmation modal once across the lifetime of the app.
+  undoWarningSeen: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -21,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   colorBlindAssist: false,
   twoColorDeck: false,
+  undoWarningSeen: false,
 };
 
 const STORAGE_KEY = 'pokergrid:settings:v1';

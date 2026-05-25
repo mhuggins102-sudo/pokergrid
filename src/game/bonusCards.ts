@@ -100,7 +100,7 @@ const handBoost = (hand: HandRank, multiplier: number): BonusCard => {
     name: `${title} ${mult}`,
     title,
     mult,
-    description: `Each line that scores ${title} is multiplied by ${m}.`,
+    description: `Lines scoring ${title}.`,
     lineEffect: line => (line.hand === hand ? { multiplier } : {}),
   };
 };
@@ -114,7 +114,7 @@ const rowBoost = (rowIdx: number, multiplier: number): BonusCard => {
     name: `${title} ${mult}`,
     title,
     mult,
-    description: `${title}'s score is multiplied by ${m}.`,
+    description: `${title}'s score.`,
     lineEffect: line =>
       line.kind === 'row' && line.index === rowIdx && line.hand
         ? { multiplier }
@@ -131,7 +131,7 @@ const colBoost = (colIdx: number, multiplier: number): BonusCard => {
     name: `${title} ${mult}`,
     title,
     mult,
-    description: `Column ${colIdx + 1}'s score is multiplied by ${m}.`,
+    description: `Column ${colIdx + 1}'s score.`,
     lineEffect: line =>
       line.kind === 'col' && line.index === colIdx && line.hand
         ? { multiplier }
@@ -145,7 +145,7 @@ const suitDensity = (suit: Suit): BonusCard => ({
   name: `${SUIT_GLYPH[suit]} Density ×1.1 (each)`,
   title: `${SUIT_GLYPH[suit]} Density`,
   mult: '×1.1 (each)',
-  description: `Each ${SUIT_GLYPH[suit]} in a line multiplies that line by 1.1.`,
+  description: `Each ${SUIT_GLYPH[suit]} in the line.`,
   lineEffect: line => {
     if (!line.hand) return {};
     const n = standardCards(line).filter(c => c.suit === suit).length;
@@ -160,7 +160,7 @@ const rainbowLine: BonusCard = {
   name: 'Rainbow ×2 (each)',
   title: 'Rainbow',
   mult: '×2 (each)',
-  description: 'Lines containing 4+ distinct suits score ×2.',
+  description: 'Lines with 4+ distinct suits.',
   lineEffect: line => {
     if (!line.hand) return {};
     const suits = new Set(standardCards(line).map(c => c.suit));
@@ -173,7 +173,7 @@ const jokerLine: BonusCard = {
   name: 'Joker Line ×1.5 (each)',
   title: 'Joker Line',
   mult: '×1.5 (each)',
-  description: 'The joker\'s row and column each score ×1.5.',
+  description: 'The joker\'s row and column.',
   lineEffect: line => {
     if (!line.hand) return {};
     const hasJoker = line.cards.some(c => c !== null && isJoker(c));
@@ -186,7 +186,7 @@ const outerEdge: BonusCard = {
   name: 'Outer Edge ×1.25 (each)',
   title: 'Outer Edge',
   mult: '×1.25 (each)',
-  description: 'Row 1, Row 5, Col 1, and Col 5 each score ×1.25.',
+  description: 'The 4 outer rows and columns (R1, R5, C1, C5).',
   lineEffect: line => {
     if (!line.hand) return {};
     const onEdge =
@@ -201,7 +201,7 @@ const royalTouch: BonusCard = {
   name: 'Royal Touch ×1.5 (each)',
   title: 'Royal Touch',
   mult: '×1.5 (each)',
-  description: 'Lines that contain an Ace score ×1.5.',
+  description: 'Lines containing an Ace.',
   lineEffect: line => {
     if (!line.hand) return {};
     const hasAce = standardCards(line).some(c => c.rank === 'A');
@@ -214,7 +214,7 @@ const spiralCore: BonusCard = {
   name: 'Spiral Core ×1.5 (each)',
   title: 'Spiral Core',
   mult: '×1.5 (each)',
-  description: 'Row 3 and Col 3 each score ×1.5.',
+  description: 'The center row and center column (R3, C3).',
   lineEffect: line => {
     if (!line.hand) return {};
     const onCore =
@@ -234,7 +234,7 @@ const cleanBorder: BonusCard = {
   name: 'Clean Border ×1.5',
   title: 'Clean Border',
   mult: '×1.5',
-  description: 'No face cards on the 16 border slots: final score ×1.5.',
+  description: 'No face cards on the 16 border slots.',
   gridEffect: ({ grid }) => {
     const anyFace = BORDER_SLOTS.some(i => {
       const c = grid[i];
@@ -249,7 +249,7 @@ const monochromeBorder: BonusCard = {
   name: 'Monochrome Border ×2',
   title: 'Monochrome Border',
   mult: '×2',
-  description: 'All border cards share a color (all red or all black): final score ×2.',
+  description: 'All border cards are the same color (red or black).',
   gridEffect: ({ grid }) => {
     const cards = BORDER_SLOTS.map(i => grid[i]).filter((c): c is Card => c !== null && !isJoker(c));
     if (cards.length === 0) return {};
@@ -265,7 +265,7 @@ const rainbowCorners: BonusCard = {
   name: 'Rainbow Corners ×1.25',
   title: 'Rainbow Corners',
   mult: '×1.25',
-  description: 'The 4 corner slots are 4 distinct suits: final score ×1.25.',
+  description: 'The 4 corners are 4 distinct suits.',
   gridEffect: ({ grid }) => {
     const cards = CORNER_SLOTS.map(i => grid[i]);
     if (cards.some(c => !c || isJoker(c))) return {};
@@ -279,7 +279,7 @@ const cozyJoker: BonusCard = {
   name: 'Cozy Joker ×1.15',
   title: 'Cozy Joker',
   mult: '×1.15',
-  description: 'Joker placed in the inner 3×3: final score ×1.15.',
+  description: 'Joker placed in the inner 3×3.',
   gridEffect: ({ grid }) => {
     const inInner = INNER_SLOTS.some(i => {
       const c = grid[i];
@@ -296,7 +296,7 @@ const deckBank: BonusCard = {
   name: 'Speedrun ×1.05 (each)',
   title: 'Speedrun',
   mult: '×1.05 (each)',
-  description: 'Each playing card remaining in the deck at game end multiplies the final score by 1.05.',
+  description: 'Each playing card still in the deck at game end.',
   gridEffect: ({ deckRemaining }) => ({
     totalMultiplier: deckRemaining > 0 ? Math.pow(1.05, deckRemaining) : 1,
   }),
@@ -307,7 +307,7 @@ const noFlushes: BonusCard = {
   name: 'No Flushes ×1.25',
   title: 'No Flushes',
   mult: '×1.25',
-  description: 'No line scores Flush, Straight Flush, or Royal Flush: final score ×1.25.',
+  description: 'No line scores a flush of any kind.',
   gridEffect: ({ lines }) => {
     const anyFlush = lines.some(l =>
       l.hand === 'FLUSH' || l.hand === 'STRAIGHT_FLUSH' || l.hand === 'ROYAL_FLUSH'
@@ -321,7 +321,7 @@ const noStraights: BonusCard = {
   name: 'No Straights ×1.25',
   title: 'No Straights',
   mult: '×1.25',
-  description: 'No line scores Straight, Straight Flush, or Royal Flush: final score ×1.25.',
+  description: 'No line scores a straight of any kind.',
   gridEffect: ({ lines }) => {
     const anyStraight = lines.some(l =>
       l.hand === 'STRAIGHT' || l.hand === 'STRAIGHT_FLUSH' || l.hand === 'ROYAL_FLUSH'
@@ -335,7 +335,7 @@ const trashJoker: BonusCard = {
   name: 'Trash Joker ×1.25',
   title: 'Trash Joker',
   mult: '×1.25',
-  description: 'The joker was destroyed during the game: final score ×1.25.',
+  description: 'The joker was destroyed during the run.',
   gridEffect: ({ discards }) => {
     const jokerOut = discards.some(c => isJoker(c));
     return jokerOut ? { totalMultiplier: 1.25 } : {};
@@ -357,7 +357,7 @@ const diagonalRun: BonusCard = {
   name: 'Diagonal ×1.25 (each)',
   title: 'Diagonal',
   mult: '×1.25 (each)',
-  description: 'Each grid diagonal that forms a Straight (or higher) multiplies the final score by 1.25. Both diagonals = ×1.5625.',
+  description: 'Each grid diagonal that forms a Straight or higher.',
   gridEffect: ({ grid }) => {
     const main = [grid[0], grid[6], grid[12], grid[18], grid[24]];
     const anti = [grid[4], grid[8], grid[12], grid[16], grid[20]];
@@ -376,7 +376,7 @@ const symmetricFrame: BonusCard = {
   name: 'Symmetric Frame ×1.2 (each)',
   title: 'Symmetric Frame',
   mult: '×1.2 (each)',
-  description: 'R1 and R5 sharing a hand type multiplies final score ×1.2; C1 and C5 sharing one multiplies it ×1.2 again. High Card doesn\'t count.',
+  description: 'R1/R5 or C1/C5 sharing a hand type (High Card doesn\'t count).',
   gridEffect: ({ lines }) => {
     const handAt = (kind: 'row' | 'col', idx: number): HandRank | null =>
       lines.find(l => l.kind === kind && l.index === idx)?.hand ?? null;
@@ -397,7 +397,7 @@ const burnout: BonusCard = {
   name: 'Burnout ×1.3',
   title: 'Burnout',
   mult: '×1.3',
-  description: 'Spent 18 or more suit perks across the game: final score ×1.3.',
+  description: '18+ suit perks spent across the run.',
   gridEffect: ({ perkSpent }) =>
     perkSpent.length >= 18 ? { totalMultiplier: 1.3 } : {},
 };
@@ -407,7 +407,7 @@ const frugal: BonusCard = {
   name: 'Frugal ×1.5',
   title: 'Frugal',
   mult: '×1.5',
-  description: 'Spent 12 or fewer suit perks across the game: final score ×1.5.',
+  description: '12 or fewer suit perks spent across the run.',
   gridEffect: ({ perkSpent }) =>
     perkSpent.length <= 12 ? { totalMultiplier: 1.5 } : {},
 };

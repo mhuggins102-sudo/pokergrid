@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -33,7 +33,7 @@ import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
 import { NeonButton } from '../components/NeonButton';
-import { ScoreBar } from '../components/ScoreBar';
+import { ScoreBar, UndoState as UndoStateKind } from '../components/ScoreBar';
 import { ScoringReferenceModal } from '../components/ScoringReferenceModal';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
@@ -45,6 +45,9 @@ interface Props {
   dispatch: (a: Action) => void;
   onHome?: () => void;
   kicker?: string;
+  // Per-mode undo cap. 0 = no undo button (challenge mode). Infinity = unlimited
+  // (free play). 1 = one undo per run (targets-up).
+  maxUndos?: number;
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
@@ -120,7 +123,13 @@ const DrawnArea = ({
   );
 };
 
-export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
+export const GameScreen = ({
+  state,
+  dispatch,
+  onHome,
+  kicker,
+  maxUndos = Infinity,
+}: Props) => {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
@@ -128,11 +137,42 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
   const deckPeekAllowed = canPreviewDeck(state.difficulty);
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
+  const [undoWarnOpen, setUndoWarnOpen] = useState(false);
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const haptic = useHaptic();
   const playSound = useSound();
-  const { settings } = useSettings();
+  const { settings, update: updateSettings } = useSettings();
+
+  // Undo button state. Hidden in challenge mode (maxUndos === 0); greyed when
+  // there's nothing on the snapshot stack or we've hit the per-mode cap.
+  const undoState: UndoStateKind =
+    maxUndos === 0
+      ? 'hidden'
+      : state.past.length === 0 || state.undoCount >= maxUndos
+      ? 'unavailable'
+      : 'available';
+
+  const doUndo = () => {
+    haptic('light');
+    playSound('tap');
+    setSelectedSlot(null);
+    dispatch({ type: 'UNDO' });
+  };
+
+  const handleUndoPress = () => {
+    if (settings.undoWarningSeen) {
+      doUndo();
+      return;
+    }
+    setUndoWarnOpen(true);
+  };
+
+  const confirmUndoWarning = () => {
+    updateSettings({ undoWarningSeen: true });
+    setUndoWarnOpen(false);
+    doUndo();
+  };
 
   useEffect(() => {
     if (state.phase.kind === 'awaiting-action') setSelectedSlot(null);
@@ -529,6 +569,8 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
         onInfoPress={() => setScoringOpen(true)}
         onHomePress={onHome}
         kicker={kicker}
+        onUndoPress={handleUndoPress}
+        undoState={undoState}
       />
       <BonusCardStrip
         cards={state.bonusCards}
@@ -596,9 +638,93 @@ export const GameScreen = ({ state, dispatch, onHome, kicker }: Props) => {
         discards={state.discards}
         perkSpent={state.perkSpent}
       />
+      <UndoWarningModal
+        visible={undoWarnOpen}
+        onCancel={() => setUndoWarnOpen(false)}
+        onConfirm={confirmUndoWarning}
+      />
     </View>
   );
 };
+
+const UndoWarningModal = ({
+  visible,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) => (
+  <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Pressable style={undoModalStyles.backdrop} onPress={onCancel}>
+      <Pressable style={undoModalStyles.sheet} onPress={() => {}}>
+        <Text style={undoModalStyles.title}>Heads up — undo is for practice</Text>
+        <Text style={undoModalStyles.body}>
+          Using undo marks this run as a practice run. It won't count as a win or
+          loss and no score will be saved to your stats.
+        </Text>
+        <Text style={undoModalStyles.bodySecondary}>
+          You'll only see this warning once.
+        </Text>
+        <View style={undoModalStyles.btnRow}>
+          <NeonButton label="Cancel" variant="secondary" onPress={onCancel} />
+          <NeonButton label="Undo anyway" variant="primary" onPress={onConfirm} />
+        </View>
+      </Pressable>
+    </Pressable>
+  </Modal>
+);
+
+const undoModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 4, 12, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.warn,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.warn, 18, 0.3),
+  },
+  title: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+  },
+  body: {
+    color: colors.textHi,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
+  },
+  bodySecondary: {
+    color: colors.textLow,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginBottom: spacing.md,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'flex-end',
+  },
+});
 
 const renderBottom = (
   state: GameState,

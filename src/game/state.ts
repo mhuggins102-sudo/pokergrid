@@ -72,6 +72,14 @@ export interface GameState {
   target: number;
   phase: Phase;
   history: string[];
+  // Snapshot stack for UNDO. Each entry is the state immediately BEFORE a
+  // commit action (PLACE, RESOLVE_*, BONUS_KEEP/REPLACE/DECLINE, DISCARD_NONE).
+  // Snapshots store `past: []` so the stack stays flat.
+  past: GameState[];
+  // Number of UNDO actions executed this run. Result-screen reads this to
+  // decide whether to count the run for stats; the GameScreen reads it to
+  // enforce per-mode caps (challenges = 0, targets-up = 1, free = unlimited).
+  undoCount: number;
 }
 
 export type Action =
@@ -86,7 +94,8 @@ export type Action =
   | { type: 'BONUS_SELECT_NEW'; idx: number }
   | { type: 'BONUS_REPLACE'; oldIdx: number }
   | { type: 'BONUS_DECLINE' }
-  | { type: 'CANCEL_ACTION' };
+  | { type: 'CANCEL_ACTION' }
+  | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
   ...s,
@@ -148,6 +157,8 @@ export const newGame = (
     target: targetOverride ?? TARGET_BY_DIFFICULTY[difficulty],
     phase: { kind: 'awaiting-action' },
     history: ['Game start'],
+    past: [],
+    undoCount: 0,
   };
   return drawNext(initial);
 };
@@ -394,35 +405,80 @@ const handleCancelAction = (s: GameState): GameState => {
   }
 };
 
+// Actions that "commit" a turn (mutate grid / deck / bonusCards in a way the
+// player would want to undo). Each of these pushes a snapshot of the prior
+// state onto the undo stack.
+const SNAP_ACTIONS = new Set<Action['type']>([
+  'PLACE',
+  'DISCARD_NONE',
+  'RESOLVE_HOP',
+  'RESOLVE_SLIDE',
+  'RESOLVE_DESTROY',
+  'BONUS_KEEP',
+  'BONUS_REPLACE',
+  'BONUS_DECLINE',
+]);
+
+const handleUndo = (s: GameState): GameState => {
+  const last = s.past[s.past.length - 1];
+  if (!last) return s;
+  return {
+    ...last,
+    past: s.past.slice(0, -1),
+    // undoCount tracks total undos across the run; never reverts.
+    undoCount: s.undoCount + 1,
+  };
+};
+
 export const step = (
   state: GameState,
   action: Action,
   rng: () => number = Math.random
 ): GameState => {
+  if (action.type === 'UNDO') return handleUndo(state);
+  let next: GameState;
   switch (action.type) {
     case 'PLACE':
-      return handlePlace(state);
+      next = handlePlace(state);
+      break;
     case 'DISCARD_NONE':
-      return handleDiscardNone(state);
+      next = handleDiscardNone(state);
+      break;
     case 'BEGIN_SUIT_ACTION':
-      return handleBeginSuitAction(state, rng);
+      next = handleBeginSuitAction(state, rng);
+      break;
     case 'RESOLVE_HOP':
-      return handleResolveHop(state, action.i, action.j);
+      next = handleResolveHop(state, action.i, action.j);
+      break;
     case 'SLIDE_SELECT_SOURCE':
-      return handleSlideSelectSource(state, action.slot);
+      next = handleSlideSelectSource(state, action.slot);
+      break;
     case 'RESOLVE_SLIDE':
-      return handleResolveSlide(state, action.from, action.direction, action.distance);
+      next = handleResolveSlide(state, action.from, action.direction, action.distance);
+      break;
     case 'RESOLVE_DESTROY':
-      return handleResolveDestroy(state, action.slot);
+      next = handleResolveDestroy(state, action.slot);
+      break;
     case 'BONUS_KEEP':
-      return handleBonusKeep(state, action.idx);
+      next = handleBonusKeep(state, action.idx);
+      break;
     case 'BONUS_SELECT_NEW':
-      return handleBonusSelectNew(state, action.idx);
+      next = handleBonusSelectNew(state, action.idx);
+      break;
     case 'BONUS_REPLACE':
-      return handleBonusReplace(state, action.oldIdx);
+      next = handleBonusReplace(state, action.oldIdx);
+      break;
     case 'BONUS_DECLINE':
-      return handleBonusDecline(state);
+      next = handleBonusDecline(state);
+      break;
     case 'CANCEL_ACTION':
-      return handleCancelAction(state);
+      next = handleCancelAction(state);
+      break;
   }
+  if (next === state) return state;
+  if (SNAP_ACTIONS.has(action.type) && state.phase.kind !== 'game-over') {
+    const snap: GameState = { ...state, past: [] };
+    return { ...next, past: [...state.past, snap] };
+  }
+  return next;
 };

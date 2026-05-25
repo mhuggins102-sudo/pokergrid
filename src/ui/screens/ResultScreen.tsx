@@ -165,11 +165,16 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       ? `CHALLENGE · ${challenge!.name.toUpperCase()}`
       : context.difficulty.toUpperCase();
 
+  // Practice runs: any UNDO during the run "taints" it for stats. We skip
+  // recording entirely so undos can't be used to game the leaderboard.
+  const tainted = state.undoCount > 0;
+
   // Record the run exactly once on mount — applying the correct stats
-  // method based on the play context.
+  // method based on the play context. Tainted runs are skipped.
   useEffect(() => {
     if (recorded.current) return;
     recorded.current = true;
+    if (tainted) return;
     switch (context.mode) {
       case 'free':
         record({
@@ -187,7 +192,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         if (won) recordChallenge(context.id);
         break;
     }
-  }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won]);
+  }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won, tainted]);
 
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
@@ -212,6 +217,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       )}
       {context.mode === 'challenge' && (
         <Text style={styles.modeNote}>{challenge!.goal}</Text>
+      )}
+      {tainted && (
+        <Text style={styles.taintedNote}>
+          Practice run · {state.undoCount} undo{state.undoCount === 1 ? '' : 's'} used · score not recorded
+        </Text>
       )}
 
       <BonusCardStrip
@@ -359,6 +369,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgPanel,
     borderWidth: 2,
     borderRadius: radius.lg,
+    // Narrow the hero box to roughly match the width of the three bonus chips
+    // beneath it (and the breakdown block further down). Looks less like a
+    // full-screen sheet and more like a stat tile.
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
   },
   bannerMode: {
     color: colors.textLow,
@@ -385,6 +401,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
     lineHeight: 17,
+  },
+  taintedNote: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
   },
   bannerScore: {
     fontFamily: fonts.mono,

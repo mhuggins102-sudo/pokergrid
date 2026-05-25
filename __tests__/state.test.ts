@@ -19,6 +19,8 @@ const baseState = (overrides: Partial<GameState>): GameState => ({
   target: 200,
   phase: { kind: 'awaiting-action' },
   history: [],
+  past: [],
+  undoCount: 0,
   ...overrides,
 });
 
@@ -256,6 +258,72 @@ describe('GameState — spiral placement order', () => {
     const expected = SPIRAL_ORDER.slice(0, 6);
     for (const slot of expected) {
       expect(s.grid[slot]).not.toBeNull();
+    }
+  });
+});
+
+describe('GameState — undo', () => {
+  test('UNDO is a no-op with empty past stack', () => {
+    const s = newGame('easy', seededRng(7));
+    const after = step(s, { type: 'UNDO' });
+    expect(after.undoCount).toBe(0);
+    expect(after).toBe(s);
+  });
+
+  test('PLACE pushes a snapshot; UNDO restores it and bumps undoCount', () => {
+    const s = newGame('easy', seededRng(7));
+    const drawnBefore = s.drawn;
+    const gridBefore = s.grid;
+    const afterPlace = step(s, { type: 'PLACE' });
+    expect(afterPlace.past.length).toBe(1);
+    expect(afterPlace.undoCount).toBe(0);
+    expect(afterPlace.grid).not.toEqual(gridBefore); // something changed
+    const afterUndo = step(afterPlace, { type: 'UNDO' });
+    expect(afterUndo.past.length).toBe(0);
+    expect(afterUndo.undoCount).toBe(1);
+    expect(afterUndo.drawn).toEqual(drawnBefore);
+    expect(afterUndo.grid).toEqual(gridBefore);
+  });
+
+  test('multiple PLACEs build a stack; UNDOs walk back through it', () => {
+    let s = newGame('easy', seededRng(11));
+    const grid0 = s.grid;
+    s = step(s, { type: 'PLACE' });
+    const grid1 = s.grid;
+    s = step(s, { type: 'PLACE' });
+    const grid2 = s.grid;
+    expect(s.past.length).toBe(2);
+
+    s = step(s, { type: 'UNDO' });
+    expect(s.grid).toEqual(grid1);
+    expect(s.undoCount).toBe(1);
+
+    s = step(s, { type: 'UNDO' });
+    expect(s.grid).toEqual(grid0);
+    expect(s.undoCount).toBe(2);
+    expect(s.past.length).toBe(0);
+
+    // grid2 was the latest pre-undo state, just confirming the assertions stayed sane
+    expect(grid2).not.toEqual(grid1);
+  });
+
+  test('CANCEL_ACTION does not push a snapshot', () => {
+    const s = newGame('easy', seededRng(11));
+    const begin = step(s, { type: 'BEGIN_SUIT_ACTION' });
+    // BEGIN may or may not change the phase depending on the drawn card; if it
+    // didn't, this is a no-op test which is also valid.
+    if (begin === s) return;
+    expect(begin.past).toEqual(s.past);
+    const cancel = step(begin, { type: 'CANCEL_ACTION' });
+    expect(cancel.past).toEqual(s.past);
+  });
+
+  test('snapshots store past: [] so the stack stays flat', () => {
+    let s = newGame('easy', seededRng(3));
+    s = step(s, { type: 'PLACE' });
+    s = step(s, { type: 'PLACE' });
+    for (const snap of s.past) {
+      expect(snap.past).toEqual([]);
     }
   });
 });
