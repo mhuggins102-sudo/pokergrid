@@ -109,36 +109,20 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         ]}
       >
         <Text
-          style={[
-            styles.cornerTL,
-            { color: pipColor, fontSize: pipSize, top: dim.padding, left: dim.padding + 1 },
-          ]}
-        >
-          ✦
-        </Text>
-        <Text
           style={{
             fontFamily: fonts.mono,
             fontWeight: '800',
-            // The star renders ~30% taller than the "JK" letters at the same
-            // point size, so trim a bit to keep it roughly in the same visual
-            // weight class as a standard card's rank glyph.
-            fontSize: dim.rank * 0.95,
+            // No corner glyphs on the joker (it has no suit to encode), so the
+            // center star gets the whole tile. Bumped well past the rank size
+            // so it reads as the focal element on the grid.
+            fontSize: dim.rank * 1.55,
             color: rankColor,
             textShadowColor: glowColor,
-            textShadowRadius: cba ? 2 : 8,
-            lineHeight: dim.rank,
+            textShadowRadius: cba ? 2 : 10,
+            lineHeight: dim.rank * 1.55,
           }}
         >
           ★
-        </Text>
-        <Text
-          style={[
-            styles.cornerBR,
-            { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
-          ]}
-        >
-          ✦
         </Text>
       </View>
     );
