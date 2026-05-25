@@ -120,16 +120,15 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
             color: rankColor,
             textShadowColor: glowColor,
             textShadowRadius: cba ? 2 : 10,
-            // Span the full cell so vertical alignment is independent of the
-            // parent's flex centering, then nudge down ~10% of fontSize: the
-            // ★ glyph sits on the baseline, so its visual center sits above
-            // the line-box center until we shift it.
+            // Span the full cell + lineHeight = cell side: the single-line
+            // text vertically centers in its own box (CSS line-height trick),
+            // which is more reliable across web/iOS/Android than relying on
+            // the parent's flex centering for a glyph that sits on the
+            // baseline.
             width: dim.side,
             height: dim.side,
             lineHeight: dim.side,
             textAlign: 'center',
-            textAlignVertical: 'center',
-            transform: [{ translateY: starSize * 0.1 }],
           }}
         >
           ★
