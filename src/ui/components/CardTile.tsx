@@ -120,15 +120,16 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
             color: rankColor,
             textShadowColor: glowColor,
             textShadowRadius: cba ? 2 : 10,
-            // Span the full cell + lineHeight = cell side: the single-line
-            // text vertically centers in its own box (CSS line-height trick),
-            // which is more reliable across web/iOS/Android than relying on
-            // the parent's flex centering for a glyph that sits on the
-            // baseline.
+            // Span the full cell + lineHeight = cell side centers the text's
+            // baseline zone, but the ★ glyph's bounding box sits low within
+            // that zone (the descender area is empty). Empirical offset of
+            // ~12% of the font size lifts the star's optical center to the
+            // cell's geometric center on web/iOS/Android monospace fonts.
             width: dim.side,
             height: dim.side,
             lineHeight: dim.side,
             textAlign: 'center',
+            transform: [{ translateY: -starSize * 0.12 }],
           }}
         >
           ★
