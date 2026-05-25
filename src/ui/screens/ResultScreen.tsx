@@ -348,7 +348,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           style={{ flex: 1 }}
         />
         <NeonButton
-          label={shareLabel ?? '↗ Share'}
+          label={shareLabel ?? 'Share'}
           variant="secondary"
           size="lg"
           onPress={handleShare}

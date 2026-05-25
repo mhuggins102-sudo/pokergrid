@@ -120,14 +120,17 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
           style={{
             fontFamily: fonts.mono,
             fontWeight: '800',
-            fontSize: dim.rank * 0.72,
+            // The star renders ~30% taller than the "JK" letters at the same
+            // point size, so trim a bit to keep it roughly in the same visual
+            // weight class as a standard card's rank glyph.
+            fontSize: dim.rank * 0.95,
             color: rankColor,
-            letterSpacing: 1,
             textShadowColor: glowColor,
-            textShadowRadius: cba ? 2 : 6,
+            textShadowRadius: cba ? 2 : 8,
+            lineHeight: dim.rank,
           }}
         >
-          JK
+          ★
         </Text>
         <Text
           style={[

@@ -53,11 +53,11 @@ const cellHtml = (cell: CellCode | null): string => {
   if (!cell) {
     return `<div style="display:flex;width:80px;height:80px;border-radius:6px;background:rgba(20,26,44,0.5);border:1px dashed ${COLOR.outline}"></div>`;
   }
-  // Joker — Satori's default font doesn't ship the suit glyphs ♥♠♦♣ so we'd
-  // get tofu rectangles if we used them. The 4-color suit border + a single
-  // big rank reads cleaner anyway; the joker gets a star which IS in the font.
+  // Joker — Satori's default font doesn't ship the suit glyphs ♥♠♦♣ or the
+  // filled-star ★, so we render "JK" in the violet joker color (same letters
+  // the in-game card uses for screen readers / accessibility).
   if (cell.kind === 'joker') {
-    return `<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:6px;background:${COLOR.bgRaised};border:2px solid ${COLOR.joker};box-shadow:0 0 14px ${COLOR.joker};color:${COLOR.joker};font-family:monospace;font-size:44px;font-weight:800">★</div>`;
+    return `<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:6px;background:${COLOR.bgRaised};border:2px solid ${COLOR.joker};box-shadow:0 0 14px ${COLOR.joker};color:${COLOR.joker};font-family:monospace;font-size:34px;font-weight:800;line-height:1;letter-spacing:1px">JK</div>`;
   }
   // Standard card: rank only, vertically + horizontally centered, in the
   // suit's color. The border color also encodes the suit.
