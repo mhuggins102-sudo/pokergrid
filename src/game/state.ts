@@ -83,6 +83,10 @@ export interface GameState {
   // True once the player has used BONUS_REPLACE to swap out a held bonus card
   // (only possible at the cap). The "No Swap" challenge checks this.
   swappedBonus: boolean;
+  // True when the No Swap challenge is active. Disables ♣ entirely at the
+  // bonus-hand cap so the player can't accidentally lose the run by drawing
+  // a bonus with no choice but to swap.
+  noSwap: boolean;
 }
 
 export type Action =
@@ -143,7 +147,9 @@ export const newGame = (
   // Optional: cap the playing deck to this many cards (after shuffle, before
   // the first card is placed). Used by the Short Deck challenge to remove 8
   // random cards from circulation.
-  deckLimit?: number
+  deckLimit?: number,
+  // Optional: lock in No Swap rules — ♣ is unavailable at the bonus-hand cap.
+  noSwap = false
 ): GameState => {
   let deck = freshShuffledDeck(rng);
   if (deckLimit !== undefined && deckLimit < deck.length) {
@@ -170,6 +176,7 @@ export const newGame = (
     past: [],
     undoCount: 0,
     swappedBonus: false,
+    noSwap,
   };
   return drawNext(initial);
 };
@@ -242,6 +249,8 @@ const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
     }
     case 'C': {
       if (!canDrawBonus(s.bonusDeck.length)) return s;
+      // No Swap challenge: ♣ is unavailable at the cap (would force a swap).
+      if (s.noSwap && s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
       // Draw up to 2 from the top of the bonus deck.
       const drawCount = Math.min(2, s.bonusDeck.length);
       const drawn = s.bonusDeck.slice(0, drawCount);

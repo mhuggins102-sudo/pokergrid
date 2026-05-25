@@ -297,7 +297,13 @@ export const GameScreen = ({
   const drawn = state.drawn;
   const suitOK =
     state.phase.kind === 'awaiting-action' &&
-    suitActionAvailable(drawn, state.grid, state.bonusDeck.length);
+    suitActionAvailable(
+      drawn,
+      state.grid,
+      state.bonusDeck.length,
+      state.bonusCards.length,
+      state.noSwap
+    );
 
   // Trigger an animation, then dispatch the action when it ends.
   const performAnimated = (spec: AnimSpec, action: Action) => {

@@ -204,12 +204,16 @@ const contextDeckLimit = (ctx: PlayContext): number | undefined => {
   return findChallenge(ctx.id).deckLimit;
 };
 
+const contextNoSwap = (ctx: PlayContext): boolean =>
+  ctx.mode === 'challenge' && ctx.id === 'no-swap';
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
   const { state, dispatch } = useGame(
     contextDifficulty(context),
     target,
-    contextDeckLimit(context)
+    contextDeckLimit(context),
+    contextNoSwap(context)
   );
   if (state.phase.kind === 'game-over') {
     return (

@@ -22,6 +22,7 @@ const baseState = (overrides: Partial<GameState>): GameState => ({
   past: [],
   undoCount: 0,
   swappedBonus: false,
+  noSwap: false,
   ...overrides,
 });
 
@@ -262,6 +263,36 @@ describe('GameState — spiral placement order', () => {
     for (const slot of expected) {
       expect(s.grid[slot]).not.toBeNull();
     }
+  });
+});
+
+describe('GameState — No Swap challenge', () => {
+  test('♣ BEGIN_SUIT_ACTION is a no-op at the bonus-hand cap when noSwap=true', () => {
+    const club = { kind: 'standard' as const, rank: 'K' as const, suit: 'C' as const };
+    const held = BONUS_DECK_POOL.slice(0, BONUS_HAND_LIMIT);
+    const state = baseState({
+      drawn: club,
+      bonusCards: held,
+      bonusDeck: BONUS_DECK_POOL.slice(BONUS_HAND_LIMIT),
+      noSwap: true,
+    });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' });
+    // Phase unchanged — ♣ didn't open the bonus-draw flow.
+    expect(after.phase.kind).toBe('awaiting-action');
+    expect(after.bonusCards).toEqual(held);
+  });
+
+  test('♣ is still allowed below the cap even with noSwap=true', () => {
+    const club = { kind: 'standard' as const, rank: 'K' as const, suit: 'C' as const };
+    const held = BONUS_DECK_POOL.slice(0, BONUS_HAND_LIMIT - 1);
+    const state = baseState({
+      drawn: club,
+      bonusCards: held,
+      bonusDeck: BONUS_DECK_POOL.slice(BONUS_HAND_LIMIT - 1),
+      noSwap: true,
+    });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' });
+    expect(after.phase.kind).toBe('bonus-card-resolving');
   });
 });
 

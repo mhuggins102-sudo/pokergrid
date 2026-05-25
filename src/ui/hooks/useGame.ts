@@ -14,12 +14,13 @@ const reducer: Reducer = (s, a) => step(s, a);
 export const useGame = (
   difficulty: Difficulty,
   target?: number,
-  deckLimit?: number
+  deckLimit?: number,
+  noSwap?: boolean
 ): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
     undefined as unknown as GameState,
-    () => newGame(difficulty, undefined, target, deckLimit)
+    () => newGame(difficulty, undefined, target, deckLimit, noSwap ?? false)
   );
 
   const dispatch = useCallback((a: Action) => rawDispatch(a), [rawDispatch]);

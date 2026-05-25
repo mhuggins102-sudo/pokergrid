@@ -1,7 +1,17 @@
 import { isJoker } from './cards';
 import { Grid } from './grid';
+import { HandRank } from './hands';
 import { ScoreReport } from './scoring';
 import type { GameState } from './state';
+
+// Pair, Two Pair, and Three of a Kind — and anything that scored nothing
+// (no hand). Used by the Low Hands challenge.
+const LOW_OR_NONE: Set<HandRank> = new Set<HandRank>([
+  'HIGH_CARD',
+  'PAIR',
+  'TWO_PAIR',
+  'THREE_OF_A_KIND',
+]);
 
 // ============================================================================
 // Challenge definitions.
@@ -20,7 +30,8 @@ export type ChallengeId =
   | 'no-swap'
   | 'grid-only'
   | 'line-only'
-  | 'short-deck';
+  | 'short-deck'
+  | 'low-hands';
 
 export interface Challenge {
   id: ChallengeId;
@@ -91,6 +102,14 @@ export const CHALLENGES: Challenge[] = [
     scoreTarget: 500,
     deckLimit: 45,
     conditionMet: () => true,
+  },
+  {
+    id: 'low-hands',
+    name: 'Low Hands',
+    goal: 'Score 500+ with no line scoring higher than Three of a Kind.',
+    scoreTarget: 500,
+    conditionMet: (_state, report) =>
+      report.lines.every(l => !l.hand || LOW_OR_NONE.has(l.hand)),
   },
 ];
 

@@ -1,3 +1,4 @@
+import { BONUS_HAND_LIMIT } from './bonusCards';
 import { Card, isJoker, StandardCard } from './cards';
 import {
   allSlideTargets,
@@ -157,7 +158,12 @@ export const canDrawBonus = (bonusDeckSize: number): boolean => bonusDeckSize >=
 export const suitActionAvailable = (
   drawn: Card | null,
   grid: Grid,
-  bonusDeckSize: number
+  bonusDeckSize: number,
+  // Extra context for the ♣ check: the player's current hand size and whether
+  // the run is operating under No Swap rules (in which case ♣ is disabled
+  // entirely at the cap, since taking it would force a swap).
+  bonusHandSize: number = 0,
+  noSwap: boolean = false
 ): boolean => {
   if (!drawn || isJoker(drawn)) return false;
   switch (drawn.suit) {
@@ -168,6 +174,7 @@ export const suitActionAvailable = (
     case 'D':
       return canDestroy(grid);
     case 'C':
+      if (noSwap && bonusHandSize >= BONUS_HAND_LIMIT) return false;
       return canDrawBonus(bonusDeckSize);
   }
 };
