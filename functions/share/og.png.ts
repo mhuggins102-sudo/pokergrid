@@ -38,7 +38,6 @@ const COLOR = {
   suitC: '#5cff9a',
 };
 
-const SUIT_GLYPH: Record<Suit, string> = { H: '♥', S: '♠', D: '♦', C: '♣' };
 const SUIT_COLOR: Record<Suit, string> = {
   H: COLOR.suitH,
   S: COLOR.suitS,
@@ -54,21 +53,20 @@ const cellHtml = (cell: CellCode | null): string => {
   if (!cell) {
     return `<div style="display:flex;width:80px;height:80px;border-radius:6px;background:rgba(20,26,44,0.5);border:1px dashed ${COLOR.outline}"></div>`;
   }
-  // Joker
+  // Joker — Satori's default font doesn't ship the suit glyphs ♥♠♦♣ so we'd
+  // get tofu rectangles if we used them. The 4-color suit border + a single
+  // big rank reads cleaner anyway; the joker gets a star which IS in the font.
   if (cell.kind === 'joker') {
-    return `
-      <div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:6px;background:${COLOR.bgRaised};border:2px solid ${COLOR.joker};box-shadow:0 0 14px ${COLOR.joker};color:${COLOR.joker};font-family:monospace;font-size:34px;font-weight:800">★</div>
-    `;
+    return `<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:6px;background:${COLOR.bgRaised};border:2px solid ${COLOR.joker};box-shadow:0 0 14px ${COLOR.joker};color:${COLOR.joker};font-family:monospace;font-size:44px;font-weight:800">★</div>`;
   }
-  // Standard card
+  // Standard card: rank only, vertically + horizontally centered, in the
+  // suit's color. The border color also encodes the suit.
   const sc = SUIT_COLOR[cell.suit];
   const rd = rankDisplay(cell.rank);
-  return `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:80px;height:80px;border-radius:6px;background:${COLOR.bgRaised};border:1px solid ${sc};box-shadow:0 0 8px ${sc}66;color:${sc};font-family:monospace;font-weight:800">
-      <div style="display:flex;font-size:28px;line-height:1">${rd}</div>
-      <div style="display:flex;font-size:20px;line-height:1;margin-top:2px">${SUIT_GLYPH[cell.suit]}</div>
-    </div>
-  `;
+  // Single-character ranks get a slightly bigger glyph than '10' so the
+  // optical sizing reads consistent across the grid.
+  const fontSize = rd.length === 1 ? 44 : 36;
+  return `<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:6px;background:${COLOR.bgRaised};border:1px solid ${sc};box-shadow:0 0 8px ${sc}66;color:${sc};font-family:monospace;font-weight:800;font-size:${fontSize}px;line-height:1">${rd}</div>`;
 };
 
 const gridHtml = (grid: (CellCode | null)[]): string => {

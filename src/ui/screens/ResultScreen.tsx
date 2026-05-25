@@ -325,7 +325,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       <View style={styles.btnRow}>
         {context.mode === 'targets-up' && won ? (
           <NeonButton
-            label={`Next · Level ${context.level + 1}`}
+            label="Next"
             variant="primary"
             size="lg"
             onPress={onAdvance}
@@ -333,13 +333,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           />
         ) : (
           <NeonButton
-            label={
-              context.mode === 'free'
-                ? `Replay · ${state.difficulty}`
-                : context.mode === 'targets-up'
-                ? 'Try Again'
-                : 'Try Again'
-            }
+            label="Replay"
             variant="primary"
             size="lg"
             onPress={onReplay}
@@ -351,11 +345,10 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           variant="secondary"
           size="lg"
           onPress={onHome}
+          style={{ flex: 1 }}
         />
-      </View>
-      <View style={styles.shareRow}>
         <NeonButton
-          label={shareLabel ?? '↗ Share result'}
+          label={shareLabel ?? '↗ Share'}
           variant="secondary"
           size="lg"
           onPress={handleShare}
@@ -605,13 +598,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.lg,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 320,
-  },
-  shareRow: {
-    flexDirection: 'row',
-    marginTop: spacing.sm,
     alignSelf: 'center',
     width: '100%',
     maxWidth: 320,
