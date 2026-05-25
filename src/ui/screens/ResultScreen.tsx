@@ -22,6 +22,7 @@ import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
 import { useStats } from '../stats';
+import { buildShareUrl, shareUrl } from '../share';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -194,6 +195,22 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     }
   }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won, tainted]);
 
+  const [shareLabel, setShareLabel] = useState<string | null>(null);
+  const handleShare = async () => {
+    const url = buildShareUrl({
+      score: total,
+      mode: context.mode,
+      difficulty: context.mode === 'free' ? state.difficulty : undefined,
+      grid: state.grid,
+    });
+    const title = `I scored ${total} on PokerGrid. Can you beat me?`;
+    const result = await shareUrl(url, title);
+    if (result.outcome === 'copied') {
+      setShareLabel('Link copied!');
+      setTimeout(() => setShareLabel(null), 2200);
+    }
+  };
+
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
     if (inspectLine.kind === 'row') {
@@ -334,6 +351,15 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           variant="secondary"
           size="lg"
           onPress={onHome}
+        />
+      </View>
+      <View style={styles.shareRow}>
+        <NeonButton
+          label={shareLabel ?? 'Share'}
+          variant="ghost"
+          size="lg"
+          onPress={handleShare}
+          style={{ flex: 1 }}
         />
       </View>
 
@@ -579,6 +605,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.lg,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+  },
+  shareRow: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
     alignSelf: 'center',
     width: '100%',
     maxWidth: 320,

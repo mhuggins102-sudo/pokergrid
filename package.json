@@ -30,9 +30,11 @@
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-web": "^0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "workers-og": "^0.0.30"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240620.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
     "jest": "^29.7.0",
