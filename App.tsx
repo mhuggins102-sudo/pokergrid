@@ -164,8 +164,16 @@ const contextTarget = (ctx: PlayContext): number => {
 const contextDifficulty = (ctx: PlayContext): Difficulty => {
   switch (ctx.mode) {
     case 'free': return ctx.difficulty;
-    case 'targets-up': return 'medium';
-    case 'challenge': return 'medium';
+    case 'targets-up': {
+      // Difficulty tracks the target for the round: easy bands (<400) get
+      // easy perks (starter bonus + deck peek), medium bands (400–499) get
+      // the medium curve, and high targets (500+) play on hard.
+      const t = targetForLevel(ctx.level);
+      if (t < 400) return 'easy';
+      if (t < 500) return 'medium';
+      return 'hard';
+    }
+    case 'challenge': return 'hard';
   }
 };
 

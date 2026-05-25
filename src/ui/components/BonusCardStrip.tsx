@@ -55,7 +55,14 @@ export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Prop
               onPress={pressable ? () => onCardPress!(i) : undefined}
             >
               {filled ? (
-                <Text style={styles.name} numberOfLines={2}>{c.name}</Text>
+                <View style={styles.chipTextWrap}>
+                  <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
+                    {c.title}
+                  </Text>
+                  <Text style={styles.mult} numberOfLines={1} adjustsFontSizeToFit>
+                    {c.mult}
+                  </Text>
+                </View>
               ) : (
                 <Text style={styles.emptyText}>· empty ·</Text>
               )}
@@ -133,15 +140,30 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     ...glow(colors.accent, 10, 0.7),
   },
-  name: {
+  chipTextWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    gap: 2,
+  },
+  title: {
     fontFamily: fonts.mono,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     color: colors.warn,
     letterSpacing: 0.5,
     textShadowColor: colors.warn,
     textShadowRadius: 4,
     textAlign: 'center',
-    lineHeight: 15,
+  },
+  mult: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.success,
+    letterSpacing: 0.5,
+    textShadowColor: colors.success,
+    textShadowRadius: 3,
+    textAlign: 'center',
   },
 });
