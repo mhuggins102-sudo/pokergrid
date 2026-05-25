@@ -57,6 +57,9 @@ export interface BonusCard {
   lineEffect?: (line: LineContext) => LineEffect;
   // Grid-level effect — called once when computing the final total.
   gridEffect?: (snap: GridSnapshot) => GridEffect;
+  // When true, scoreGrid skips the -25 incomplete-line penalty entirely.
+  // Used by Patience.
+  negatesIncompletePenalty?: boolean;
 }
 
 // Helpers
@@ -399,6 +402,18 @@ const symmetricFrame: BonusCard = {
   },
 };
 
+// Patience cancels the -25 incomplete-line penalty entirely. Doesn't add a
+// multiplier; its value is the penalties it prevents. scoreGrid reads the
+// `negatesIncompletePenalty` flag directly.
+const patience: BonusCard = {
+  id: 'patience-no-penalty',
+  name: 'Patience',
+  title: 'Patience',
+  mult: '(no negative points)',
+  description: 'Removes the -25 penalty for incomplete rows or columns at game end.',
+  negatesIncompletePenalty: true,
+};
+
 // Perk-volume tells: how many suit perks did you spend across the run?
 // (Counts the ♥/♠/♦/♣ used to trigger a Hop / Slide / Destroy / Bonus.
 //  Plain Discards and destroyed targets DON'T count here — only perks.)
@@ -474,6 +489,7 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   symmetricFrame,
   burnout,
   frugal,
+  patience,
 ];
 
 export const BONUS_HAND_LIMIT = 3;

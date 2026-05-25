@@ -428,6 +428,24 @@ describe('live-score ignore-penalty option', () => {
     const final = scoreGrid(empty, []);
     expect(final.total).toBe(-250);
   });
+
+  test('Patience cancels the incomplete-line penalty without needing the option', () => {
+    const patience = findCard('patience-no-penalty');
+    const empty = emptyGrid();
+    // Without Patience: 10 lines × -25 = -250.
+    expect(scoreGrid(empty, []).total).toBe(-250);
+    // With Patience: penalty is gone.
+    expect(scoreGrid(empty, [patience]).total).toBe(0);
+
+    // Partial grid: 4 cards in row 0 only. Other 9 lines still incomplete,
+    // plus row 0 itself (4 cards < 5) → 10 penalty lines without Patience.
+    const g = emptyGrid();
+    g[0] = C('A','H'); g[1] = C('A','C'); g[2] = C('5','D'); g[3] = C('8','S');
+    const withoutPatience = scoreGrid(g, []).total;
+    const withPatience = scoreGrid(g, [patience]).total;
+    expect(withPatience).toBeGreaterThan(withoutPatience);
+    expect(withPatience).toBe(withoutPatience + 250);
+  });
 });
 
 describe('grid-level achievements', () => {

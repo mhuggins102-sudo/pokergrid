@@ -121,7 +121,11 @@ export const scoreGrid = (
   options: ScoreOptions = {}
 ): ScoreReport => {
   const deckRemaining = options.deckRemaining ?? 0;
-  const ignorePenalty = options.ignoreIncompletePenalty ?? false;
+  // The penalty is skipped during live-preview scoring (option) AND when the
+  // player holds Patience. Either route reaches the same place.
+  const ignorePenalty =
+    (options.ignoreIncompletePenalty ?? false) ||
+    bonusCards.some(c => c.negatesIncompletePenalty);
   const discards = options.discards ?? [];
   const perkSpent = options.perkSpent ?? [];
   const scored: ScoredLine[] = lines(grid).map(l => {
