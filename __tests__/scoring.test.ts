@@ -290,13 +290,20 @@ describe('new grid-wide bonuses', () => {
 
   test('Diagonal Run triggers per straight diagonal — none / one / both', () => {
     const card = findCard('diagonal-run-x1_25');
-    // Filler grid with no diagonal straight.
+    // filledNonPair happens to put all-hearts on the anti-diagonal (slots
+    // 4,8,12,16,20 all land on suitCycle[0]='H'), which under the corrected
+    // "straight or higher" logic IS a triggering flush. Break that flush so
+    // the baseline really has no diagonal hand.
+    const breakAntiFlush = (g: Grid) => { g[8] = C('10','C'); };
+
     const noDiagonal = filledNonPair();
+    breakAntiFlush(noDiagonal);
     expect(scoreGrid(noDiagonal, [card]).total).toBe(scoreGrid(noDiagonal, []).total);
 
     // Main diagonal slots (0,6,12,18,24): place 5-6-7-8-9 so the main is a
     // Straight, anti is not.
     const oneDiag = filledNonPair();
+    breakAntiFlush(oneDiag);
     oneDiag[0] = C('5','H');
     oneDiag[6] = C('6','C');
     oneDiag[12] = C('7','D');
@@ -335,6 +342,23 @@ describe('new grid-wide bonuses', () => {
     const base2 = scoreGrid(twoDiag, []).total;
     const with2 = scoreGrid(twoDiag, [card]).total;
     expect(with2).toBe(Math.ceil(base2 * 1.25 * 1.25));
+  });
+
+  test('Diagonal Run also triggers on Flush / Full House / better-than-Straight', () => {
+    const card = findCard('diagonal-run-x1_25');
+    // Main diagonal: a Flush (all ♥, non-consecutive ranks).
+    const flushDiag = filledNonPair();
+    // filledNonPair leaves the anti-diagonal all-hearts; break it so only
+    // the main diagonal triggers.
+    flushDiag[8] = C('10','C');
+    flushDiag[0] = C('2','H');
+    flushDiag[6] = C('5','H');
+    flushDiag[12] = C('7','H');
+    flushDiag[18] = C('9','H');
+    flushDiag[24] = C('J','H');
+    const base = scoreGrid(flushDiag, []).total;
+    const withCard = scoreGrid(flushDiag, [card]).total;
+    expect(withCard).toBe(Math.ceil(base * 1.25));
   });
 
   test('Symmetric Frame multiplies on matching row pairs / column pairs', () => {

@@ -345,11 +345,21 @@ const trashJoker: BonusCard = {
 // ---- Spatial / pattern bonuses ----------------------------------------------
 
 // Main and anti diagonals each multiply the final total by 1.25 when the 5
-// cards on that diagonal form a Straight (including Straight Flush / Royal
-// Flush). Both diagonals can trigger simultaneously → 1.25 × 1.25 = 1.5625.
-const isStraightLine = (cards: (Card | null)[]): boolean => {
+// cards on that diagonal score a Straight or any higher hand (Flush, Full
+// House, Four of a Kind, Straight Flush, Royal Flush). Both diagonals can
+// trigger simultaneously → 1.25 × 1.25 = 1.5625.
+const STRAIGHT_OR_HIGHER: Set<HandRank> = new Set<HandRank>([
+  'STRAIGHT',
+  'FLUSH',
+  'FULL_HOUSE',
+  'FOUR_OF_A_KIND',
+  'STRAIGHT_FLUSH',
+  'ROYAL_FLUSH',
+  'FIVE_OF_A_KIND',
+]);
+const isStraightOrBetter = (cards: (Card | null)[]): boolean => {
   const h = evaluateLine(cards);
-  return h === 'STRAIGHT' || h === 'STRAIGHT_FLUSH' || h === 'ROYAL_FLUSH';
+  return h !== null && STRAIGHT_OR_HIGHER.has(h);
 };
 
 const diagonalRun: BonusCard = {
@@ -362,8 +372,8 @@ const diagonalRun: BonusCard = {
     const main = [grid[0], grid[6], grid[12], grid[18], grid[24]];
     const anti = [grid[4], grid[8], grid[12], grid[16], grid[20]];
     let mult = 1;
-    if (isStraightLine(main)) mult *= 1.25;
-    if (isStraightLine(anti)) mult *= 1.25;
+    if (isStraightOrBetter(main)) mult *= 1.25;
+    if (isStraightOrBetter(anti)) mult *= 1.25;
     return mult > 1 ? { totalMultiplier: mult } : {};
   },
 };
