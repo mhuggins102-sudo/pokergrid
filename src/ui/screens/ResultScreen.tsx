@@ -355,8 +355,8 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       </View>
       <View style={styles.shareRow}>
         <NeonButton
-          label={shareLabel ?? 'Share'}
-          variant="ghost"
+          label={shareLabel ?? '↗ Share result'}
+          variant="secondary"
           size="lg"
           onPress={handleShare}
           style={{ flex: 1 }}
