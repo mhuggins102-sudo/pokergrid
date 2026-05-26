@@ -44,8 +44,15 @@ const SUIT_LETTER: Record<Suit, string> = {
 
 const cardGlowColor = (card: Card, twoColor: boolean): string => {
   if (isJoker(card)) return colors.joker;
+  // Wild supercharge takes the joker's violet so the player can read "this
+  // card's suit is flexible" at a glance, without losing the rank info.
+  if (card.supercharge === 'wild') return colors.joker;
   return twoColor ? TWO_COLOR_SUIT[card.suit] : suitColor(card.suit);
 };
+
+// Wild cards render with a ✦ in place of the suit symbol. Joker uses ★;
+// keeping them distinct so the two never read as the same effect.
+const WILD_GLYPH = '✦';
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
   const { settings } = useSettings();
@@ -142,6 +149,10 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
   // "10" is two characters and needs to be slightly smaller to fit nicely.
   const isWide = card.rank === '10';
   const rankSize = isWide ? dim.rank * 0.74 : dim.rank;
+  const suitGlyph = card.supercharge === 'wild'
+    ? WILD_GLYPH
+    : SUIT_GLYPH[card.suit];
+  const isDouble = card.supercharge === 'double';
 
   return (
     <View
@@ -158,7 +169,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
           { color: pipColor, fontSize: pipSize, top: dim.padding, left: dim.padding + 1 },
         ]}
       >
-        {SUIT_GLYPH[card.suit]}
+        {suitGlyph}
       </Text>
       <Text
         style={{
@@ -189,7 +200,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
               },
             ]}
           >
-            {SUIT_LETTER[card.suit]}
+            {card.supercharge === 'wild' ? 'W' : SUIT_LETTER[card.suit]}
           </Text>
           <Text
             style={[
@@ -197,7 +208,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
               { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
             ]}
           >
-            {SUIT_GLYPH[card.suit]}
+            {suitGlyph}
           </Text>
         </>
       ) : (
@@ -207,7 +218,25 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
             { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
           ]}
         >
-          {SUIT_GLYPH[card.suit]}
+          {suitGlyph}
+        </Text>
+      )}
+      {isDouble && size !== 'xs' && (
+        // Small ×2 badge in the bottom-left so the player can see at a
+        // glance that this card counts twice for pair-class hands. Sits
+        // in an otherwise empty corner so it doesn't fight with the
+        // existing rank / suit / colorblind-letter slots.
+        <Text
+          style={[
+            styles.doubleBadge,
+            {
+              fontSize: Math.max(8, dim.pip - 1),
+              bottom: dim.padding,
+              left: dim.padding + 1,
+            },
+          ]}
+        >
+          ×2
         </Text>
       )}
     </View>
@@ -234,6 +263,15 @@ const styles = StyleSheet.create({
   cornerBR: {
     position: 'absolute',
     fontWeight: '800',
+  },
+  doubleBadge: {
+    position: 'absolute',
+    fontFamily: fonts.mono,
+    fontWeight: '900',
+    color: colors.warn,
+    letterSpacing: 0.5,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
   },
   dimmed: { opacity: 0.4 },
   highlighted: {

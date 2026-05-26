@@ -165,6 +165,10 @@ const colBoost = (colIdx: number, multiplier: number): BonusCard => {
 };
 
 // Per-suit-in-line: multiplies the line by 1.1 for each card of `suit` in it.
+// A 'double' supercharge counts as 2 cards of its suit (per the user's
+// "6 card flush could help with the ×1.1 multiplier for that suit"); wild
+// supercharges don't contribute to density — they're flexible for flush
+// evaluation only.
 const suitDensity = (suit: Suit): BonusCard => ({
   id: `suit-density-${suit.toLowerCase()}`,
   name: `${SUIT_GLYPH[suit]} Density ×1.1 (each)`,
@@ -175,7 +179,10 @@ const suitDensity = (suit: Suit): BonusCard => ({
   baseMultValue: 1.1,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
-    const n = standardCards(line).filter(c => c.suit === suit).length;
+    const n = standardCards(line).reduce((acc, c) => {
+      if (c.suit !== suit) return acc;
+      return acc + (c.supercharge === 'double' ? 2 : 1);
+    }, 0);
     const base = card.multValue ?? 1.1;
     return n > 0 ? { multiplier: Math.pow(base, n) } : {};
   },
