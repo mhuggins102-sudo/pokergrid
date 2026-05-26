@@ -101,11 +101,14 @@ describe('double supercharge', () => {
   });
 
   test('does not add to flush slot count (line is still 5)', () => {
-    // 4 hearts + 1 off-suit (doubled) — still 4 hearts, no flush. All
-    // ranks distinct → HIGH_CARD.
+    // 4 hearts + 1 off-suit (doubled) — still 4 hearts, no flush. The
+    // doubled 7 still bumps its rank count to 2, which on a line of
+    // otherwise-distinct ranks promotes the hand to a PAIR. The point
+    // of this test is that the line did NOT promote all the way to a
+    // FLUSH despite having 4 of the same suit + a double.
     expectHand(
       [C('2', 'H'), C('5', 'H'), C('9', 'H'), C('K', 'H'), C('7', 'S', 'double')],
-      'HIGH_CARD'
+      'PAIR'
     );
   });
 });
