@@ -87,6 +87,10 @@ export interface GameState {
   // bonus-hand cap so the player can't accidentally lose the run by drawing
   // a bonus with no choice but to swap.
   noSwap: boolean;
+  // True when the No Discards challenge is active. Disables the Discard
+  // button entirely — every drawn card must be placed or spent on a
+  // suit perk.
+  noDiscards: boolean;
 }
 
 export type Action =
@@ -150,6 +154,9 @@ export const newGame = (
   deckLimit?: number,
   // Optional: lock in No Swap rules — ♣ is unavailable at the bonus-hand cap.
   noSwap = false,
+  // Optional: lock in No Discards rules — DISCARD_NONE is rejected by the
+  // reducer; the Discard button hides in GameScreen.
+  noDiscards = false,
   // Targets-Up carry-over: cards the player kept from the previous level's
   // power-up pick, pre-placed in the starting hand. The free easy/medium
   // starter is drawn AROUND these so the same card type isn't duplicated.
@@ -226,6 +233,7 @@ export const newGame = (
     undoCount: 0,
     swappedBonus: false,
     noSwap,
+    noDiscards,
   };
   return drawNext(initial);
 };
@@ -256,6 +264,7 @@ const handlePlace = (s: GameState): GameState => {
 
 const handleDiscardNone = (s: GameState): GameState => {
   if (s.phase.kind !== 'awaiting-action' || !s.drawn || isJoker(s.drawn)) return s;
+  if (s.noDiscards) return s; // No Discards challenge — reject the action.
   return drawNext(log(pushDiscard(s, s.drawn), 'Discard'));
 };
 

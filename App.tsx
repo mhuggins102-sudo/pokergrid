@@ -321,6 +321,9 @@ const contextDeckLimit = (ctx: PlayContext): number | undefined => {
 const contextNoSwap = (ctx: PlayContext): boolean =>
   ctx.mode === 'challenge' && ctx.id === 'no-swap';
 
+const contextNoDiscards = (ctx: PlayContext): boolean =>
+  ctx.mode === 'challenge' && ctx.id === 'no-discards';
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
   // No bonus cards carry between TU levels — the easy/medium free
@@ -339,7 +342,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     contextNoSwap(context),
     undefined,
     deckExtras,
-    superchargedDeckCards
+    superchargedDeckCards,
+    contextNoDiscards(context)
   );
   if (state.phase.kind === 'game-over') {
     return (

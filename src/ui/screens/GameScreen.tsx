@@ -1205,7 +1205,7 @@ const renderBottom = (
               style={styles.stackedBtn}
             />
           )}
-          {!isJk && (
+          {!isJk && !state.noDiscards && (
             <NeonButton
               label="Discard"
               variant="secondary"
