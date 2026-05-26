@@ -65,6 +65,26 @@ const SUIT_PERK_VARIANT: Record<string, 'primary' | 'warn' | 'danger'> = {
   C: 'warn',
 };
 
+// First-time contextual hints. Each fires exactly once per device the first
+// time the corresponding state appears mid-run, then is silenced via the
+// matching `seen*Hint` settings flag.
+type HintId = 'joker' | 'bonus-cap' | 'grid-effect';
+
+const HINT_TITLE: Record<HintId, string> = {
+  joker: 'Meet the joker',
+  'bonus-cap': 'Bonus hand is full',
+  'grid-effect': 'Grid achievement is live',
+};
+
+const HINT_BODY: Record<HintId, string> = {
+  joker:
+    'The joker is wild — its row and its column each score as the best 5-card hand they can. It auto-places when drawn and can\'t be discarded normally.',
+  'bonus-cap':
+    'You\'re holding 3 bonus cards — the maximum. Drawing another ♣ Bonus will now force you to swap one out instead of declining.',
+  'grid-effect':
+    'A grid achievement (purple border) is now satisfying its condition — it multiplies your TOTAL score at game end, on top of any per-line bonuses.',
+};
+
 // Drawn-card area: card fades + scales in on every change so each new draw
 // reads as a beat. The duration is intentionally slow so placing feels weighty.
 const DrawnArea = ({
@@ -140,6 +160,7 @@ export const GameScreen = ({
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
   const [slideGhost, setSlideGhost] = useState<Set<number> | null>(null);
+  const [activeHint, setActiveHint] = useState<HintId | null>(null);
   const slideGhostKeyRef = useRef<string>('');
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -258,14 +279,14 @@ export const GameScreen = ({
     animTimer.current = setTimeout(() => setAnim(null), ANIM_DURATION['joker-place']);
   }, [state.grid, settings.reduceMotion, playSound, haptic]);
 
-  const liveScore = useMemo(
+  const liveReport = useMemo(
     () =>
       scoreGrid(state.grid, state.bonusCards, {
         deckRemaining: state.deck.length,
         ignoreIncompletePenalty: true,
         discards: state.discards,
         perkSpent: state.perkSpent,
-      }).total,
+      }),
     [
       state.grid,
       state.bonusCards,
@@ -274,6 +295,7 @@ export const GameScreen = ({
       state.perkSpent,
     ]
   );
+  const liveScore = liveReport.total;
 
   // Shapley-value attribution of the bonus contribution, so multiple cards
   // stacking multiplicatively don't each "claim" the joint multiplier. Sum of
@@ -294,6 +316,49 @@ export const GameScreen = ({
       state.perkSpent,
     ]
   );
+
+  // First-time contextual hints — fire each one exactly once when its
+  // matching state first appears in a run. We guard on `anim` so the
+  // modal doesn't pop up over an in-flight place / slide animation, and
+  // on phase === 'awaiting-action' so it never interrupts a picker.
+  useEffect(() => {
+    if (activeHint !== null) return;
+    if (anim) return;
+    if (state.phase.kind !== 'awaiting-action') return;
+    if (!settings.seenJokerHint && state.grid.some(c => c !== null && isJoker(c))) {
+      setActiveHint('joker');
+      return;
+    }
+    if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
+      setActiveHint('bonus-cap');
+      return;
+    }
+    if (
+      !settings.seenGridEffectHint &&
+      (liveReport.gridMultiplier !== 1 || liveReport.gridFlat !== 0)
+    ) {
+      setActiveHint('grid-effect');
+      return;
+    }
+  }, [
+    activeHint,
+    anim,
+    state.phase.kind,
+    state.grid,
+    state.bonusCards.length,
+    liveReport.gridMultiplier,
+    liveReport.gridFlat,
+    settings.seenJokerHint,
+    settings.seenBonusCapHint,
+    settings.seenGridEffectHint,
+  ]);
+
+  const dismissHint = () => {
+    if (activeHint === 'joker') updateSettings({ seenJokerHint: true });
+    else if (activeHint === 'bonus-cap') updateSettings({ seenBonusCapHint: true });
+    else if (activeHint === 'grid-effect') updateSettings({ seenGridEffectHint: true });
+    setActiveHint(null);
+  };
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
 
@@ -720,9 +785,90 @@ export const GameScreen = ({
         onCancel={() => setUndoWarnOpen(false)}
         onConfirm={confirmUndoWarning}
       />
+      <HintModal
+        hint={activeHint}
+        onDismiss={dismissHint}
+      />
     </View>
   );
 };
+
+const HintModal = ({
+  hint,
+  onDismiss,
+}: {
+  hint: HintId | null;
+  onDismiss: () => void;
+}) => (
+  <Modal
+    visible={hint !== null}
+    transparent
+    animationType="fade"
+    onRequestClose={onDismiss}
+  >
+    <Pressable style={hintModalStyles.backdrop} onPress={onDismiss}>
+      <Pressable style={hintModalStyles.sheet} onPress={() => {}}>
+        <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
+        <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
+        <Text style={hintModalStyles.body}>{hint ? HINT_BODY[hint] : ''}</Text>
+        <View style={hintModalStyles.btnRow}>
+          <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
+        </View>
+      </Pressable>
+    </Pressable>
+  </Modal>
+);
+
+const hintModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 4, 12, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.accent, 14, 0.35),
+  },
+  kicker: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 3,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  title: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowColor: colors.accent,
+    textShadowRadius: 6,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  body: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: spacing.md,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+});
 
 const UndoWarningModal = ({
   visible,

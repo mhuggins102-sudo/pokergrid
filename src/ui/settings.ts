@@ -17,6 +17,13 @@ export interface Settings {
   // ("undoing taints the run for stats"). Persists so we only show the
   // confirmation modal once across the lifetime of the app.
   undoWarningSeen: boolean;
+  // First-time contextual hints. Each fires exactly once per device the
+  // first time the relevant in-game condition appears (joker on the grid,
+  // bonus hand full at 3 cards, a held grid-effect bonus card actually
+  // firing). Dismissing the modal flips the corresponding flag.
+  seenJokerHint: boolean;
+  seenBonusCapHint: boolean;
+  seenGridEffectHint: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,6 +33,9 @@ export const DEFAULT_SETTINGS: Settings = {
   colorBlindAssist: false,
   twoColorDeck: false,
   undoWarningSeen: false,
+  seenJokerHint: false,
+  seenBonusCapHint: false,
+  seenGridEffectHint: false,
 };
 
 const STORAGE_KEY = 'pokergrid:settings:v1';
