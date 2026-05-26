@@ -250,7 +250,7 @@ export const GameScreen = ({
     const card = state.grid[current];
     if (!card) return;
     playSound('joker');
-    haptic('medium');
+    haptic('joker');
     setAnim({ kind: 'joker-place', card, toSlot: current });
     if (animTimer.current) clearTimeout(animTimer.current);
     animTimer.current = setTimeout(() => setAnim(null), ANIM_DURATION['joker-place']);
@@ -323,7 +323,7 @@ export const GameScreen = ({
 
   const handlePlace = () => {
     if (!state.drawn || nextSlot === null) return;
-    haptic('medium');
+    haptic('place');
     playSound('place');
     performAnimated({ kind: 'place', card: state.drawn, toSlot: nextSlot }, { type: 'PLACE' });
   };
@@ -344,7 +344,7 @@ export const GameScreen = ({
         to: slot + step * distance,
       }))
       .filter((c): c is { card: Card; from: number; to: number } => c.card !== null);
-    haptic('medium');
+    haptic('slide');
     playSound('slide');
     // The drag path skips the explicit "select source" tap, so when we arrive
     // here the phase is still awaiting-target-slide-source — the reducer
@@ -381,7 +381,7 @@ export const GameScreen = ({
           const cardA = state.grid[pair[0]];
           const cardB = state.grid[pair[1]];
           if (cardA && cardB) {
-            haptic('medium');
+            haptic('swap');
             playSound('swap');
             performAnimated(
               { kind: 'swap', cardA, slotA: pair[0], cardB, slotB: pair[1] },
@@ -407,7 +407,7 @@ export const GameScreen = ({
       if (p.targets.includes(idx)) {
         const card = state.grid[idx];
         if (card) {
-          haptic('heavy');
+          haptic('destroy');
           playSound('destroy');
           performAnimated(
             { kind: 'destroy', card, slot: idx },
@@ -738,7 +738,7 @@ const renderBottom = (
   state: GameState,
   onPlace: () => void,
   dispatch: (a: Action) => void,
-  haptic: (k: 'light' | 'medium' | 'heavy' | 'warning') => void,
+  haptic: (k: import('../haptics').HapticKind) => void,
   playSound: (k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus') => void,
   suitOK: boolean,
   drawnKey: string,
@@ -930,7 +930,7 @@ const renderBottom = (
                 key={i}
                 style={[styles.bonusPick, { borderColor: s.borderColor }, glow(s.borderColor, 8, 0.4)]}
                 onPress={() => {
-                  haptic('light');
+                  haptic('bonus');
                   playSound('bonus');
                   dispatch(
                     atMax
@@ -985,7 +985,7 @@ const renderBottom = (
                 key={i}
                 style={[styles.bonusPick, { borderColor: s.borderColor }, glow(s.borderColor, 8, 0.4)]}
                 onPress={() => {
-                  haptic('medium');
+                  haptic('bonus');
                   playSound('bonus');
                   dispatch({ type: 'BONUS_REPLACE', oldIdx: i });
                 }}
