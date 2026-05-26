@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BONUS_DECK_POOL } from '../../game/bonusCards';
 import { BonusCategory, categoryOf, CATEGORY_LABEL, styleFor } from '../bonusCardCategory';
 import { NeonButton } from '../components/NeonButton';
+import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 const ORDER: BonusCategory[] = ['hand', 'line', 'suit', 'conditional', 'grid'];
 
 export const BonusCardsScreen = ({ onBack }: Props) => {
+  const { settings } = useSettings();
   const groups = new Map<BonusCategory, typeof BONUS_DECK_POOL>();
   for (const card of BONUS_DECK_POOL) {
     const g = categoryOf(card);
@@ -45,11 +47,26 @@ export const BonusCardsScreen = ({ onBack }: Props) => {
               {cards.map(c => {
                 const s = styleFor(c);
                 return (
-                  <View key={c.id} style={styles.card}>
-                    <Text style={[styles.cardIcon, { color: s.color, textShadowColor: s.color }]}>
-                      {s.icon}
-                    </Text>
-                    <Text style={styles.cardTitle} numberOfLines={1} adjustsFontSizeToFit>
+                  <View
+                    key={c.id}
+                    style={[
+                      styles.card,
+                      { borderColor: s.borderColor },
+                      glow(s.borderColor, 4, 0.18),
+                    ]}
+                  >
+                    {settings.colorBlindAssist && (
+                      <Text
+                        style={[styles.cardIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}
+                      >
+                        {s.icon}
+                      </Text>
+                    )}
+                    <Text
+                      style={[styles.cardTitle, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                    >
                       {c.title}
                     </Text>
                     <Text style={styles.cardMult} numberOfLines={1} adjustsFontSizeToFit>
@@ -117,12 +134,11 @@ const styles = StyleSheet.create({
     flexBasis: '48%',
     flexGrow: 0,
     backgroundColor: colors.bgPanel,
-    borderColor: colors.warn,
+    // borderColor + glow set inline from the card's category tone.
     borderWidth: 1,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
-    ...glow(colors.warn, 4, 0.18),
   },
   cardIcon: {
     fontFamily: fonts.mono,
@@ -133,12 +149,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardTitle: {
-    color: colors.warn,
+    // color + textShadowColor set inline from category tone.
     fontFamily: fonts.mono,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowColor: colors.warn,
     textShadowRadius: 3,
     textAlign: 'center',
   },

@@ -26,6 +26,7 @@ import {
   AnimSpec,
   hiddenSlotsFor,
 } from '../components/AnimationLayer';
+import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { RemainingDeckModal } from '../components/RemainingDeckModal';
@@ -611,6 +612,7 @@ export const GameScreen = ({
           suitOK,
           drawnKey,
           !!anim,
+          settings.colorBlindAssist,
           deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined
         )}
       </View>
@@ -741,6 +743,7 @@ const renderBottom = (
   suitOK: boolean,
   drawnKey: string,
   animating: boolean,
+  colorBlindAssist: boolean,
   onDeckPress?: () => void
 ) => {
   const p = state.phase;
@@ -920,24 +923,37 @@ const renderBottom = (
             : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
         <View style={styles.bonusRow}>
-          {p.drawn.map((b, i) => (
-            <Pressable
-              key={i}
-              style={styles.bonusPick}
-              onPress={() => {
-                haptic('light');
-                playSound('bonus');
-                dispatch(
-                  atMax
-                    ? { type: 'BONUS_SELECT_NEW', idx: i }
-                    : { type: 'BONUS_KEEP', idx: i }
-                );
-              }}
-            >
-              <Text style={styles.bonusName} numberOfLines={2}>{b.name}</Text>
-              <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
-            </Pressable>
-          ))}
+          {p.drawn.map((b, i) => {
+            const s = bonusStyleFor(b);
+            return (
+              <Pressable
+                key={i}
+                style={[styles.bonusPick, { borderColor: s.borderColor }, glow(s.borderColor, 8, 0.4)]}
+                onPress={() => {
+                  haptic('light');
+                  playSound('bonus');
+                  dispatch(
+                    atMax
+                      ? { type: 'BONUS_SELECT_NEW', idx: i }
+                      : { type: 'BONUS_KEEP', idx: i }
+                  );
+                }}
+              >
+                {colorBlindAssist && (
+                  <Text style={[styles.bonusIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}>
+                    {s.icon}
+                  </Text>
+                )}
+                <Text
+                  style={[styles.bonusName, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                  numberOfLines={2}
+                >
+                  {b.title} <Text style={styles.bonusMult}>{b.mult}</Text>
+                </Text>
+                <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
+              </Pressable>
+            );
+          })}
         </View>
         {!atMax && (
           <NeonButton
@@ -962,20 +978,33 @@ const renderBottom = (
           Tap one of your 3 to replace with "{newCard?.name}". The old one is gone for good.
         </Text>
         <View style={styles.bonusRow}>
-          {state.bonusCards.map((b, i) => (
-            <Pressable
-              key={i}
-              style={styles.bonusPick}
-              onPress={() => {
-                haptic('medium');
-                playSound('bonus');
-                dispatch({ type: 'BONUS_REPLACE', oldIdx: i });
-              }}
-            >
-              <Text style={styles.bonusName} numberOfLines={2}>{b.name}</Text>
-              <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
-            </Pressable>
-          ))}
+          {state.bonusCards.map((b, i) => {
+            const s = bonusStyleFor(b);
+            return (
+              <Pressable
+                key={i}
+                style={[styles.bonusPick, { borderColor: s.borderColor }, glow(s.borderColor, 8, 0.4)]}
+                onPress={() => {
+                  haptic('medium');
+                  playSound('bonus');
+                  dispatch({ type: 'BONUS_REPLACE', oldIdx: i });
+                }}
+              >
+                {colorBlindAssist && (
+                  <Text style={[styles.bonusIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}>
+                    {s.icon}
+                  </Text>
+                )}
+                <Text
+                  style={[styles.bonusName, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                  numberOfLines={2}
+                >
+                  {b.title} <Text style={styles.bonusMult}>{b.mult}</Text>
+                </Text>
+                <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
+              </Pressable>
+            );
+          })}
         </View>
         <NeonButton
           label="Back"
@@ -1075,18 +1104,32 @@ const styles = StyleSheet.create({
   bonusPick: {
     flex: 1,
     backgroundColor: colors.bgGlass,
-    borderColor: colors.warn,
+    // borderColor + glow set inline from the card's category tone.
     borderWidth: 1.5,
     borderRadius: radius.md,
     padding: spacing.sm,
     maxWidth: 170,
-    ...glow(colors.warn, 8, 0.4),
+  },
+  bonusIcon: {
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    textShadowRadius: 4,
+    marginBottom: 2,
   },
   bonusName: {
     fontFamily: fonts.mono,
     fontSize: 12,
     fontWeight: '800',
-    color: colors.warn,
+    // color + textShadowColor set inline from category tone.
+    letterSpacing: 0.5,
+    textShadowRadius: 4,
+  },
+  bonusMult: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.success,
     letterSpacing: 0.5,
   },
   bonusDesc: {
