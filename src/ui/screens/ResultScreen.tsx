@@ -9,11 +9,14 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import type { PlayContext } from '../../../App';
+import { BonusCard, powerUpBonusCard } from '../../game/bonusCards';
+import { Card, isJoker, Supercharge } from '../../game/cards';
 import { challengeWon, findChallenge } from '../../game/challenges';
 import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
+import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
@@ -32,7 +35,14 @@ interface Props {
   context: PlayContext;
   onReplay: () => void;
   onHome: () => void;
-  onAdvance: () => void;
+  // For TU mode, the player's powered-up keep-one pick + the cumulative
+  // powered extras + the supercharged S-tier deck cards are passed
+  // through so the next level starts with the full carry-over state.
+  onAdvance: (
+    keptCard?: BonusCard,
+    deckExtras?: BonusCard[],
+    superchargedDeckCards?: Card[]
+  ) => void;
 }
 
 const HAND_LABEL: Record<HandRank, string> = {
@@ -219,6 +229,113 @@ const BannerHero = ({
   );
 };
 
+// Picker chip with a mount-time "power-up" animation: scale pulses up
+// briefly + a bright glow flash, then settles into its resting state.
+// The glow color matches the card's category tone so the visual reads
+// in step with the rest of the chip styling. Reduce-motion disables the
+// animation but the chip still shows the new (post-boost) value.
+const PickerChip = ({
+  card,
+  selected,
+  dimmed,
+  onPress,
+}: {
+  card: BonusCard;
+  selected: boolean;
+  dimmed: boolean;
+  onPress: () => void;
+}) => {
+  const { settings } = useSettings();
+  const tone = bonusStyleFor(card);
+  const scale = useSharedValue(settings.reduceMotion ? 1 : 0.85);
+  const glowOpacity = useSharedValue(settings.reduceMotion ? 0.3 : 0);
+
+  useEffect(() => {
+    if (settings.reduceMotion) {
+      scale.value = 1;
+      glowOpacity.value = 0.3;
+      return;
+    }
+    scale.value = withSequence(
+      withTiming(1.12, { duration: 320, easing: Easing.out(Easing.cubic) }),
+      withTiming(1, { duration: 260 })
+    );
+    glowOpacity.value = withSequence(
+      withTiming(1, { duration: 320 }),
+      withTiming(0.3, { duration: 540 })
+    );
+  }, [scale, glowOpacity, settings.reduceMotion]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    shadowOpacity: glowOpacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.pickerCard,
+        { borderColor: tone.borderColor, shadowColor: tone.borderColor, shadowRadius: 10 },
+        selected && styles.pickerCardSelected,
+        dimmed && styles.pickerCardDimmed,
+        animStyle,
+      ]}
+    >
+      <Pressable
+        onPress={onPress}
+        style={styles.pickerCardInner}
+      >
+        <Text
+          style={[styles.pickerCardTitle, { color: tone.titleColor, textShadowColor: tone.titleColor }]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+        >
+          {card.title}
+        </Text>
+        <Text style={styles.pickerCardMult} numberOfLines={1} adjustsFontSizeToFit>
+          {card.mult}
+        </Text>
+        {card.baseMultValue !== undefined && card.baseMultValue !== card.multValue && (
+          <Text style={styles.pickerCardWas}>was ×{card.baseMultValue}</Text>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+};
+
+// Supercharge reveal text: fades + scales in when the player taps a card
+// on the grid and the wild/double coin flip resolves. Anchored under the
+// "S-tier reward" prompt so the player's attention is pulled from the
+// grid tap to the rolled outcome.
+const SuperchargeReveal = ({ supercharge }: { supercharge: Supercharge }) => {
+  const { settings } = useSettings();
+  const opacity = useSharedValue(settings.reduceMotion ? 1 : 0);
+  const scale = useSharedValue(settings.reduceMotion ? 1 : 0.8);
+  useEffect(() => {
+    if (settings.reduceMotion) {
+      opacity.value = 1;
+      scale.value = 1;
+      return;
+    }
+    opacity.value = withTiming(1, { duration: 360 });
+    scale.value = withSequence(
+      withTiming(1.18, { duration: 260, easing: Easing.out(Easing.cubic) }),
+      withTiming(1, { duration: 220 })
+    );
+  }, [opacity, scale, settings.reduceMotion, supercharge]);
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+  return (
+    <Animated.Text style={[styles.superchargeRevealText, animStyle]}>
+      {supercharge === 'wild'
+        ? '✦ WILD — suit is now flexible for flush / straight flush.'
+        : '×2 DOUBLE — counts as 2 same-rank cards.'}
+    </Animated.Text>
+  );
+};
+
 export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
@@ -293,6 +410,137 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const tainted = state.undoCount > 0;
 
   const tier = tierFor(total, state.target, won);
+
+  // ---- Targets-Up keep-one picker -------------------------------------
+  // For a winning TU level we compute powered-up copies of every card
+  // the player was holding when the game ended. The player taps one to
+  // keep into the next level; the other two shuffle back into the
+  // bonus deck powered up too. The picker only shows in TU mode + on a
+  // win + when the player actually has at least one bonus card.
+  const isTUWin = context.mode === 'targets-up' && won;
+  const poweredCards = useMemo<BonusCard[]>(
+    () => (isTUWin ? state.bonusCards.map(c => powerUpBonusCard(c)) : []),
+    [isTUWin, state.bonusCards]
+  );
+  const [keptIdx, setKeptIdx] = useState<number | null>(null);
+
+  // Single-card hands auto-pick (the player has no real choice — keep
+  // the one card they had). 0-card hands skip the picker entirely.
+  useEffect(() => {
+    if (poweredCards.length === 1 && keptIdx === null) {
+      setKeptIdx(0);
+    }
+  }, [poweredCards.length, keptIdx]);
+
+  // Cumulative deck extras for TU runs: previous levels' returned cards
+  // plus the two from this round that the player DIDN'T keep.
+  const prevDeckExtras = context.mode === 'targets-up'
+    ? (context.deckExtras ?? [])
+    : [];
+  const newDeckExtras = useMemo<BonusCard[]>(
+    () =>
+      keptIdx === null
+        ? poweredCards
+        : poweredCards.filter((_, i) => i !== keptIdx),
+    [poweredCards, keptIdx]
+  );
+  const allDeckExtras = useMemo<BonusCard[]>(
+    () => [...prevDeckExtras, ...newDeckExtras],
+    [prevDeckExtras, newDeckExtras]
+  );
+  const keptCard = keptIdx !== null ? poweredCards[keptIdx] : undefined;
+
+  // Persist the picker outcome as it happens — so if the player closes
+  // the app between picking and tapping Next, they still resume with
+  // their carry-over intact. Preserve any prior supercharged-deck cards
+  // (from earlier S-tier wins) on this write; the supercharge picker's
+  // own useEffect re-saves with the new pick once it resolves.
+  useEffect(() => {
+    if (!isTUWin || keptIdx === null) return;
+    saveTUProgress(
+      context.level + 1,
+      context.wins + 1,
+      keptCard,
+      allDeckExtras,
+      context.mode === 'targets-up' ? context.superchargedDeckCards : undefined
+    );
+  }, [isTUWin, keptIdx, keptCard, allDeckExtras, context, saveTUProgress]);
+
+  // ---- S-tier grid supercharge picker --------------------------------
+  // An S or SS finish on a TU level earns the right to supercharge one
+  // grid card. Player taps any non-joker grid card; RNG picks whether
+  // it becomes wild or doubled. The chosen card is added to the run's
+  // accumulated supercharged-deck list so the next level draws it
+  // boosted.
+  const earnedSupercharge = isTUWin && (tier === 'S' || tier === 'SS');
+  const [superchargedSlot, setSuperchargedSlot] = useState<number | null>(null);
+  const [supercharge, setSupercharge] = useState<Supercharge | null>(null);
+  const handleGridPick = (slot: number) => {
+    if (!earnedSupercharge || superchargedSlot !== null) return;
+    const target = state.grid[slot];
+    if (!target || isJoker(target)) return;
+    // Roll a fresh wild vs double for this pick. Coin flip.
+    const roll: Supercharge = Math.random() < 0.5 ? 'wild' : 'double';
+    setSuperchargedSlot(slot);
+    setSupercharge(roll);
+  };
+
+  const superchargedCard: Card | undefined = useMemo(() => {
+    if (superchargedSlot === null || supercharge === null) return undefined;
+    const c = state.grid[superchargedSlot];
+    if (!c || isJoker(c)) return undefined;
+    return { ...c, supercharge };
+  }, [superchargedSlot, supercharge, state.grid]);
+
+  // Apply the picked supercharge to the displayed grid so the suit glyph
+  // (or ×2 badge) updates immediately when the player taps a card.
+  const gridForDisplay = useMemo(() => {
+    if (!superchargedCard || superchargedSlot === null) return state.grid;
+    const next = [...state.grid];
+    next[superchargedSlot] = superchargedCard;
+    return next;
+  }, [state.grid, superchargedCard, superchargedSlot]);
+
+  // Cumulative supercharged-deck list = previous-level supercharges +
+  // this level's pick (if any).
+  const prevSupercharged = context.mode === 'targets-up'
+    ? (context.superchargedDeckCards ?? [])
+    : [];
+  const allSuperchargedDeckCards: Card[] = useMemo(
+    () => (superchargedCard ? [...prevSupercharged, superchargedCard] : prevSupercharged),
+    [prevSupercharged, superchargedCard]
+  );
+
+  // Update the save once the player completes the supercharge pick so
+  // closing the app between picking and Next preserves it.
+  useEffect(() => {
+    if (!isTUWin) return;
+    if (!earnedSupercharge) return;
+    if (superchargedSlot === null) return;
+    saveTUProgress(
+      context.level + 1,
+      context.wins + 1,
+      keptCard,
+      allDeckExtras,
+      allSuperchargedDeckCards
+    );
+  }, [
+    isTUWin,
+    earnedSupercharge,
+    superchargedSlot,
+    keptCard,
+    allDeckExtras,
+    allSuperchargedDeckCards,
+    context,
+    saveTUProgress,
+  ]);
+
+  // TU win blocks the Next button until the picker(s) resolve. For all
+  // other modes (loss, free play, challenge) Next/Replay are immediate.
+  const keepPickerDone = !isTUWin || keptIdx !== null || poweredCards.length === 0;
+  const superchargePickerDone = !earnedSupercharge || superchargedSlot !== null;
+  const pickerComplete = keepPickerDone && superchargePickerDone;
+
   // Personal-best detection. Tainted runs don't count — they wouldn't be
   // recorded either, so flagging them as "new best" would be misleading.
   const isNewBest = ((): boolean => {
@@ -319,9 +567,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     if (tainted) return;
     // Per-card attribution: pair every held bonus card with its Shapley
     // value so recordRun can fold them into the all-time aggregate that
-    // powers the StatsScreen's bonus-card analytics.
+    // powers the StatsScreen's bonus-card analytics. Strip any "-pwrN"
+    // suffix so a powered-up variant aggregates under its base card id
+    // (a Pair ×4 and a Pair ×4.8 still share the "Pair" stats row).
     const bonusCardsForRecord = state.bonusCards.map((card, i) => ({
-      cardId: card.id,
+      cardId: card.id.replace(/-pwr\d+$/, ''),
       shapley: bonusValues[i] ?? 0,
     }));
     switch (context.mode) {
@@ -338,10 +588,18 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       case 'targets-up':
         if (won) {
           recordTargetsUp(context.level);
-          // Save the player's position so closing the app between levels
-          // doesn't lose the run. The saved level is the NEXT level to
-          // play; advanceTargetsUp will land here on tap.
-          saveTUProgress(context.level + 1, context.wins + 1);
+          // Initial save: roll the run forward to the next level
+          // immediately so closing the app preserves at least the level
+          // progress. The keep-one picker will re-save with the kept
+          // card once the player chooses; bailing out before choosing
+          // forfeits the boost for this round but keeps the level intact.
+          saveTUProgress(
+            context.level + 1,
+            context.wins + 1,
+            undefined,
+            context.deckExtras ?? [],
+            context.superchargedDeckCards ?? []
+          );
         } else {
           // A losing TU level ends the run; wipe the save so Home goes
           // back to "Start at Level 1" instead of resuming into a dead
@@ -415,8 +673,24 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       />
       <View style={styles.gridArea}>
         <GridView
-          grid={state.grid}
+          grid={gridForDisplay}
           onLinePress={(kind, index) => setInspectLine({ kind, index })}
+          onSlotPress={
+            earnedSupercharge && keepPickerDone && superchargedSlot === null
+              ? handleGridPick
+              : undefined
+          }
+          highlight={
+            earnedSupercharge && keepPickerDone && superchargedSlot === null
+              ? new Set(
+                  state.grid
+                    .map((c, i) => (c && !isJoker(c) ? i : -1))
+                    .filter(i => i >= 0)
+                )
+              : earnedSupercharge && superchargedSlot !== null
+                ? new Set([superchargedSlot])
+                : undefined
+          }
           compact
         />
       </View>
@@ -489,13 +763,52 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         </View>
       </View>
 
+      {isTUWin && poweredCards.length >= 2 && (
+        <View style={styles.pickerBlock}>
+          <Text style={styles.pickerLabel}>Power up · keep one</Text>
+          <Text style={styles.pickerHint}>
+            Each card's multiplier was boosted ×1.2. Pick one to carry into Level {context.level + 1}; the others go back into the bonus deck powered up.
+          </Text>
+          <View style={styles.pickerRow}>
+            {poweredCards.map((c, i) => (
+              <PickerChip
+                key={i}
+                card={c}
+                selected={keptIdx === i}
+                dimmed={keptIdx !== null && keptIdx !== i}
+                onPress={() => setKeptIdx(i)}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {earnedSupercharge && keepPickerDone && (
+        <View style={styles.pickerBlock}>
+          <Text style={styles.pickerLabel}>
+            S-tier reward · Supercharge a card
+          </Text>
+          {superchargedSlot === null ? (
+            <Text style={styles.pickerHint}>
+              Tap any non-joker card on the grid above. A coin flip
+              decides whether it becomes WILD (✦, any suit for flush)
+              or DOUBLE (×2, counts twice for pair-class hands). The
+              supercharge follows the card into the next level's deck.
+            </Text>
+          ) : (
+            supercharge && <SuperchargeReveal supercharge={supercharge} />
+          )}
+        </View>
+      )}
+
       <View style={styles.btnRow}>
         {context.mode === 'targets-up' && won ? (
           <NeonButton
-            label="Next"
+            label={pickerComplete ? 'Next' : 'Pick to continue'}
             variant="primary"
             size="lg"
-            onPress={onAdvance}
+            disabled={!pickerComplete}
+            onPress={() => onAdvance(keptCard, allDeckExtras, allSuperchargedDeckCards)}
             style={{ flex: 1 }}
           />
         ) : (
@@ -803,6 +1116,98 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 13,
     fontWeight: '700',
+  },
+  // TU power-up keep-one picker. Sits between the score breakdown and the
+  // action buttons; only rendered on TU wins with at least 2 held bonus
+  // cards (1-card hands auto-keep, 0-card hands skip entirely).
+  pickerBlock: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+    borderTopWidth: 1,
+    borderTopColor: colors.outlineSoft,
+  },
+  pickerLabel: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+    marginBottom: spacing.xs,
+  },
+  pickerHint: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: spacing.sm,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  pickerCard: {
+    flex: 1,
+    backgroundColor: colors.bgGlass,
+    borderWidth: 1.5,
+    borderRadius: radius.md,
+    minHeight: 76,
+  },
+  pickerCardInner: {
+    flex: 1,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerCardSelected: {
+    borderWidth: 2.5,
+  },
+  pickerCardDimmed: {
+    opacity: 0.45,
+  },
+  pickerCardTitle: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowRadius: 3,
+    textAlign: 'center',
+  },
+  pickerCardMult: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  pickerCardWas: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    fontStyle: 'italic',
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
+  superchargeRevealText: {
+    color: colors.joker,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: colors.joker,
+    textShadowRadius: 5,
+    textAlign: 'center',
+    paddingVertical: spacing.xs,
   },
   // Mirror the breakdownBlock width so the buttons sit directly beneath it.
   btnRow: {

@@ -149,16 +149,55 @@ export const newGame = (
   // random cards from circulation.
   deckLimit?: number,
   // Optional: lock in No Swap rules — ♣ is unavailable at the bonus-hand cap.
-  noSwap = false
+  noSwap = false,
+  // Targets-Up carry-over: cards the player kept from the previous level's
+  // power-up pick, pre-placed in the starting hand. The free easy/medium
+  // starter is drawn AROUND these so the same card type isn't duplicated.
+  keptBonusCards: BonusCard[] = [],
+  // Targets-Up carry-over: extra bonus cards (the two NOT kept from each
+  // previous level, powered up) shuffled into this level's bonus deck.
+  deckExtras: BonusCard[] = [],
+  // Targets-Up S-tier reward: standard cards with a supercharge ('wild'
+  // or 'double') the player earned in a previous level. We replace the
+  // matching un-supercharged card in the fresh shuffled deck so the
+  // supercharged version can be drawn in this level.
+  superchargedDeckCards: Card[] = []
 ): GameState => {
   let deck = freshShuffledDeck(rng);
   if (deckLimit !== undefined && deckLimit < deck.length) {
     deck = deck.slice(0, deckLimit);
   }
-  const shuffledBonus = shuffle(BONUS_DECK_POOL, rng);
+  // Splice supercharged cards into the freshly shuffled deck by replacing
+  // the matching standard card (same rank + suit) in place. Position is
+  // preserved so the player can't predict when a supercharged card draws.
+  for (const sc of superchargedDeckCards) {
+    if (sc.kind !== 'standard') continue;
+    const idx = deck.findIndex(
+      d => d.kind === 'standard' && d.rank === sc.rank && d.suit === sc.suit
+    );
+    if (idx >= 0) deck[idx] = sc;
+  }
+  // The free easy/medium starter must come from the un-powered pool AND
+  // must not duplicate any card the player has already kept across levels
+  // (per the user's "the second card should not be one of the other
+  // superpowered cards" rule). Filter the standard pool to exclude held
+  // base ids before drawing the starter.
+  const heldBaseIds = new Set(
+    keptBonusCards.map(c => c.id.replace(/-pwr\d+$/, ''))
+  );
+  const drawable = BONUS_DECK_POOL.filter(c => !heldBaseIds.has(c.id));
+  const shuffledBonus = shuffle(drawable, rng);
   const starterCount = STARTER_BONUS_BY_DIFFICULTY[difficulty];
-  const bonusCards = shuffledBonus.slice(0, starterCount);
-  const bonusDeck = shuffledBonus.slice(starterCount);
+  // Player's hand starts with the kept carry-overs first, then the
+  // difficulty-based free starter on top (capped at BONUS_HAND_LIMIT just
+  // in case future power-ups push the carry to 3 cards on hard).
+  const starterDraw = shuffledBonus.slice(0, starterCount);
+  const bonusCards = [...keptBonusCards, ...starterDraw].slice(0, BONUS_HAND_LIMIT);
+  // Bonus deck = standard pool minus the drawn starter + powered carry-overs
+  // from earlier levels. Shuffled together so the powered cards can resurface
+  // at any time.
+  const remainingPool = shuffledBonus.slice(starterCount);
+  const bonusDeck = shuffle([...remainingPool, ...deckExtras], rng);
   const [first, ...rest] = deck;
   const grid = placeAtSpiralNext(emptyGrid(), first);
   const initial: GameState = {

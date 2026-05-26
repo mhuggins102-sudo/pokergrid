@@ -1,19 +1,54 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
+import {
+  BONUS_DECK_POOL,
+  BonusCard,
+  powerUpBonusCard,
+} from '../game/bonusCards';
+import { Card } from '../game/cards';
 
 // Targets-Up resume save. Mirrors the React-context pattern used by Settings
-// and Stats. For now the save only captures the level / wins counters that
-// would normally live on PlayContext — when the player clears a level it's
-// written; when they lose, it's cleared. Future phases will extend this to
-// include the bonus-card power-ups so a paused run can also carry its
-// boosted deck state across an app relaunch.
+// and Stats. Captures the level / wins counters plus the powered-up bonus
+// card the player kept across the previous level and the powered extras
+// shuffled back into the deck, so closing the app between levels resumes
+// the full carry-over state — not just the level number.
+
+// Serialized form of a BonusCard. We can't JSON-serialize the lineEffect /
+// gridEffect function references, so we persist just enough to look the
+// card up in BONUS_DECK_POOL and re-apply N power-ups on load.
+interface SerializedBonusCard {
+  baseId: string;
+  powerLevel: number;
+}
+
 export interface TUSave {
   level: number;
   wins: number;
   ts: number;
+  keptCard?: SerializedBonusCard | null;
+  deckExtras?: SerializedBonusCard[];
+  // Standard cards the player has supercharged on past S-tier wins.
+  // Plain Card objects survive JSON round-tripping (no functions on them),
+  // so we just store them directly.
+  superchargedDeckCards?: Card[];
 }
 
 const STORAGE_KEY = 'pokergrid:tu-save:v1';
+
+const serializeBonusCard = (c: BonusCard): SerializedBonusCard => ({
+  baseId: c.id.replace(/-pwr\d+$/, ''),
+  powerLevel: c.powerLevel ?? 0,
+});
+
+const deserializeBonusCard = (s: SerializedBonusCard): BonusCard | null => {
+  const base = BONUS_DECK_POOL.find(c => c.id === s.baseId);
+  if (!base) return null;
+  let card = base;
+  for (let i = 0; i < s.powerLevel; i++) {
+    card = powerUpBonusCard(card);
+  }
+  return card;
+};
 
 export const loadTUSave = async (): Promise<TUSave | null> => {
   try {
@@ -27,6 +62,9 @@ export const loadTUSave = async (): Promise<TUSave | null> => {
       level: parsed.level,
       wins: parsed.wins,
       ts: parsed.ts ?? Date.now(),
+      keptCard: parsed.keptCard ?? null,
+      deckExtras: parsed.deckExtras ?? [],
+      superchargedDeckCards: parsed.superchargedDeckCards ?? [],
     };
   } catch {
     return null;
@@ -49,9 +87,37 @@ export const deleteTUSave = async (): Promise<void> => {
   }
 };
 
+// Reconstruct the actual BonusCard objects + supercharged Cards from a
+// save. Used by App when resuming via "Continue Targets Up".
+export const hydrateSavedCards = (
+  s: TUSave | null
+): {
+  keptCard: BonusCard | undefined;
+  deckExtras: BonusCard[];
+  superchargedDeckCards: Card[];
+} => {
+  if (!s) {
+    return { keptCard: undefined, deckExtras: [], superchargedDeckCards: [] };
+  }
+  const keptCard = s.keptCard
+    ? deserializeBonusCard(s.keptCard) ?? undefined
+    : undefined;
+  const deckExtras = (s.deckExtras ?? [])
+    .map(deserializeBonusCard)
+    .filter((c): c is BonusCard => c !== null);
+  const superchargedDeckCards = s.superchargedDeckCards ?? [];
+  return { keptCard, deckExtras, superchargedDeckCards };
+};
+
 interface TUSaveContextValue {
   save: TUSave | null;
-  saveProgress: (level: number, wins: number) => void;
+  saveProgress: (
+    level: number,
+    wins: number,
+    keptCard?: BonusCard,
+    deckExtras?: BonusCard[],
+    superchargedDeckCards?: Card[]
+  ) => void;
   clearProgress: () => void;
 }
 
@@ -68,11 +134,27 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
     loadTUSave().then(setSave);
   }, []);
 
-  const saveProgress = React.useCallback((level: number, wins: number) => {
-    const s: TUSave = { level, wins, ts: Date.now() };
-    setSave(s);
-    writeTUSave(s);
-  }, []);
+  const saveProgress = React.useCallback(
+    (
+      level: number,
+      wins: number,
+      keptCard?: BonusCard,
+      deckExtras?: BonusCard[],
+      superchargedDeckCards?: Card[]
+    ) => {
+      const s: TUSave = {
+        level,
+        wins,
+        ts: Date.now(),
+        keptCard: keptCard ? serializeBonusCard(keptCard) : null,
+        deckExtras: (deckExtras ?? []).map(serializeBonusCard),
+        superchargedDeckCards: superchargedDeckCards ?? [],
+      };
+      setSave(s);
+      writeTUSave(s);
+    },
+    []
+  );
 
   const clearProgress = React.useCallback(() => {
     setSave(null);

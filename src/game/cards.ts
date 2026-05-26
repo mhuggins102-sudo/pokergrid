@@ -31,7 +31,24 @@ export const RANKS: Rank[] = [
   'K',
 ];
 
-export type StandardCard = { kind: 'standard'; rank: Rank; suit: Suit };
+// Targets-Up reward: when the player earns an S-tier win, they pick one
+// card on the grid to supercharge with one of two effects (RNG picks).
+//   - 'wild':   the card's suit becomes flexible for flush / straight-
+//               flush evaluation. Rank is unchanged. Doesn't help
+//               straights, doesn't count as a suit for per-suit density.
+//   - 'double': the card counts as 2 same-rank cards for pair-class
+//               hand evaluation (PAIR / TWO PAIR / TRIPLE / FULL HOUSE
+//               / FOUR / FIVE OF A KIND) and adds +1 to the per-suit
+//               density bonus. Counts as 1 for straights.
+// The two are mutually exclusive on a card; re-supercharging replaces.
+export type Supercharge = 'wild' | 'double';
+
+export type StandardCard = {
+  kind: 'standard';
+  rank: Rank;
+  suit: Suit;
+  supercharge?: Supercharge;
+};
 export type JokerCard = { kind: 'joker' };
 export type Card = StandardCard | JokerCard;
 
