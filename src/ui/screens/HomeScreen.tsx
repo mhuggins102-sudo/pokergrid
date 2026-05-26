@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -11,11 +11,13 @@ import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { NeonButton } from '../components/NeonButton';
 import { useSettings } from '../settings';
 import { useStats } from '../stats';
+import { useTUSave } from '../targetsUpSave';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   onStartFree: (d: Difficulty) => void;
   onStartTargetsUp: () => void;
+  onContinueTargetsUp: () => void;
   onOpenChallenges: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
@@ -42,13 +44,16 @@ const NeonTitle = () => {
 export const HomeScreen = ({
   onStartFree,
   onStartTargetsUp,
+  onContinueTargetsUp,
   onOpenChallenges,
   onOpenStats,
   onOpenSettings,
   onOpenRules,
 }: Props) => {
   const [diff, setDiff] = React.useState<Difficulty>('medium');
+  const [confirmNewTU, setConfirmNewTU] = React.useState(false);
   const { stats } = useStats();
+  const { save: tuSave } = useTUSave();
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -92,7 +97,10 @@ export const HomeScreen = ({
       {/* GAME MODES --------------------------------------------------- */}
       <Text style={styles.sectionLabel}>Game Modes</Text>
       <View style={styles.modesCol}>
-        <Pressable style={styles.modeCard} onPress={onStartTargetsUp}>
+        <Pressable
+          style={styles.modeCard}
+          onPress={tuSave ? onContinueTargetsUp : onStartTargetsUp}
+        >
           <View style={styles.modeHeader}>
             <Text style={styles.modeTitle}>Targets Up</Text>
             {stats.targetsUpBest > 0 && (
@@ -103,7 +111,22 @@ export const HomeScreen = ({
             A ladder. Level 1 starts at target 300; each win pushes the bar +50. Lose once and the
             run ends. Final score is the highest level you cleared.
           </Text>
-          <Text style={styles.modeCta}>Start at Level 1 →</Text>
+          {tuSave ? (
+            <>
+              <Text style={styles.modeCta}>Continue at Level {tuSave.level} →</Text>
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setConfirmNewTU(true);
+                }}
+                hitSlop={6}
+              >
+                <Text style={styles.modeSecondaryCta}>· Start a new run</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.modeCta}>Start at Level 1 →</Text>
+          )}
         </Pressable>
 
         <Pressable style={styles.modeCard} onPress={onOpenChallenges}>
@@ -137,9 +160,85 @@ export const HomeScreen = ({
         <NeonButton label="Stats" variant="secondary" size="sm" onPress={onOpenStats} />
         <NeonButton label="Settings" variant="secondary" size="sm" onPress={onOpenSettings} />
       </View>
+
+      <Modal
+        visible={confirmNewTU}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmNewTU(false)}
+      >
+        <Pressable style={modalStyles.backdrop} onPress={() => setConfirmNewTU(false)}>
+          <Pressable style={modalStyles.sheet} onPress={() => {}}>
+            <Text style={modalStyles.title}>Discard your Targets Up save?</Text>
+            <Text style={modalStyles.body}>
+              You'll lose your progress on Level {tuSave?.level ?? 1} and start fresh at Level 1.
+            </Text>
+            <View style={modalStyles.btnRow}>
+              <NeonButton
+                label="Cancel"
+                variant="secondary"
+                size="sm"
+                onPress={() => setConfirmNewTU(false)}
+              />
+              <NeonButton
+                label="Start fresh"
+                variant="warn"
+                size="sm"
+                onPress={() => {
+                  setConfirmNewTU(false);
+                  onStartTargetsUp();
+                }}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 };
+
+const modalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 4, 12, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.warn,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.warn, 14, 0.3),
+  },
+  title: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+  },
+  body: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.md,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'flex-end',
+  },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
@@ -272,6 +371,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
     textShadowRadius: 3,
+  },
+  modeSecondaryCta: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1,
+    marginTop: 4,
   },
   streakRow: { alignItems: 'center', marginTop: spacing.md, height: 18 },
   streakText: {

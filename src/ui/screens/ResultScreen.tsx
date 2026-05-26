@@ -23,6 +23,7 @@ import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
 import { useStats } from '../stats';
+import { useTUSave } from '../targetsUpSave';
 import { buildShareUrl, shareUrl } from '../share';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -223,6 +224,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const [linesExpanded, setLinesExpanded] = useState(false);
   const { stats, record, recordTargetsUp, recordChallenge } = useStats();
+  const { saveProgress: saveTUProgress, clearProgress: clearTUProgress } = useTUSave();
   const recorded = useRef(false);
   // Snapshot stats on first render so the "NEW BEST" check compares against
   // the player's prior best — not the post-record best (which would always
@@ -334,13 +336,24 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         });
         break;
       case 'targets-up':
-        if (won) recordTargetsUp(context.level);
+        if (won) {
+          recordTargetsUp(context.level);
+          // Save the player's position so closing the app between levels
+          // doesn't lose the run. The saved level is the NEXT level to
+          // play; advanceTargetsUp will land here on tap.
+          saveTUProgress(context.level + 1, context.wins + 1);
+        } else {
+          // A losing TU level ends the run; wipe the save so Home goes
+          // back to "Start at Level 1" instead of resuming into a dead
+          // run state.
+          clearTUProgress();
+        }
         break;
       case 'challenge':
         if (won) recordChallenge(context.id);
         break;
     }
-  }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues]);
+  }, [record, recordTargetsUp, recordChallenge, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues]);
 
   const [shareLabel, setShareLabel] = useState<string | null>(null);
   const handleShare = async () => {
