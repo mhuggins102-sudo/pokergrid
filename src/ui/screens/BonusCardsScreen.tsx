@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BONUS_DECK_POOL } from '../../game/bonusCards';
+import { BonusCategory, categoryOf, CATEGORY_LABEL, styleFor } from '../bonusCardCategory';
 import { NeonButton } from '../components/NeonButton';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -8,33 +9,15 @@ interface Props {
   onBack: () => void;
 }
 
-// Group cards by their id prefix so the list reads top-to-bottom in
-// category groups.
-const groupFor = (id: string): string => {
-  if (id.startsWith('hand-')) return 'Hand Type';
-  if (id.startsWith('row-')) return 'Row / Column';
-  if (id.startsWith('col-')) return 'Row / Column';
-  if (id.startsWith('suit-density-')) return 'Suit Density';
-  if (id === 'outer-edge-x1_25') return 'Per-Line Conditional';
-  if (id === 'rainbow-line-x2') return 'Per-Line Conditional';
-  if (id === 'joker-line-x1_5') return 'Per-Line Conditional';
-  if (id === 'royal-touch-x1_5') return 'Per-Line Conditional';
-  if (id === 'spiral-core-x1_5') return 'Per-Line Conditional';
-  return 'Grid Achievement';
-};
-
-const ORDER = [
-  'Hand Type',
-  'Row / Column',
-  'Suit Density',
-  'Per-Line Conditional',
-  'Grid Achievement',
-];
+// Iteration order matches the visual hierarchy of bonus impact: hand-type
+// boosts first (most personal), then line-targeted, then suit density,
+// then conditional, then grid-wide.
+const ORDER: BonusCategory[] = ['hand', 'line', 'suit', 'conditional', 'grid'];
 
 export const BonusCardsScreen = ({ onBack }: Props) => {
-  const groups = new Map<string, typeof BONUS_DECK_POOL>();
+  const groups = new Map<BonusCategory, typeof BONUS_DECK_POOL>();
   for (const card of BONUS_DECK_POOL) {
-    const g = groupFor(card.id);
+    const g = categoryOf(card);
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g)!.push(card);
   }
@@ -50,26 +33,32 @@ export const BonusCardsScreen = ({ onBack }: Props) => {
         2 of them; keep one (hold up to 3 at a time).
       </Text>
 
-      {ORDER.map(groupName => {
-        const cards = groups.get(groupName) ?? [];
+      {ORDER.map(cat => {
+        const cards = groups.get(cat) ?? [];
         if (cards.length === 0) return null;
         return (
-          <View key={groupName} style={styles.groupBlock}>
+          <View key={cat} style={styles.groupBlock}>
             <Text style={styles.groupLabel}>
-              {groupName} <Text style={styles.groupCount}>· {cards.length}</Text>
+              {CATEGORY_LABEL[cat]} <Text style={styles.groupCount}>· {cards.length}</Text>
             </Text>
             <View style={styles.cardGrid}>
-              {cards.map(c => (
-                <View key={c.id} style={styles.card}>
-                  <Text style={styles.cardTitle} numberOfLines={1} adjustsFontSizeToFit>
-                    {c.title}
-                  </Text>
-                  <Text style={styles.cardMult} numberOfLines={1} adjustsFontSizeToFit>
-                    {c.mult}
-                  </Text>
-                  <Text style={styles.cardDesc}>{c.description}</Text>
-                </View>
-              ))}
+              {cards.map(c => {
+                const s = styleFor(c);
+                return (
+                  <View key={c.id} style={styles.card}>
+                    <Text style={[styles.cardIcon, { color: s.color, textShadowColor: s.color }]}>
+                      {s.icon}
+                    </Text>
+                    <Text style={styles.cardTitle} numberOfLines={1} adjustsFontSizeToFit>
+                      {c.title}
+                    </Text>
+                    <Text style={styles.cardMult} numberOfLines={1} adjustsFontSizeToFit>
+                      {c.mult}
+                    </Text>
+                    <Text style={styles.cardDesc}>{c.description}</Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
         );
@@ -134,6 +123,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     ...glow(colors.warn, 4, 0.18),
+  },
+  cardIcon: {
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    textShadowRadius: 4,
+    textAlign: 'center',
+    marginBottom: 2,
   },
   cardTitle: {
     color: colors.warn,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BonusCard, BONUS_HAND_LIMIT } from '../../game/bonusCards';
+import { styleFor } from '../bonusCardCategory';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -56,6 +57,11 @@ export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Prop
             >
               {filled ? (
                 <View style={styles.chipTextWrap}>
+                  <Text
+                    style={[styles.icon, { color: styleFor(c).color, textShadowColor: styleFor(c).color }]}
+                  >
+                    {styleFor(c).icon}
+                  </Text>
                   <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
                     {c.title}
                   </Text>
@@ -144,7 +150,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    gap: 2,
+    gap: 1,
+  },
+  icon: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+    textShadowRadius: 4,
+    lineHeight: 14,
   },
   title: {
     fontFamily: fonts.mono,

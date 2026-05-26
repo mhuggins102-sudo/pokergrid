@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BonusCard } from '../../game/bonusCards';
+import { styleFor } from '../bonusCardCategory';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -12,38 +13,30 @@ interface Props {
   onClose: () => void;
 }
 
-const groupFor = (id: string): string => {
-  if (id.startsWith('hand-')) return 'Hand-type bonus';
-  if (id.startsWith('row-') || id.startsWith('col-')) return 'Row / Column bonus';
-  if (id.startsWith('suit-density-')) return 'Per-suit density';
-  if (
-    id === 'outer-edge-x1_25' ||
-    id === 'rainbow-line-x2' ||
-    id === 'joker-line-x1_5' ||
-    id === 'royal-touch-x1_5' ||
-    id === 'spiral-core-x1_5'
-  ) {
-    return 'Per-line conditional';
-  }
-  return 'Grid achievement';
-};
-
 export const BonusCardDetailModal = ({ visible, card, currentValue, onClose }: Props) => {
   if (!card) return null;
-  const group = groupFor(card.id);
+  const cat = styleFor(card);
   const showValue = currentValue !== undefined;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.headerRow}>
-            <Text style={styles.kicker}>{group}</Text>
+            <View style={styles.kickerRow}>
+              <Text style={[styles.icon, { color: cat.color, textShadowColor: cat.color }]}>
+                {cat.icon}
+              </Text>
+              <Text style={styles.kicker}>{cat.label}</Text>
+            </View>
             <Pressable onPress={onClose} hitSlop={12}>
               <Text style={styles.closeBtn}>×</Text>
             </Pressable>
           </View>
 
-          <Text style={styles.name}>{card.name}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={2}>{card.title}</Text>
+            <Text style={styles.mult} numberOfLines={1}>{card.mult}</Text>
+          </View>
           <Text style={styles.desc}>{card.description}</Text>
 
           {showValue && (
@@ -89,6 +82,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
+  kickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  icon: {
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    textShadowRadius: 4,
+  },
   kicker: {
     color: colors.textLow,
     fontFamily: fonts.mono,
@@ -103,7 +107,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingHorizontal: 4,
   },
-  name: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  title: {
+    flex: 1,
     color: colors.warn,
     fontFamily: fonts.mono,
     fontSize: 18,
@@ -111,7 +123,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textShadowColor: colors.warn,
     textShadowRadius: 6,
-    marginBottom: spacing.sm,
+  },
+  mult: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
   },
   desc: {
     color: colors.textMid,
