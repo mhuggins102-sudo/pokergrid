@@ -4,6 +4,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { BonusCard } from './src/game/bonusCards';
+import { Card } from './src/game/cards';
 import {
   ChallengeId,
   findChallenge,
@@ -38,6 +39,10 @@ export type PlayContext =
       // deckExtras shuffle back into the bonus deck.
       keptCard?: BonusCard;
       deckExtras?: BonusCard[];
+      // S-tier reward carry-over: standard cards the player has chosen
+      // to supercharge on past grids. newGame swaps these in for the
+      // matching rank+suit in the shuffled deck.
+      superchargedDeckCards?: Card[];
     }
   | { mode: 'challenge'; id: ChallengeId };
 
@@ -82,13 +87,14 @@ const AppShell = () => {
   };
   const continueTargetsUp = () => {
     if (!tuSave) return;
-    const { keptCard, deckExtras } = hydrateSavedCards(tuSave);
+    const { keptCard, deckExtras, superchargedDeckCards } = hydrateSavedCards(tuSave);
     setPlayContext({
       mode: 'targets-up',
       level: tuSave.level,
       wins: tuSave.wins,
       keptCard,
       deckExtras,
+      superchargedDeckCards,
     });
     setNonce(n => n + 1);
     setScreen('game');
@@ -100,7 +106,8 @@ const AppShell = () => {
   };
   const advanceTargetsUp = (
     keptCard?: BonusCard,
-    deckExtras?: BonusCard[]
+    deckExtras?: BonusCard[],
+    superchargedDeckCards?: Card[]
   ) => {
     if (playContext?.mode !== 'targets-up') return;
     setPlayContext({
@@ -109,6 +116,8 @@ const AppShell = () => {
       wins: playContext.wins + 1,
       keptCard: keptCard ?? playContext.keptCard,
       deckExtras: deckExtras ?? playContext.deckExtras,
+      superchargedDeckCards:
+        superchargedDeckCards ?? playContext.superchargedDeckCards,
     });
     setNonce(n => n + 1);
   };
@@ -243,7 +252,11 @@ interface GameContainerProps {
   context: PlayContext;
   onHome: () => void;
   onReplay: () => void;
-  onAdvance: (keptCard?: BonusCard, deckExtras?: BonusCard[]) => void;
+  onAdvance: (
+    keptCard?: BonusCard,
+    deckExtras?: BonusCard[],
+    superchargedDeckCards?: Card[]
+  ) => void;
 }
 
 const contextTarget = (ctx: PlayContext): number => {
@@ -302,19 +315,23 @@ const contextNoSwap = (ctx: PlayContext): boolean =>
 
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
-  // For TU mode, surface the kept card + powered extras to the engine so
-  // the next level starts with them in hand / in the deck respectively.
+  // For TU mode, surface the kept card + powered extras + supercharged
+  // deck cards to the engine so the next level starts with them in hand
+  // / in the deck / spliced into the playing deck respectively.
   const keptBonusCards =
     context.mode === 'targets-up' && context.keptCard ? [context.keptCard] : undefined;
   const deckExtras =
     context.mode === 'targets-up' ? context.deckExtras : undefined;
+  const superchargedDeckCards =
+    context.mode === 'targets-up' ? context.superchargedDeckCards : undefined;
   const { state, dispatch } = useGame(
     contextDifficulty(context),
     target,
     contextDeckLimit(context),
     contextNoSwap(context),
     keptBonusCards,
-    deckExtras
+    deckExtras,
+    superchargedDeckCards
   );
   if (state.phase.kind === 'game-over') {
     return (

@@ -1,5 +1,6 @@
 import { useCallback, useReducer } from 'react';
 import { BonusCard } from '../../game/bonusCards';
+import { Card } from '../../game/cards';
 import { Action, GameState, newGame, step } from '../../game/state';
 import { Difficulty } from '../../game/rules';
 
@@ -18,7 +19,8 @@ export const useGame = (
   deckLimit?: number,
   noSwap?: boolean,
   keptBonusCards?: BonusCard[],
-  deckExtras?: BonusCard[]
+  deckExtras?: BonusCard[],
+  superchargedDeckCards?: Card[]
 ): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
@@ -31,7 +33,8 @@ export const useGame = (
         deckLimit,
         noSwap ?? false,
         keptBonusCards,
-        deckExtras
+        deckExtras,
+        superchargedDeckCards
       )
   );
 

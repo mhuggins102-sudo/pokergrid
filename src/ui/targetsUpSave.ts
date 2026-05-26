@@ -5,6 +5,7 @@ import {
   BonusCard,
   powerUpBonusCard,
 } from '../game/bonusCards';
+import { Card } from '../game/cards';
 
 // Targets-Up resume save. Mirrors the React-context pattern used by Settings
 // and Stats. Captures the level / wins counters plus the powered-up bonus
@@ -26,6 +27,10 @@ export interface TUSave {
   ts: number;
   keptCard?: SerializedBonusCard | null;
   deckExtras?: SerializedBonusCard[];
+  // Standard cards the player has supercharged on past S-tier wins.
+  // Plain Card objects survive JSON round-tripping (no functions on them),
+  // so we just store them directly.
+  superchargedDeckCards?: Card[];
 }
 
 const STORAGE_KEY = 'pokergrid:tu-save:v1';
@@ -59,6 +64,7 @@ export const loadTUSave = async (): Promise<TUSave | null> => {
       ts: parsed.ts ?? Date.now(),
       keptCard: parsed.keptCard ?? null,
       deckExtras: parsed.deckExtras ?? [],
+      superchargedDeckCards: parsed.superchargedDeckCards ?? [],
     };
   } catch {
     return null;
@@ -81,20 +87,26 @@ export const deleteTUSave = async (): Promise<void> => {
   }
 };
 
-// Reconstruct the actual BonusCard objects from a save (looking up the
-// base in BONUS_DECK_POOL and re-applying any power-ups). Used by App when
-// resuming via "Continue Targets Up".
+// Reconstruct the actual BonusCard objects + supercharged Cards from a
+// save. Used by App when resuming via "Continue Targets Up".
 export const hydrateSavedCards = (
   s: TUSave | null
-): { keptCard: BonusCard | undefined; deckExtras: BonusCard[] } => {
-  if (!s) return { keptCard: undefined, deckExtras: [] };
+): {
+  keptCard: BonusCard | undefined;
+  deckExtras: BonusCard[];
+  superchargedDeckCards: Card[];
+} => {
+  if (!s) {
+    return { keptCard: undefined, deckExtras: [], superchargedDeckCards: [] };
+  }
   const keptCard = s.keptCard
     ? deserializeBonusCard(s.keptCard) ?? undefined
     : undefined;
   const deckExtras = (s.deckExtras ?? [])
     .map(deserializeBonusCard)
     .filter((c): c is BonusCard => c !== null);
-  return { keptCard, deckExtras };
+  const superchargedDeckCards = s.superchargedDeckCards ?? [];
+  return { keptCard, deckExtras, superchargedDeckCards };
 };
 
 interface TUSaveContextValue {
@@ -103,7 +115,8 @@ interface TUSaveContextValue {
     level: number,
     wins: number,
     keptCard?: BonusCard,
-    deckExtras?: BonusCard[]
+    deckExtras?: BonusCard[],
+    superchargedDeckCards?: Card[]
   ) => void;
   clearProgress: () => void;
 }
@@ -126,7 +139,8 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
       level: number,
       wins: number,
       keptCard?: BonusCard,
-      deckExtras?: BonusCard[]
+      deckExtras?: BonusCard[],
+      superchargedDeckCards?: Card[]
     ) => {
       const s: TUSave = {
         level,
@@ -134,6 +148,7 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
         ts: Date.now(),
         keptCard: keptCard ? serializeBonusCard(keptCard) : null,
         deckExtras: (deckExtras ?? []).map(serializeBonusCard),
+        superchargedDeckCards: superchargedDeckCards ?? [],
       };
       setSave(s);
       writeTUSave(s);
