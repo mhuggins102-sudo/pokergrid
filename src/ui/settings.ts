@@ -21,7 +21,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
-  sounds: false, // off by default — we don't ship sound files yet
+  sounds: true,
   reduceMotion: false,
   colorBlindAssist: false,
   twoColorDeck: false,
