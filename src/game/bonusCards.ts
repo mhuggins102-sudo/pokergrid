@@ -326,23 +326,25 @@ const rainbowCorners: BonusCard = {
   baseMultValue: 1.25,
   gridEffect: ({ grid }, card) => {
     const cards = CORNER_SLOTS.map(i => grid[i]);
-    if (cards.some(c => !c || isJoker(c))) return {};
-    // Wild corners are suit-flexible — they can fill any missing suit.
-    // The achievement triggers iff the non-wild corners have distinct
-    // suits among themselves (no duplicates), since the remaining
-    // wilds can always be assigned the missing suits.
-    const nonWildSuits: Suit[] = [];
-    let wildCount = 0;
+    // Empty corners block the achievement — we need all four filled.
+    if (cards.some(c => c === null)) return {};
+    // Both the joker and wild-supercharged cards are suit-flexible:
+    // they can fill any missing suit. The achievement triggers iff
+    // the non-flexible corners have distinct suits among themselves
+    // (no duplicates), since the remaining flex cards can always be
+    // assigned the missing suits.
+    const nonFlexSuits: Suit[] = [];
+    let flexCount = 0;
     for (const c of cards) {
-      const std = c as Exclude<Card, { kind: 'joker' }>;
-      if (std.supercharge === 'wild') wildCount += 1;
-      else nonWildSuits.push(std.suit);
+      if (c === null) continue;
+      if (isJoker(c) || c.supercharge === 'wild') {
+        flexCount += 1;
+      } else {
+        nonFlexSuits.push(c.suit);
+      }
     }
-    const noDupes = new Set(nonWildSuits).size === nonWildSuits.length;
-    // With all 4 corners filled (non-joker, non-null) and no duplicates
-    // among the non-wilds, the wilds can always pick the missing suits
-    // to make 4 distinct total.
-    return noDupes && nonWildSuits.length + wildCount === 4
+    const noDupes = new Set(nonFlexSuits).size === nonFlexSuits.length;
+    return noDupes && nonFlexSuits.length + flexCount === 4
       ? { totalMultiplier: card.multValue ?? 1.25 }
       : {};
   },
