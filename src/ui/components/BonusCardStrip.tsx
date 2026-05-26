@@ -1,6 +1,14 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { BonusCard, BONUS_HAND_LIMIT } from '../../game/bonusCards';
+import { styleFor } from '../bonusCardCategory';
+import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -34,6 +42,77 @@ const ValueBadge = ({ value }: { value: number | undefined }) => {
   );
 };
 
+interface ChipProps {
+  card: BonusCard;
+  value: number | undefined;
+  isSelected: boolean;
+  onPress?: () => void;
+}
+
+// Single bonus card chip. Tracks its own value-changed pulse so that when a
+// scoring event (place, swap, slide, destroy, etc.) bumps the card's
+// contribution upward, the chip flashes — making it obvious WHICH held
+// bonus card just fired without the player having to mentally diff a row of
+// small numbers.
+//
+// The pulse only fires on value INCREASES — decreases (e.g., a swap that
+// breaks the line this card was scoring on) are not "fires," they're losses
+// and the value-badge text already communicates that.
+const BonusChip = ({ card, value, isSelected, onPress }: ChipProps) => {
+  const { settings } = useSettings();
+  const cat = styleFor(card);
+  const flash = useSharedValue(0);
+  const prevValue = useRef<number | undefined>(value);
+
+  useEffect(() => {
+    if (
+      value !== undefined &&
+      prevValue.current !== undefined &&
+      value > prevValue.current
+    ) {
+      if (!settings.reduceMotion) {
+        flash.value = withSequence(
+          withTiming(1, { duration: 140 }),
+          withTiming(0, { duration: 420 })
+        );
+      }
+    }
+    prevValue.current = value;
+  }, [value, settings.reduceMotion, flash]);
+
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+
+  return (
+    <Pressable
+      style={[
+        styles.chip,
+        glow(colors.warn, 6, 0.35),
+        isSelected && styles.selected,
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.chipTextWrap}>
+        <Text style={[styles.icon, { color: cat.color, textShadowColor: cat.color }]}>
+          {cat.icon}
+        </Text>
+        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
+          {card.title}
+        </Text>
+        <Text style={styles.mult} numberOfLines={1} adjustsFontSizeToFit>
+          {card.mult}
+        </Text>
+      </View>
+      <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashStyle]} />
+    </Pressable>
+  );
+};
+
+const EmptyChip = () => (
+  <View style={[styles.chip, styles.empty]}>
+    <Text style={styles.emptyText}>· empty ·</Text>
+  </View>
+);
+
 export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Props) => (
   <View style={styles.wrap}>
     <View style={styles.strip}>
@@ -45,28 +124,21 @@ export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Prop
         return (
           <View key={i} style={styles.slot}>
             <ValueBadge value={filled ? values?.[i] : undefined} />
-            <Pressable
-              style={[
-                styles.chip,
-                !filled && styles.empty,
-                filled && glow(colors.warn, 6, 0.35),
-                isSelected && styles.selected,
-              ]}
-              onPress={pressable ? () => onCardPress!(i) : undefined}
-            >
-              {filled ? (
-                <View style={styles.chipTextWrap}>
-                  <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
-                    {c.title}
-                  </Text>
-                  <Text style={styles.mult} numberOfLines={1} adjustsFontSizeToFit>
-                    {c.mult}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.emptyText}>· empty ·</Text>
-              )}
-            </Pressable>
+            {filled ? (
+              // Keyed by card id so a replacement remounts the chip with a
+              // fresh prev-value ref — otherwise the new card's first value
+              // would be compared against the old card's last value and
+              // could trigger a spurious flash on swap.
+              <BonusChip
+                key={c.id}
+                card={c}
+                value={values?.[i]}
+                isSelected={isSelected}
+                onPress={pressable ? () => onCardPress!(i) : undefined}
+              />
+            ) : (
+              <EmptyChip />
+            )}
           </View>
         );
       })}
@@ -122,6 +194,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
     minHeight: 50,
+    overflow: 'hidden',
   },
   empty: {
     backgroundColor: 'transparent',
@@ -144,7 +217,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    gap: 2,
+    gap: 1,
+  },
+  icon: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+    textShadowRadius: 4,
+    lineHeight: 14,
   },
   title: {
     fontFamily: fonts.mono,
@@ -165,5 +246,17 @@ const styles = StyleSheet.create({
     textShadowColor: colors.success,
     textShadowRadius: 3,
     textAlign: 'center',
+  },
+  // Briefly visible amber wash on the chip when its scoring contribution
+  // increases — "this card just fired." Semi-transparent so the existing
+  // title / icon / mult tint amber rather than getting hidden.
+  flashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 183, 74, 0.55)',
+    borderRadius: radius.md,
   },
 });
