@@ -17,6 +17,9 @@ interface Props {
   onInfoPress?: () => void;
   onHomePress?: () => void;
   onUndoPress?: () => void;
+  // Opens the tier-breakdown popup explaining what score earns A / S /
+  // SS for the current target. Wired by GameScreen.
+  onScorePress?: () => void;
   // 'hidden' = challenge mode (no undo at all). 'available' = pressable.
   // 'unavailable' = greyed out (no snapshots, or per-mode cap reached).
   undoState?: UndoState;
@@ -77,6 +80,7 @@ export const ScoreBar = ({
   onInfoPress,
   onHomePress,
   onUndoPress,
+  onScorePress,
   undoState = 'hidden',
   kicker,
 }: Props) => {
@@ -90,12 +94,17 @@ export const ScoreBar = ({
             <Text style={styles.iconText}>‹</Text>
           </Pressable>
         )}
-        <View style={styles.scoreBlock}>
+        <Pressable
+          onPress={onScorePress}
+          disabled={!onScorePress}
+          style={styles.scoreBlock}
+          hitSlop={6}
+        >
           {kicker && <Text style={styles.kicker}>{kicker}</Text>}
           {liveScore !== undefined && (
             <ScoreReadout score={liveScore} target={target} />
           )}
-        </View>
+        </Pressable>
         {showUndo && (
           <Pressable
             onPress={undoActive ? onUndoPress : undefined}

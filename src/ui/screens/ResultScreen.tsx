@@ -35,13 +35,13 @@ interface Props {
   context: PlayContext;
   onReplay: () => void;
   onHome: () => void;
-  // For TU mode, the player's powered-up keep-one pick + the cumulative
-  // powered extras + the supercharged S-tier deck cards are passed
-  // through so the next level starts with the full carry-over state.
+  // For TU mode, the cumulative powered bonus extras + S-tier
+  // supercharged deck cards are passed through so the next level
+  // starts with the full carry-over state.
   onAdvance: (
-    keptCard?: BonusCard,
     deckExtras?: BonusCard[],
-    superchargedDeckCards?: Card[]
+    superchargedDeckCards?: Card[],
+    lastKeptBaseId?: string | null
   ) => void;
 }
 
@@ -305,7 +305,7 @@ const PickerChip = ({
           {card.mult}
         </Text>
         {blocked ? (
-          <Text style={styles.pickerCardBlockedTag}>kept last round</Text>
+          <Text style={styles.pickerCardBlockedTag}>picked last round</Text>
         ) : card.baseMultValue !== undefined && card.baseMultValue !== card.multValue ? (
           <Text style={styles.pickerCardWas}>was ×{card.baseMultValue}</Text>
         ) : null}
@@ -438,6 +438,14 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const showGridPicker =
     isTUWin && (tier === 'SS' || (tier === 'S' && tierChoice === 'grid'));
 
+  // If the player has no bonus cards in hand at S tier, the bonus
+  // option isn't viable — auto-resolve the choice to grid so the
+  // player doesn't get stuck on a picker that can't render.
+  useEffect(() => {
+    if (!requiresTierChoice || tierChoice !== null) return;
+    if (state.bonusCards.length === 0) setTierChoice('grid');
+  }, [requiresTierChoice, tierChoice, state.bonusCards.length]);
+
   const poweredCards = useMemo<BonusCard[]>(
     () => (showBonusPicker ? state.bonusCards.map(c => powerUpBonusCard(c)) : []),
     [showBonusPicker, state.bonusCards]
@@ -473,23 +481,20 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     }
   }, [poweredCards.length, keptIdx, blockedIndices]);
 
-  // Cumulative deck extras for TU runs: previous levels' returned cards
-  // plus the two from this round that the player DIDN'T keep.
+  // Cumulative deck extras for TU runs: previous levels' supercharged
+  // bonus cards plus the ONE the player picked this round (if any).
+  // Cards the player didn't pick are simply discarded — no carry-over.
   const prevDeckExtras = context.mode === 'targets-up'
     ? (context.deckExtras ?? [])
     : [];
   const newDeckExtras = useMemo<BonusCard[]>(
-    () =>
-      keptIdx === null
-        ? poweredCards
-        : poweredCards.filter((_, i) => i !== keptIdx),
+    () => (keptIdx === null ? [] : [poweredCards[keptIdx]]),
     [poweredCards, keptIdx]
   );
   const allDeckExtras = useMemo<BonusCard[]>(
     () => [...prevDeckExtras, ...newDeckExtras],
     [prevDeckExtras, newDeckExtras]
   );
-  const keptCard = keptIdx !== null ? poweredCards[keptIdx] : undefined;
 
   // Persist the picker outcome as it happens — so if the player closes
   // the app between picking and tapping Next, they still resume with
@@ -501,7 +506,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     saveTUProgress(
       context.level + 1,
       context.wins + 1,
-      keptCard,
       allDeckExtras,
       context.mode === 'targets-up' ? context.superchargedDeckCards : undefined,
       nextLastKeptBaseId
@@ -509,7 +513,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   }, [
     isTUWin,
     keptIdx,
-    keptCard,
     allDeckExtras,
     context,
     nextLastKeptBaseId,
@@ -525,7 +528,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     saveTUProgress(
       context.level + 1,
       context.wins + 1,
-      undefined,
       allDeckExtras,
       context.mode === 'targets-up' ? context.superchargedDeckCards : undefined,
       null
@@ -583,12 +585,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     saveTUProgress(
       context.level + 1,
       context.wins + 1,
-      keptCard,
       allDeckExtras,
       allSuperchargedDeckCards,
-      // Preserve the keep-one picker's effect on lastKeptBaseId — if
-      // we omitted this, the save default would null it out and undo
-      // the cooldown the bonus picker just set.
+      // Preserve the bonus-supercharge picker's effect on
+      // lastKeptBaseId — if we omitted this, the save default would
+      // null it out and undo the cooldown the bonus picker just set.
       nextLastKeptBaseId !== null
         ? nextLastKeptBaseId
         : (context.lastKeptBaseId ?? null)
@@ -597,7 +598,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     isTUWin,
     showGridPicker,
     superchargedSlot,
-    keptCard,
     allDeckExtras,
     allSuperchargedDeckCards,
     context,
@@ -679,7 +679,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           saveTUProgress(
             context.level + 1,
             context.wins + 1,
-            undefined,
             context.deckExtras ?? [],
             context.superchargedDeckCards ?? [],
             context.lastKeptBaseId ?? null
@@ -849,9 +848,9 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
 
       {showTierChoice && (
         <View style={styles.pickerBlock}>
-          <Text style={styles.pickerLabel}>S-tier reward · Pick your upgrade</Text>
+          <Text style={styles.pickerLabel}>S-tier reward · Pick one to supercharge</Text>
           <Text style={styles.pickerHint}>
-            Score an S to pick one upgrade; an SS earns both. Choose carefully — once you tap, it's locked in for this round.
+            Score an S to supercharge one card; an SS supercharges both. Choose carefully — once you tap, it's locked in for this round.
           </Text>
           <View style={styles.tierChoiceRow}>
             <Pressable
@@ -859,10 +858,10 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
               style={[styles.tierChoiceCard, { borderColor: colors.warn }, glow(colors.warn, 8, 0.4)]}
             >
               <Text style={[styles.tierChoiceTitle, { color: colors.warn, textShadowColor: colors.warn }]}>
-                Power up a bonus card
+                Supercharge a bonus card
               </Text>
               <Text style={styles.tierChoiceBody}>
-                Boost your held cards ×1.2 and keep one for Level {context.level + 1}.
+                Pick one of your held cards. It gets ×1.2 power and joins the bonus deck for the rest of the run.
               </Text>
             </Pressable>
             <Pressable
@@ -873,7 +872,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
                 Supercharge a grid card
               </Text>
               <Text style={styles.tierChoiceBody}>
-                Make any non-joker card wild or double in this run's deck.
+                Pick any non-joker card on the grid. A coin flip turns it into a wild or a double for the rest of the run.
               </Text>
             </Pressable>
           </View>
@@ -882,13 +881,13 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
 
       {showBonusPicker && poweredCards.length >= 1 && (
         <View style={styles.pickerBlock}>
-          <Text style={styles.pickerLabel}>Power up · keep one</Text>
+          <Text style={styles.pickerLabel}>Supercharge a bonus card</Text>
           <Text style={styles.pickerHint}>
-            Each card's multiplier was boosted ×1.2. Pick one to carry into Level {context.level + 1}; the others go back into the bonus deck powered up. You can't keep the same card type two rounds in a row.
+            Pick one of your held cards. It gets ×1.2 power and joins the bonus deck for the rest of the run; the others are discarded. You can't supercharge the same card type two rounds in a row.
           </Text>
           {allBlocked && (
             <Text style={styles.pickerAllBlocked}>
-              All three cards match last round's pick — no card kept this round, but you can repeat any of them next round.
+              All three cards match last round's pick — no card supercharged this round, but you can repeat any of them next round.
             </Text>
           )}
           <View style={styles.pickerRow}>
@@ -933,7 +932,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
             disabled={!pickerComplete}
             onPress={() =>
               onAdvance(
-                keptCard,
                 allDeckExtras,
                 allSuperchargedDeckCards,
                 // Only overwrite the cooldown when the bonus picker

@@ -92,26 +92,28 @@ export const deleteTUSave = async (): Promise<void> => {
   }
 };
 
-// Reconstruct the actual BonusCard objects + supercharged Cards from a
-// save. Used by App when resuming via "Continue Targets Up".
+// Reconstruct deck extras + supercharged Cards from a save. Used by App
+// when resuming via "Continue Targets Up". The new spec dropped the
+// "kept card carries into the next round's hand" mechanic, but pre-spec
+// saves may still have a keptCard set — we fold it into deckExtras so
+// the powered card joins the bonus deck rather than being lost.
 export const hydrateSavedCards = (
   s: TUSave | null
 ): {
-  keptCard: BonusCard | undefined;
   deckExtras: BonusCard[];
   superchargedDeckCards: Card[];
 } => {
   if (!s) {
-    return { keptCard: undefined, deckExtras: [], superchargedDeckCards: [] };
+    return { deckExtras: [], superchargedDeckCards: [] };
   }
-  const keptCard = s.keptCard
-    ? deserializeBonusCard(s.keptCard) ?? undefined
-    : undefined;
-  const deckExtras = (s.deckExtras ?? [])
+  const extras = (s.deckExtras ?? [])
     .map(deserializeBonusCard)
     .filter((c): c is BonusCard => c !== null);
+  // Backward compat with the old keep-one save format.
+  const legacyKept = s.keptCard ? deserializeBonusCard(s.keptCard) : null;
+  const deckExtras = legacyKept ? [...extras, legacyKept] : extras;
   const superchargedDeckCards = s.superchargedDeckCards ?? [];
-  return { keptCard, deckExtras, superchargedDeckCards };
+  return { deckExtras, superchargedDeckCards };
 };
 
 interface TUSaveContextValue {
@@ -119,7 +121,6 @@ interface TUSaveContextValue {
   saveProgress: (
     level: number,
     wins: number,
-    keptCard?: BonusCard,
     deckExtras?: BonusCard[],
     superchargedDeckCards?: Card[],
     lastKeptBaseId?: string | null
@@ -144,7 +145,6 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
     (
       level: number,
       wins: number,
-      keptCard?: BonusCard,
       deckExtras?: BonusCard[],
       superchargedDeckCards?: Card[],
       lastKeptBaseId?: string | null
@@ -153,7 +153,9 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
         level,
         wins,
         ts: Date.now(),
-        keptCard: keptCard ? serializeBonusCard(keptCard) : null,
+        // keptCard intentionally always null — the new spec has no
+        // hand carry-over. Field stays in the schema for migration.
+        keptCard: null,
         deckExtras: (deckExtras ?? []).map(serializeBonusCard),
         superchargedDeckCards: superchargedDeckCards ?? [],
         lastKeptBaseId: lastKeptBaseId ?? null,

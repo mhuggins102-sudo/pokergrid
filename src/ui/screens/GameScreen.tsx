@@ -36,6 +36,7 @@ import { LineDetailModal } from '../components/LineDetailModal';
 import { NeonButton } from '../components/NeonButton';
 import { ScoreBar, UndoState as UndoStateKind } from '../components/ScoreBar';
 import { ScoringReferenceModal } from '../components/ScoringReferenceModal';
+import { TierBreakdownModal } from '../components/TierBreakdownModal';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
@@ -49,6 +50,10 @@ interface Props {
   // Per-mode undo cap. 0 = no undo button (challenge mode). Infinity = unlimited
   // (free play). 1 = one undo per run (targets-up).
   maxUndos?: number;
+  // True for Targets-Up mode — tells the tier-breakdown popup to show
+  // the per-tier reward column (A: advance, S: 1 supercharge, SS: 2).
+  // Other modes don't have tier-based rewards so the column is hidden.
+  showTierRewards?: boolean;
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
@@ -194,9 +199,11 @@ export const GameScreen = ({
   onHome,
   kicker,
   maxUndos = Infinity,
+  showTierRewards = false,
 }: Props) => {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
+  const [tierBreakdownOpen, setTierBreakdownOpen] = useState(false);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const [deckPreviewOpen, setDeckPreviewOpen] = useState(false);
   const deckPeekAllowed = canPreviewDeck(state.difficulty);
@@ -895,6 +902,7 @@ export const GameScreen = ({
         liveScore={liveScore}
         onInfoPress={() => setScoringOpen(true)}
         onHomePress={onHome}
+        onScorePress={() => setTierBreakdownOpen(true)}
         kicker={kicker}
         onUndoPress={handleUndoPress}
         undoState={undoState}
@@ -938,6 +946,12 @@ export const GameScreen = ({
         )}
       </View>
 
+      <TierBreakdownModal
+        visible={tierBreakdownOpen}
+        target={state.target}
+        showRewards={showTierRewards}
+        onClose={() => setTierBreakdownOpen(false)}
+      />
       <ScoringReferenceModal
         visible={scoringOpen}
         onClose={() => setScoringOpen(false)}

@@ -34,19 +34,18 @@ export type PlayContext =
       mode: 'targets-up';
       level: number;
       wins: number;
-      // Carried over from each successful level via the end-of-round
-      // power-up picker. keptCard goes straight into the player's hand;
-      // deckExtras shuffle back into the bonus deck.
-      keptCard?: BonusCard;
+      // Powered bonus cards carried over from past S/SS-tier wins.
+      // They shuffle into the bonus deck of every subsequent level so
+      // future ♣ draws can produce them at their boosted multiplier.
       deckExtras?: BonusCard[];
-      // S-tier reward carry-over: standard cards the player has chosen
-      // to supercharge on past grids. newGame swaps these in for the
-      // matching rank+suit in the shuffled deck.
+      // S/SS-tier reward carry-over: standard cards the player has
+      // chosen to supercharge on past grids. newGame swaps these in
+      // for the matching rank+suit in the shuffled deck.
       superchargedDeckCards?: Card[];
-      // Base id of the card the player kept LAST round (or null if no
-      // card was kept). The next round's keep-one picker disables any
-      // chip whose base id matches — so the player can't power-up the
-      // same bonus card on consecutive rounds.
+      // Base id of the bonus card the player supercharged LAST round
+      // (or null if none). The next round's bonus-supercharge picker
+      // disables any chip whose base id matches — so the player can't
+      // supercharge the same bonus card type on consecutive rounds.
       lastKeptBaseId?: string | null;
     }
   | { mode: 'challenge'; id: ChallengeId };
@@ -92,12 +91,11 @@ const AppShell = () => {
   };
   const continueTargetsUp = () => {
     if (!tuSave) return;
-    const { keptCard, deckExtras, superchargedDeckCards } = hydrateSavedCards(tuSave);
+    const { deckExtras, superchargedDeckCards } = hydrateSavedCards(tuSave);
     setPlayContext({
       mode: 'targets-up',
       level: tuSave.level,
       wins: tuSave.wins,
-      keptCard,
       deckExtras,
       superchargedDeckCards,
       lastKeptBaseId: tuSave.lastKeptBaseId ?? null,
@@ -111,12 +109,11 @@ const AppShell = () => {
     setScreen('game');
   };
   const advanceTargetsUp = (
-    keptCard?: BonusCard,
     deckExtras?: BonusCard[],
     superchargedDeckCards?: Card[],
-    // null = picker resolved with no kept card (auto-skip when all
-    // chips matched last round's pick); undefined = caller didn't
-    // touch this field, preserve whatever was there.
+    // null = picker resolved with no bonus supercharge (player chose
+    // grid, all chips matched last round's pick, or no held cards);
+    // undefined = caller didn't touch this field, preserve previous.
     lastKeptBaseId?: string | null
   ) => {
     if (playContext?.mode !== 'targets-up') return;
@@ -124,7 +121,6 @@ const AppShell = () => {
       mode: 'targets-up',
       level: playContext.level + 1,
       wins: playContext.wins + 1,
-      keptCard: keptCard ?? playContext.keptCard,
       deckExtras: deckExtras ?? playContext.deckExtras,
       superchargedDeckCards:
         superchargedDeckCards ?? playContext.superchargedDeckCards,
@@ -265,7 +261,6 @@ interface GameContainerProps {
   onHome: () => void;
   onReplay: () => void;
   onAdvance: (
-    keptCard?: BonusCard,
     deckExtras?: BonusCard[],
     superchargedDeckCards?: Card[],
     lastKeptBaseId?: string | null
@@ -328,11 +323,11 @@ const contextNoSwap = (ctx: PlayContext): boolean =>
 
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
-  // For TU mode, surface the kept card + powered extras + supercharged
-  // deck cards to the engine so the next level starts with them in hand
-  // / in the deck / spliced into the playing deck respectively.
-  const keptBonusCards =
-    context.mode === 'targets-up' && context.keptCard ? [context.keptCard] : undefined;
+  // No bonus cards carry between TU levels — the easy/medium free
+  // starter is drawn fresh by newGame via STARTER_BONUS_BY_DIFFICULTY.
+  // Past supercharged bonus cards (from prior S/SS picks) shuffle into
+  // the bonus deck via deckExtras; supercharged grid cards splice into
+  // the playing deck via superchargedDeckCards.
   const deckExtras =
     context.mode === 'targets-up' ? context.deckExtras : undefined;
   const superchargedDeckCards =
@@ -342,7 +337,7 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     target,
     contextDeckLimit(context),
     contextNoSwap(context),
-    keptBonusCards,
+    undefined,
     deckExtras,
     superchargedDeckCards
   );
@@ -364,6 +359,7 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
       onHome={onHome}
       kicker={contextKicker(context)}
       maxUndos={contextMaxUndos(context)}
+      showTierRewards={context.mode === 'targets-up'}
     />
   );
 };
