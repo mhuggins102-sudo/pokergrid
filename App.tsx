@@ -21,6 +21,7 @@ import { StatsScreen } from './src/ui/screens/StatsScreen';
 import { markTutorialSeen, TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
 import { SettingsProvider } from './src/ui/settings';
 import { StatsProvider } from './src/ui/stats';
+import { TUSaveProvider, useTUSave } from './src/ui/targetsUpSave';
 import { colors } from './src/ui/theme';
 
 // Play contexts — the "mode" the current run is in. The Game loop itself is
@@ -44,6 +45,7 @@ const AppShell = () => {
   const [screen, setScreen] = useState<Screen>('home');
   const [playContext, setPlayContext] = useState<PlayContext | null>(null);
   const [nonce, setNonce] = useState(0);
+  const { save: tuSave } = useTUSave();
 
   // First-run: pop up the single-page Rules. Mark seen on dismiss so we
   // don't show it again. The user can re-open from Home → How to Play.
@@ -68,6 +70,12 @@ const AppShell = () => {
     setNonce(n => n + 1);
     setScreen('game');
   };
+  const continueTargetsUp = () => {
+    if (!tuSave) return;
+    setPlayContext({ mode: 'targets-up', level: tuSave.level, wins: tuSave.wins });
+    setNonce(n => n + 1);
+    setScreen('game');
+  };
   const startChallenge = (id: ChallengeId) => {
     setPlayContext({ mode: 'challenge', id });
     setNonce(n => n + 1);
@@ -89,6 +97,7 @@ const AppShell = () => {
         <HomeScreen
           onStartFree={startFreePlay}
           onStartTargetsUp={startTargetsUp}
+          onContinueTargetsUp={continueTargetsUp}
           onOpenChallenges={() => setScreen('challenges')}
           onOpenStats={() => setScreen('stats')}
           onOpenSettings={() => setScreen('settings')}
@@ -193,12 +202,14 @@ export default function App() {
       <SafeAreaProvider>
         <SettingsProvider>
           <StatsProvider>
-            <WebScaler>
-              <View style={styles.app}>
-                <StatusBar style="light" />
-                <AppShell />
-              </View>
-            </WebScaler>
+            <TUSaveProvider>
+              <WebScaler>
+                <View style={styles.app}>
+                  <StatusBar style="light" />
+                  <AppShell />
+                </View>
+              </WebScaler>
+            </TUSaveProvider>
           </StatsProvider>
         </SettingsProvider>
       </SafeAreaProvider>
