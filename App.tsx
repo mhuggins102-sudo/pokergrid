@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { BonusCard } from './src/game/bonusCards';
 import {
   ChallengeId,
   findChallenge,
@@ -21,14 +22,23 @@ import { StatsScreen } from './src/ui/screens/StatsScreen';
 import { markTutorialSeen, TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
 import { SettingsProvider } from './src/ui/settings';
 import { StatsProvider } from './src/ui/stats';
-import { TUSaveProvider, useTUSave } from './src/ui/targetsUpSave';
+import { hydrateSavedCards, TUSaveProvider, useTUSave } from './src/ui/targetsUpSave';
 import { colors } from './src/ui/theme';
 
 // Play contexts — the "mode" the current run is in. The Game loop itself is
 // identical across modes; only the target and the post-game flow differ.
 export type PlayContext =
   | { mode: 'free'; difficulty: Difficulty }
-  | { mode: 'targets-up'; level: number; wins: number }
+  | {
+      mode: 'targets-up';
+      level: number;
+      wins: number;
+      // Carried over from each successful level via the end-of-round
+      // power-up picker. keptCard goes straight into the player's hand;
+      // deckExtras shuffle back into the bonus deck.
+      keptCard?: BonusCard;
+      deckExtras?: BonusCard[];
+    }
   | { mode: 'challenge'; id: ChallengeId };
 
 type Screen =
@@ -72,7 +82,14 @@ const AppShell = () => {
   };
   const continueTargetsUp = () => {
     if (!tuSave) return;
-    setPlayContext({ mode: 'targets-up', level: tuSave.level, wins: tuSave.wins });
+    const { keptCard, deckExtras } = hydrateSavedCards(tuSave);
+    setPlayContext({
+      mode: 'targets-up',
+      level: tuSave.level,
+      wins: tuSave.wins,
+      keptCard,
+      deckExtras,
+    });
     setNonce(n => n + 1);
     setScreen('game');
   };
@@ -81,12 +98,17 @@ const AppShell = () => {
     setNonce(n => n + 1);
     setScreen('game');
   };
-  const advanceTargetsUp = () => {
+  const advanceTargetsUp = (
+    keptCard?: BonusCard,
+    deckExtras?: BonusCard[]
+  ) => {
     if (playContext?.mode !== 'targets-up') return;
     setPlayContext({
       mode: 'targets-up',
       level: playContext.level + 1,
       wins: playContext.wins + 1,
+      keptCard: keptCard ?? playContext.keptCard,
+      deckExtras: deckExtras ?? playContext.deckExtras,
     });
     setNonce(n => n + 1);
   };
@@ -221,7 +243,7 @@ interface GameContainerProps {
   context: PlayContext;
   onHome: () => void;
   onReplay: () => void;
-  onAdvance: () => void;
+  onAdvance: (keptCard?: BonusCard, deckExtras?: BonusCard[]) => void;
 }
 
 const contextTarget = (ctx: PlayContext): number => {
@@ -280,11 +302,19 @@ const contextNoSwap = (ctx: PlayContext): boolean =>
 
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
+  // For TU mode, surface the kept card + powered extras to the engine so
+  // the next level starts with them in hand / in the deck respectively.
+  const keptBonusCards =
+    context.mode === 'targets-up' && context.keptCard ? [context.keptCard] : undefined;
+  const deckExtras =
+    context.mode === 'targets-up' ? context.deckExtras : undefined;
   const { state, dispatch } = useGame(
     contextDifficulty(context),
     target,
     contextDeckLimit(context),
-    contextNoSwap(context)
+    contextNoSwap(context),
+    keptBonusCards,
+    deckExtras
   );
   if (state.phase.kind === 'game-over') {
     return (

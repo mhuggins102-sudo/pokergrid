@@ -1,4 +1,5 @@
 import { useCallback, useReducer } from 'react';
+import { BonusCard } from '../../game/bonusCards';
 import { Action, GameState, newGame, step } from '../../game/state';
 import { Difficulty } from '../../game/rules';
 
@@ -15,12 +16,23 @@ export const useGame = (
   difficulty: Difficulty,
   target?: number,
   deckLimit?: number,
-  noSwap?: boolean
+  noSwap?: boolean,
+  keptBonusCards?: BonusCard[],
+  deckExtras?: BonusCard[]
 ): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
     undefined as unknown as GameState,
-    () => newGame(difficulty, undefined, target, deckLimit, noSwap ?? false)
+    () =>
+      newGame(
+        difficulty,
+        undefined,
+        target,
+        deckLimit,
+        noSwap ?? false,
+        keptBonusCards,
+        deckExtras
+      )
   );
 
   const dispatch = useCallback((a: Action) => rawDispatch(a), [rawDispatch]);

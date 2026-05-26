@@ -9,11 +9,13 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import type { PlayContext } from '../../../App';
+import { BonusCard, powerUpBonusCard } from '../../game/bonusCards';
 import { challengeWon, findChallenge } from '../../game/challenges';
 import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
+import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
@@ -32,7 +34,10 @@ interface Props {
   context: PlayContext;
   onReplay: () => void;
   onHome: () => void;
-  onAdvance: () => void;
+  // For TU mode, the player's powered-up keep-one pick + the cumulative
+  // powered extras are passed through so the next level starts with the
+  // correct carry-over hand and deck.
+  onAdvance: (keptCard?: BonusCard, deckExtras?: BonusCard[]) => void;
 }
 
 const HAND_LABEL: Record<HandRank, string> = {
@@ -293,6 +298,66 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const tainted = state.undoCount > 0;
 
   const tier = tierFor(total, state.target, won);
+
+  // ---- Targets-Up keep-one picker -------------------------------------
+  // For a winning TU level we compute powered-up copies of every card
+  // the player was holding when the game ended. The player taps one to
+  // keep into the next level; the other two shuffle back into the
+  // bonus deck powered up too. The picker only shows in TU mode + on a
+  // win + when the player actually has at least one bonus card.
+  const isTUWin = context.mode === 'targets-up' && won;
+  const poweredCards = useMemo<BonusCard[]>(
+    () => (isTUWin ? state.bonusCards.map(c => powerUpBonusCard(c)) : []),
+    [isTUWin, state.bonusCards]
+  );
+  const [keptIdx, setKeptIdx] = useState<number | null>(null);
+
+  // Single-card hands auto-pick (the player has no real choice — keep
+  // the one card they had). 0-card hands skip the picker entirely.
+  useEffect(() => {
+    if (poweredCards.length === 1 && keptIdx === null) {
+      setKeptIdx(0);
+    }
+  }, [poweredCards.length, keptIdx]);
+
+  // Cumulative deck extras for TU runs: previous levels' returned cards
+  // plus the two from this round that the player DIDN'T keep.
+  const prevDeckExtras = context.mode === 'targets-up'
+    ? (context.deckExtras ?? [])
+    : [];
+  const newDeckExtras = useMemo<BonusCard[]>(
+    () =>
+      keptIdx === null
+        ? poweredCards
+        : poweredCards.filter((_, i) => i !== keptIdx),
+    [poweredCards, keptIdx]
+  );
+  const allDeckExtras = useMemo<BonusCard[]>(
+    () => [...prevDeckExtras, ...newDeckExtras],
+    [prevDeckExtras, newDeckExtras]
+  );
+  const keptCard = keptIdx !== null ? poweredCards[keptIdx] : undefined;
+
+  // Persist the picker outcome as it happens — so if the player closes
+  // the app between picking and tapping Next, they still resume with
+  // their carry-over intact.
+  useEffect(() => {
+    if (!isTUWin || keptIdx === null) return;
+    saveTUProgress(
+      context.level + 1,
+      context.wins + 1,
+      keptCard,
+      allDeckExtras
+    );
+    // The mount-time useEffect already wrote a "no kept card yet" save;
+    // this one overwrites with the chosen card so the resume state stays
+    // in lockstep with the picker.
+  }, [isTUWin, keptIdx, keptCard, allDeckExtras, context, saveTUProgress]);
+
+  // TU win blocks the Next button until the picker resolves. For all
+  // other modes (loss, free play, challenge) Next/Replay are immediate.
+  const pickerComplete = !isTUWin || keptIdx !== null || poweredCards.length === 0;
+
   // Personal-best detection. Tainted runs don't count — they wouldn't be
   // recorded either, so flagging them as "new best" would be misleading.
   const isNewBest = ((): boolean => {
@@ -340,10 +405,17 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       case 'targets-up':
         if (won) {
           recordTargetsUp(context.level);
-          // Save the player's position so closing the app between levels
-          // doesn't lose the run. The saved level is the NEXT level to
-          // play; advanceTargetsUp will land here on tap.
-          saveTUProgress(context.level + 1, context.wins + 1);
+          // Initial save: roll the run forward to the next level
+          // immediately so closing the app preserves at least the level
+          // progress. The keep-one picker will re-save with the kept
+          // card once the player chooses; bailing out before choosing
+          // forfeits the boost for this round but keeps the level intact.
+          saveTUProgress(
+            context.level + 1,
+            context.wins + 1,
+            undefined,
+            context.deckExtras ?? []
+          );
         } else {
           // A losing TU level ends the run; wipe the save so Home goes
           // back to "Start at Level 1" instead of resuming into a dead
@@ -491,13 +563,57 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         </View>
       </View>
 
+      {isTUWin && poweredCards.length >= 2 && (
+        <View style={styles.pickerBlock}>
+          <Text style={styles.pickerLabel}>Power up · keep one</Text>
+          <Text style={styles.pickerHint}>
+            Each card's multiplier was boosted ×1.2. Pick one to carry into Level {context.level + 1}; the others go back into the bonus deck powered up.
+          </Text>
+          <View style={styles.pickerRow}>
+            {poweredCards.map((c, i) => {
+              const tone = bonusStyleFor(c);
+              const selected = keptIdx === i;
+              const dimmed = keptIdx !== null && !selected;
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => setKeptIdx(i)}
+                  style={[
+                    styles.pickerCard,
+                    { borderColor: tone.borderColor },
+                    glow(tone.borderColor, 6, selected ? 0.7 : 0.3),
+                    selected && styles.pickerCardSelected,
+                    dimmed && styles.pickerCardDimmed,
+                  ]}
+                >
+                  <Text
+                    style={[styles.pickerCardTitle, { color: tone.titleColor, textShadowColor: tone.titleColor }]}
+                    numberOfLines={2}
+                    adjustsFontSizeToFit
+                  >
+                    {c.title}
+                  </Text>
+                  <Text style={styles.pickerCardMult} numberOfLines={1} adjustsFontSizeToFit>
+                    {c.mult}
+                  </Text>
+                  {c.baseMultValue !== undefined && c.baseMultValue !== c.multValue && (
+                    <Text style={styles.pickerCardWas}>was ×{c.baseMultValue}</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       <View style={styles.btnRow}>
         {context.mode === 'targets-up' && won ? (
           <NeonButton
-            label="Next"
+            label={pickerComplete ? 'Next' : 'Pick to continue'}
             variant="primary"
             size="lg"
-            onPress={onAdvance}
+            disabled={!pickerComplete}
+            onPress={() => onAdvance(keptCard, allDeckExtras)}
             style={{ flex: 1 }}
           />
         ) : (
@@ -805,6 +921,84 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 13,
     fontWeight: '700',
+  },
+  // TU power-up keep-one picker. Sits between the score breakdown and the
+  // action buttons; only rendered on TU wins with at least 2 held bonus
+  // cards (1-card hands auto-keep, 0-card hands skip entirely).
+  pickerBlock: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+    borderTopWidth: 1,
+    borderTopColor: colors.outlineSoft,
+  },
+  pickerLabel: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+    marginBottom: spacing.xs,
+  },
+  pickerHint: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: spacing.sm,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  pickerCard: {
+    flex: 1,
+    backgroundColor: colors.bgGlass,
+    borderWidth: 1.5,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    minHeight: 76,
+    justifyContent: 'center',
+  },
+  pickerCardSelected: {
+    borderWidth: 2.5,
+  },
+  pickerCardDimmed: {
+    opacity: 0.45,
+  },
+  pickerCardTitle: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowRadius: 3,
+    textAlign: 'center',
+  },
+  pickerCardMult: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  pickerCardWas: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    fontStyle: 'italic',
+    marginTop: 2,
+    letterSpacing: 0.3,
   },
   // Mirror the breakdownBlock width so the buttons sit directly beneath it.
   btnRow: {
