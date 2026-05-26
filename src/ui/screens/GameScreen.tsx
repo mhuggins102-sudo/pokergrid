@@ -67,22 +67,66 @@ const SUIT_PERK_VARIANT: Record<string, 'primary' | 'warn' | 'danger'> = {
 
 // First-time contextual hints. Each fires exactly once per device the first
 // time the corresponding state appears mid-run, then is silenced via the
-// matching `seen*Hint` settings flag.
-type HintId = 'joker' | 'bonus-cap' | 'grid-effect';
+// matching `seen*Hint` settings flag (see settings.ts).
+type HintId =
+  | 'joker'
+  | 'bonus-cap'
+  | 'grid-effect'
+  | 'hearts-swap'
+  | 'spades-slide'
+  | 'diamonds-destroy'
+  | 'clubs-bonus'
+  | 'bonus-held'
+  | 'first-scoring-line'
+  | 'low-deck';
 
 const HINT_TITLE: Record<HintId, string> = {
   joker: 'Meet the joker',
   'bonus-cap': 'Bonus hand is full',
   'grid-effect': 'Grid achievement is live',
+  'hearts-swap': '♥ Swap',
+  'spades-slide': '♠ Slide',
+  'diamonds-destroy': '♦ Destroy',
+  'clubs-bonus': '♣ Bonus',
+  'bonus-held': 'Your first bonus card',
+  'first-scoring-line': 'First scoring line',
+  'low-deck': 'Deck running low',
 };
 
 const HINT_BODY: Record<HintId, string> = {
   joker:
-    'The joker is wild — its row and its column each score as the best 5-card hand they can. It auto-places when drawn and can\'t be discarded normally.',
+    'The joker is wild — its row and its column each score as the best 5-card hand they can. It auto-places when drawn and can\'t be discarded normally; only a ♦ Destroy can remove it.',
   'bonus-cap':
-    'You\'re holding 3 bonus cards — the maximum. Drawing another ♣ Bonus will now force you to swap one out instead of declining.',
+    'You\'re holding 3 bonus cards — the maximum. Drawing another ♣ Bonus will now force you to swap one out instead of letting you decline.',
   'grid-effect':
     'A grid achievement (purple border) is now satisfying its condition — it multiplies your TOTAL score at game end, on top of any per-line bonuses.',
+  'hearts-swap':
+    '♥ lets you swap two cards that share a row OR a column — tap one card, then tap its partner. Or just drag one onto the other. The drawn ♥ is then spent.',
+  'spades-slide':
+    '♠ slides a chain of cards in one direction. Tap a card to see valid landings, then tap one — or drag the card the way you want it to go. Cards keep their relative order.',
+  'diamonds-destroy':
+    '♦ removes any card from the grid (joker included). The slot becomes empty; if you can\'t refill it before the run ends it costs -25 at scoring time, so use ♦ deliberately.',
+  'clubs-bonus':
+    '♣ draws 2 bonus cards from a separate deck — pick one to keep. Multipliers stack MULTIPLICATIVELY: two ×2 cards on the same line is ×4, not ×3.',
+  'bonus-held':
+    'Bonus cards modify your score. Border tone tells you when they pay out: yellow = multi-trigger in-game, blue = single in-game trigger, purple = end-game multiplier. Tap any held card for full details.',
+  'first-scoring-line':
+    'Nice — your first scoring line. Each completed row and column scores as a 5-card poker hand. Pair and above pay out; High Card scores 0. Bonus cards modify these per-line totals.',
+  'low-deck':
+    'The deck is almost empty. The run ends when the deck runs out or the grid fills up. Lines you haven\'t completed by then cost -25 each, so plan your last few placements carefully.',
+};
+
+const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
+  joker: 'seenJokerHint',
+  'bonus-cap': 'seenBonusCapHint',
+  'grid-effect': 'seenGridEffectHint',
+  'hearts-swap': 'seenHeartsSwapHint',
+  'spades-slide': 'seenSpadesSlideHint',
+  'diamonds-destroy': 'seenDiamondsDestroyHint',
+  'clubs-bonus': 'seenClubsBonusHint',
+  'bonus-held': 'seenBonusHeldHint',
+  'first-scoring-line': 'seenFirstScoringLineHint',
+  'low-deck': 'seenLowDeckHint',
 };
 
 // Drawn-card area: card fades + scales in on every change so each new draw
@@ -317,20 +361,55 @@ export const GameScreen = ({
     ]
   );
 
-  // First-time contextual hints — fire each one exactly once when its
-  // matching state first appears in a run. We guard on `anim` so the
-  // modal doesn't pop up over an in-flight place / slide animation, and
-  // on phase === 'awaiting-action' so it never interrupts a picker.
+  // First-time contextual hints — each fires once when its trigger state
+  // first appears in a run. Phase-specific hints (the four suit-action
+  // targets + the bonus picker) fire when their phase becomes active so
+  // the teach moment lines up with the new UI; everything else waits for
+  // 'awaiting-action' + no in-flight anim so a modal never pops up over a
+  // placement animation.
   useEffect(() => {
     if (activeHint !== null) return;
     if (anim) return;
-    if (state.phase.kind !== 'awaiting-action') return;
+    const phase = state.phase.kind;
+
+    // Phase-anchored hints fire as soon as their UI shows.
+    if (phase === 'awaiting-target-hop' && !settings.seenHeartsSwapHint) {
+      setActiveHint('hearts-swap');
+      return;
+    }
+    if (phase === 'awaiting-target-slide-source' && !settings.seenSpadesSlideHint) {
+      setActiveHint('spades-slide');
+      return;
+    }
+    if (phase === 'awaiting-target-destroy' && !settings.seenDiamondsDestroyHint) {
+      setActiveHint('diamonds-destroy');
+      return;
+    }
+    if (phase === 'bonus-card-resolving' && !settings.seenClubsBonusHint) {
+      setActiveHint('clubs-bonus');
+      return;
+    }
+
+    // State-based hints only fire when the player is between actions.
+    if (phase !== 'awaiting-action') return;
+
     if (!settings.seenJokerHint && state.grid.some(c => c !== null && isJoker(c))) {
       setActiveHint('joker');
       return;
     }
+    if (!settings.seenBonusHeldHint && state.bonusCards.length >= 1) {
+      setActiveHint('bonus-held');
+      return;
+    }
     if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
       setActiveHint('bonus-cap');
+      return;
+    }
+    if (
+      !settings.seenFirstScoringLineHint &&
+      liveReport.lines.some(l => l.hand !== null)
+    ) {
+      setActiveHint('first-scoring-line');
       return;
     }
     if (
@@ -340,23 +419,38 @@ export const GameScreen = ({
       setActiveHint('grid-effect');
       return;
     }
+    if (
+      !settings.seenLowDeckHint &&
+      state.deck.length > 0 &&
+      state.deck.length <= 5
+    ) {
+      setActiveHint('low-deck');
+      return;
+    }
   }, [
     activeHint,
     anim,
     state.phase.kind,
     state.grid,
     state.bonusCards.length,
+    state.deck.length,
     liveReport.gridMultiplier,
     liveReport.gridFlat,
+    liveReport.lines,
     settings.seenJokerHint,
     settings.seenBonusCapHint,
     settings.seenGridEffectHint,
+    settings.seenHeartsSwapHint,
+    settings.seenSpadesSlideHint,
+    settings.seenDiamondsDestroyHint,
+    settings.seenClubsBonusHint,
+    settings.seenBonusHeldHint,
+    settings.seenFirstScoringLineHint,
+    settings.seenLowDeckHint,
   ]);
 
   const dismissHint = () => {
-    if (activeHint === 'joker') updateSettings({ seenJokerHint: true });
-    else if (activeHint === 'bonus-cap') updateSettings({ seenBonusCapHint: true });
-    else if (activeHint === 'grid-effect') updateSettings({ seenGridEffectHint: true });
+    if (activeHint) updateSettings({ [HINT_SETTING_KEY[activeHint]]: true });
     setActiveHint(null);
   };
 
