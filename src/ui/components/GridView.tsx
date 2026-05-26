@@ -21,11 +21,12 @@ interface Props {
   hiddenSlots?: Set<number>;
   selected?: number | null;
   nextSlotHint?: number | null;
-  // Drag-to-slide preview: slots where the chain WILL land at the current
-  // drag distance / direction. Rendered as a green outline overlay on top
-  // of the existing slot content so the player sees the landing in real
+  // Drag-target preview: slots that show as the destination of an
+  // in-flight drag — chain landing slots for a ♠ slide, or the partner
+  // slot for a ♥ swap. Rendered as a green outline overlay on top of
+  // the existing slot content so the player sees the landing in real
   // time without committing yet.
-  slideGhostSlots?: Set<number>;
+  ghostSlots?: Set<number>;
   onSlotPress?: (idx: number) => void;
   onLinePress?: (kind: LineKind, index: number) => void;
   // Render with smaller cells + sm cards. Used by ResultScreen to keep the
@@ -68,7 +69,7 @@ export const GridView = ({
   hiddenSlots,
   selected,
   nextSlotHint,
-  slideGhostSlots,
+  ghostSlots,
   onSlotPress,
   onLinePress,
   compact,
@@ -108,7 +109,7 @@ export const GridView = ({
             const isEmpty = cardHere === null;
             const positionNum = SPIRAL_POSITION[idx];
 
-            const isGhost = slideGhostSlots?.has(idx) ?? false;
+            const isGhost = ghostSlots?.has(idx) ?? false;
             return (
               <Pressable
                 key={idx}
@@ -134,7 +135,7 @@ export const GridView = ({
                     <View
                       pointerEvents="none"
                       style={[
-                        styles.slideGhost,
+                        styles.dragGhost,
                         {
                           width: compact ? cardSize.sm : cardSize.md,
                           height: compact ? cardSize.sm : cardSize.md,
@@ -207,10 +208,11 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     ...glow(colors.accent, 8, 0.6),
   },
-  // Drag-to-slide preview: a thick success-green outline over the slots
-  // where the chain will land if the drag is released right now. Sits on
-  // top of any existing card art so it remains visible mid-chain.
-  slideGhost: {
+  // Drag-target preview: a thick success-green outline marking where the
+  // in-flight drag will land if released right now — chain landing slots
+  // for a ♠ slide, or the partner card for a ♥ swap. Sits on top of any
+  // existing card art so it remains visible over filled slots.
+  dragGhost: {
     position: 'absolute',
     borderWidth: 2,
     borderColor: colors.success,
