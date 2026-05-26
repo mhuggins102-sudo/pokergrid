@@ -50,29 +50,16 @@ export const RemainingDeckModal = ({
     if (isStandard(c)) inDeck.add(`${c.rank}${c.suit}`);
   }
 
-  const standardRemaining = Array.from(inDeck).length;
-  // Easy ships two jokers, Extreme zero — count every location rather
-  // than assuming a single joker.
+  // Joker totals — count every location so we can show "remaining /
+  // initial" on the new Jokers row alongside the suit rows. Easy
+  // ships 2, Medium / Hard 1, Extreme 0 (the row hides entirely in
+  // that case).
   const jokerInDeckCount = deck.filter(isJoker).length;
-  const jokerOnGridCount = grid.filter(c => c !== null && isJoker(c)).length;
-  const jokerDestroyedCount =
-    discards.filter(isJoker).length + perkSpent.filter(isJoker).length;
-  const totalJokers = jokerInDeckCount + jokerOnGridCount + jokerDestroyedCount;
-
-  const jokerSummary = ((): string => {
-    if (totalJokers === 0) return 'No jokers in this deck.';
-    if (totalJokers === 1) {
-      if (jokerInDeckCount === 1) return 'The joker is in the deck.';
-      if (jokerOnGridCount === 1) return 'The joker is on the grid.';
-      return 'The joker has been destroyed.';
-    }
-    // Two or more jokers — list each non-zero location with its count.
-    const parts: string[] = [];
-    if (jokerInDeckCount > 0) parts.push(`${jokerInDeckCount} in the deck`);
-    if (jokerOnGridCount > 0) parts.push(`${jokerOnGridCount} on the grid`);
-    if (jokerDestroyedCount > 0) parts.push(`${jokerDestroyedCount} destroyed`);
-    return `${totalJokers} jokers · ${parts.join(', ')}.`;
-  })();
+  const totalJokers =
+    jokerInDeckCount +
+    grid.filter(c => c !== null && isJoker(c)).length +
+    discards.filter(isJoker).length +
+    perkSpent.filter(isJoker).length;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -84,10 +71,6 @@ export const RemainingDeckModal = ({
               <Text style={styles.closeBtn}>×</Text>
             </Pressable>
           </View>
-
-          <Text style={styles.sub}>
-            {standardRemaining} of 52 standard cards remain. {jokerSummary}
-          </Text>
 
           <ScrollView style={styles.scroll}>
             {SUITS_ORDER.map(s => {
@@ -114,6 +97,31 @@ export const RemainingDeckModal = ({
                 </View>
               );
             })}
+            {totalJokers > 0 && (
+              <View style={styles.suitBlock}>
+                <View style={styles.suitHeader}>
+                  <Text style={[styles.suitLabel, { color: colors.joker }]}>
+                    ★ Jokers
+                  </Text>
+                  <Text style={styles.suitCount}>
+                    {jokerInDeckCount} / {totalJokers}
+                  </Text>
+                </View>
+                <View style={styles.rankRow}>
+                  {Array.from({ length: totalJokers }, (_, i) => (
+                    <JokerCell
+                      key={i}
+                      // The first `jokerInDeckCount` cells are present;
+                      // the rest are drawn (on grid, destroyed, or
+                      // perk-spent). Individual jokers are
+                      // indistinguishable, so we just light up the
+                      // first N cells.
+                      present={i < jokerInDeckCount}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
           </ScrollView>
 
           <Text style={styles.footnote}>
@@ -151,6 +159,32 @@ const RankCell = ({
       ]}
     >
       {rank}
+    </Text>
+  </View>
+);
+
+// Joker cell mirrors RankCell but uses the joker glyph (★) instead of
+// a rank label. Present jokers are violet + glowing; drawn jokers are
+// dimmed (we don't strike through since the ★ glyph doesn't combine
+// cleanly with text-decoration the way letter ranks do).
+const JokerCell = ({ present }: { present: boolean }) => (
+  <View
+    style={[
+      styles.rankCell,
+      present
+        ? { borderColor: colors.joker }
+        : { borderColor: colors.outlineSoft, opacity: 0.4 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.rankText,
+        present
+          ? { color: colors.joker, textShadowColor: colors.joker, textShadowRadius: 3 }
+          : { color: colors.textLow },
+      ]}
+    >
+      ★
     </Text>
   </View>
 );
@@ -194,14 +228,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingHorizontal: 4,
   },
-  sub: {
-    color: colors.textMid,
-    fontFamily: fonts.sans,
-    fontSize: 12,
-    lineHeight: 17,
-    marginBottom: spacing.md,
-  },
-  scroll: {},
+  scroll: { marginTop: spacing.sm },
   suitBlock: {
     marginBottom: spacing.md,
   },
