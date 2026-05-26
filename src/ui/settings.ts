@@ -20,10 +20,18 @@ export interface Settings {
   // First-time contextual hints. Each fires exactly once per device the
   // first time the relevant in-game condition appears (joker on the grid,
   // bonus hand full at 3 cards, a held grid-effect bonus card actually
-  // firing). Dismissing the modal flips the corresponding flag.
+  // firing, each suit perk's target UI, first scoring line, etc.).
+  // Dismissing the modal flips the corresponding flag.
   seenJokerHint: boolean;
   seenBonusCapHint: boolean;
   seenGridEffectHint: boolean;
+  seenHeartsSwapHint: boolean;
+  seenSpadesSlideHint: boolean;
+  seenDiamondsDestroyHint: boolean;
+  seenClubsBonusHint: boolean;
+  seenBonusHeldHint: boolean;
+  seenFirstScoringLineHint: boolean;
+  seenLowDeckHint: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +44,13 @@ export const DEFAULT_SETTINGS: Settings = {
   seenJokerHint: false,
   seenBonusCapHint: false,
   seenGridEffectHint: false,
+  seenHeartsSwapHint: false,
+  seenSpadesSlideHint: false,
+  seenDiamondsDestroyHint: false,
+  seenClubsBonusHint: false,
+  seenBonusHeldHint: false,
+  seenFirstScoringLineHint: false,
+  seenLowDeckHint: false,
 };
 
 const STORAGE_KEY = 'pokergrid:settings:v1';
