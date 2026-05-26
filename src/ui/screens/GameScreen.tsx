@@ -101,7 +101,7 @@ const HINT_BODY: Record<HintId, string> = {
   'grid-effect':
     'A grid achievement (purple border) is now satisfying its condition — it multiplies your TOTAL score at game end, on top of any per-line bonuses.',
   'hearts-swap':
-    '♥ lets you swap two cards that share a row OR a column — tap one card, then tap its partner. Or just drag one onto the other. The drawn ♥ is then spent.',
+    '♥ swaps two cards that share a row OR a column. Tap one card and then its partner — or drag one straight onto the other (a green outline shows where it\'ll land). The drawn ♥ is then spent.',
   'spades-slide':
     '♠ slides a chain of cards in one direction. Tap a card to see valid landings, then tap one — or drag the card the way you want it to go. Cards keep their relative order.',
   'diamonds-destroy':
@@ -203,9 +203,9 @@ export const GameScreen = ({
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
-  const [slideGhost, setSlideGhost] = useState<Set<number> | null>(null);
+  const [dragGhost, setDragGhost] = useState<Set<number> | null>(null);
   const [activeHint, setActiveHint] = useState<HintId | null>(null);
-  const slideGhostKeyRef = useRef<string>('');
+  const dragGhostKeyRef = useRef<string>('');
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const haptic = useHaptic();
@@ -633,7 +633,15 @@ export const GameScreen = ({
   // Quick taps fall through to the existing onSlotPress handler because Pan
   // requires ≥6px of movement before activating.
   const dragSourceRef = useRef<number | null>(null);
-  const clearDragRef = () => { dragSourceRef.current = null; };
+  // The drag pointer's position relative to the grid view. onDragStart
+  // captures the absolute origin (e.x, e.y at gesture begin); onUpdate
+  // adds the translation so we know which slot the finger is currently
+  // over for swap-target detection.
+  const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const clearDragRef = () => {
+    dragSourceRef.current = null;
+    dragOriginRef.current = null;
+  };
 
   // Inverse of slotXY() in AnimationLayer / GridView. Coords are relative to
   // the GestureDetector's view (the grid stack).
@@ -648,123 +656,208 @@ export const GameScreen = ({
 
   const onDragStart = (x: number, y: number) => {
     const p = state.phase;
-    if (p.kind !== 'awaiting-target-slide-source' || anim) {
+    if (anim) {
       dragSourceRef.current = null;
       return;
     }
     const slot = slotFromXY(x, y);
-    if (slot === null || !p.sources.includes(slot)) {
+    if (slot === null) {
       dragSourceRef.current = null;
       return;
     }
-    dragSourceRef.current = slot;
-    haptic('light');
-    playSound('tap');
+    // Slide: only valid sources (chains that can move) are draggable.
+    if (p.kind === 'awaiting-target-slide-source') {
+      if (!p.sources.includes(slot)) {
+        dragSourceRef.current = null;
+        return;
+      }
+      dragSourceRef.current = slot;
+      dragOriginRef.current = { x, y };
+      haptic('light');
+      playSound('tap');
+      return;
+    }
+    // Swap: any slot that appears in at least one pair is a valid source.
+    if (p.kind === 'awaiting-target-hop') {
+      const inPairs = p.pairs.some(([a, b]) => a === slot || b === slot);
+      if (!inPairs) {
+        dragSourceRef.current = null;
+        return;
+      }
+      dragSourceRef.current = slot;
+      dragOriginRef.current = { x, y };
+      haptic('light');
+      playSound('tap');
+      return;
+    }
+    dragSourceRef.current = null;
   };
 
-  // Mid-drag preview: compute where the chain will land at the current
-  // direction + distance and surface the slots to GridView as ghost
-  // outlines. State updates are gated on the slot-set actually changing so
-  // we don't re-render the grid every gesture frame.
-  const setSlideGhostIfChanged = (next: Set<number> | null) => {
+  // Mid-drag preview: compute where the dragged card will land (slide
+  // chain footprint, or swap partner) and surface the slots to GridView
+  // as ghost outlines. State updates are gated on the slot-set actually
+  // changing so we don't re-render the grid every gesture frame.
+  const setDragGhostIfChanged = (next: Set<number> | null) => {
     const key = next ? Array.from(next).sort((a, b) => a - b).join(',') : '';
-    if (key === slideGhostKeyRef.current) return;
-    slideGhostKeyRef.current = key;
-    setSlideGhost(next);
+    if (key === dragGhostKeyRef.current) return;
+    dragGhostKeyRef.current = key;
+    setDragGhost(next);
   };
 
   const onDragUpdate = (dx: number, dy: number) => {
     const source = dragSourceRef.current;
     if (source === null) {
-      setSlideGhostIfChanged(null);
+      setDragGhostIfChanged(null);
       return;
     }
-    if (state.phase.kind !== 'awaiting-target-slide-source') {
-      setSlideGhostIfChanged(null);
-      return;
-    }
+    const phase = state.phase;
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
-    // Below the activeOffset threshold there's no committed direction yet.
+    // Below the activeOffset threshold no direction / hover has settled yet.
     if (absX < 18 && absY < 18) {
-      setSlideGhostIfChanged(null);
+      setDragGhostIfChanged(null);
       return;
     }
-    const direction: Direction =
-      absX > absY
-        ? dx > 0 ? 'right' : 'left'
-        : dy > 0 ? 'down' : 'up';
-    const moves = slideDestinationsFrom(state.grid, source)
-      .filter(m => m.direction === direction);
-    if (moves.length === 0) {
-      setSlideGhostIfChanged(null);
+
+    if (phase.kind === 'awaiting-target-slide-source') {
+      const direction: Direction =
+        absX > absY
+          ? dx > 0 ? 'right' : 'left'
+          : dy > 0 ? 'down' : 'up';
+      const moves = slideDestinationsFrom(state.grid, source)
+        .filter(m => m.direction === direction);
+      if (moves.length === 0) {
+        setDragGhostIfChanged(null);
+        return;
+      }
+      const CELL = gridCellSize;
+      const draggedCells = Math.max(
+        1,
+        Math.round(
+          (direction === 'left' || direction === 'right' ? absX : absY) / CELL
+        )
+      );
+      const move =
+        moves.find(m => m.distance === draggedCells) ??
+        moves.reduce((max, m) => (m.distance > max.distance ? m : max));
+      // Project every chain member's landing slot — the whole chain moves
+      // together, so the preview shows the full footprint, not just where
+      // the leading card ends up.
+      const chainSlots = slideChain(state.grid, source, direction);
+      const step =
+        direction === 'left' ? -1 :
+        direction === 'right' ? 1 :
+        direction === 'up' ? -5 : 5;
+      const landings = new Set(chainSlots.map(s => s + step * move.distance));
+      setDragGhostIfChanged(landings);
       return;
     }
-    const CELL = gridCellSize;
-    const draggedCells = Math.max(
-      1,
-      Math.round(
-        (direction === 'left' || direction === 'right' ? absX : absY) / CELL
-      )
-    );
-    const move =
-      moves.find(m => m.distance === draggedCells) ??
-      moves.reduce((max, m) => (m.distance > max.distance ? m : max));
-    // Project every chain member's landing slot — the whole chain moves
-    // together, so the preview shows the full footprint, not just where
-    // the leading card ends up.
-    const chainSlots = slideChain(state.grid, source, direction);
-    const step =
-      direction === 'left' ? -1 :
-      direction === 'right' ? 1 :
-      direction === 'up' ? -5 : 5;
-    const landings = new Set(chainSlots.map(s => s + step * move.distance));
-    setSlideGhostIfChanged(landings);
+
+    if (phase.kind === 'awaiting-target-hop') {
+      // Hover detection — which slot is the finger over right now?
+      const origin = dragOriginRef.current;
+      if (!origin) {
+        setDragGhostIfChanged(null);
+        return;
+      }
+      const hoverSlot = slotFromXY(origin.x + dx, origin.y + dy);
+      if (hoverSlot === null || hoverSlot === source) {
+        setDragGhostIfChanged(null);
+        return;
+      }
+      // The slot is a valid swap partner iff [source, hover] (in either
+      // order) is in the pairs list — i.e., they share a row OR column.
+      const isPartner = phase.pairs.some(
+        ([a, b]) =>
+          (a === source && b === hoverSlot) || (a === hoverSlot && b === source)
+      );
+      setDragGhostIfChanged(isPartner ? new Set([hoverSlot]) : null);
+      return;
+    }
+
+    setDragGhostIfChanged(null);
   };
 
   const onDragEnd = (dx: number, dy: number) => {
     const source = dragSourceRef.current;
+    const origin = dragOriginRef.current;
     dragSourceRef.current = null;
-    setSlideGhostIfChanged(null);
+    dragOriginRef.current = null;
+    setDragGhostIfChanged(null);
     if (source === null) return;
-    if (state.phase.kind !== 'awaiting-target-slide-source') return;
-
+    const phase = state.phase;
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
-    // A small drag = tap; surface as source selection so the player can
-    // tap-tap from there.
-    if (absX < 18 && absY < 18) {
-      dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: source });
-      setSelectedSlot(source);
+
+    if (phase.kind === 'awaiting-target-slide-source') {
+      // A small drag = tap; surface as source selection so the player can
+      // tap-tap from there.
+      if (absX < 18 && absY < 18) {
+        dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: source });
+        setSelectedSlot(source);
+        return;
+      }
+      const direction: Direction =
+        absX > absY
+          ? dx > 0 ? 'right' : 'left'
+          : dy > 0 ? 'down' : 'up';
+      const moves = slideDestinationsFrom(state.grid, source)
+        .filter(m => m.direction === direction);
+      if (moves.length === 0) {
+        // Bias toward a usable outcome: just select the source so the player
+        // can finish the move with a tap on a destination.
+        dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: source });
+        setSelectedSlot(source);
+        return;
+      }
+      const CELL = gridCellSize;
+      const draggedCells = Math.max(
+        1,
+        Math.round((direction === 'left' || direction === 'right' ? absX : absY) / CELL)
+      );
+      const exact = moves.find(m => m.distance === draggedCells);
+      const move =
+        exact ??
+        moves.reduce((max, m) => (m.distance > max.distance ? m : max));
+      commitSlide(move.from, move.direction, move.distance);
       return;
     }
 
-    const direction: Direction =
-      absX > absY
-        ? dx > 0 ? 'right' : 'left'
-        : dy > 0 ? 'down' : 'up';
-
-    const moves = slideDestinationsFrom(state.grid, source)
-      .filter(m => m.direction === direction);
-    if (moves.length === 0) {
-      // Bias toward a usable outcome: just select the source so the player
-      // can finish the move with a tap on a destination.
-      dispatch({ type: 'SLIDE_SELECT_SOURCE', slot: source });
-      setSelectedSlot(source);
-      return;
+    if (phase.kind === 'awaiting-target-hop') {
+      // Small drag = tap → fall through to the tap-tap-tap path by just
+      // selecting the source.
+      if (absX < 18 && absY < 18 || !origin) {
+        setSelectedSlot(source);
+        return;
+      }
+      const hoverSlot = slotFromXY(origin.x + dx, origin.y + dy);
+      if (hoverSlot === null || hoverSlot === source) {
+        setSelectedSlot(source);
+        return;
+      }
+      const pair = phase.pairs.find(
+        ([a, b]) =>
+          (a === source && b === hoverSlot) || (a === hoverSlot && b === source)
+      );
+      if (!pair) {
+        // Released over a non-partner slot — leave the source selected so
+        // the player can still tap a valid target instead of losing the
+        // intent entirely.
+        setSelectedSlot(source);
+        return;
+      }
+      const cardA = state.grid[pair[0]];
+      const cardB = state.grid[pair[1]];
+      if (cardA && cardB) {
+        haptic('swap');
+        playSound('swap');
+        performAnimated(
+          { kind: 'swap', cardA, slotA: pair[0], cardB, slotB: pair[1] },
+          { type: 'RESOLVE_HOP', i: pair[0], j: pair[1] }
+        );
+        setSelectedSlot(null);
+      }
     }
-
-    const CELL = gridCellSize;
-    const draggedCells = Math.max(
-      1,
-      Math.round((direction === 'left' || direction === 'right' ? absX : absY) / CELL)
-    );
-    const exact = moves.find(m => m.distance === draggedCells);
-    const move =
-      exact ??
-      moves.reduce((max, m) => (m.distance > max.distance ? m : max));
-
-    commitSlide(move.from, move.direction, move.distance);
   };
 
   const panGesture = useMemo(
@@ -788,7 +881,7 @@ export const GameScreen = ({
           'worklet';
           // Ensure stale refs / ghost slots don't survive a cancel.
           runOnJS(clearDragRef)();
-          runOnJS(setSlideGhostIfChanged)(null);
+          runOnJS(setDragGhostIfChanged)(null);
         }),
     // We intentionally rebuild the gesture per relevant state change so the
     // onDragStart / onDragUpdate / onDragEnd closures see fresh values.
@@ -821,7 +914,7 @@ export const GameScreen = ({
               hiddenSlots={hiddenSlotsFor(anim)}
               selected={selectedSlot}
               nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
-              slideGhostSlots={slideGhost ?? undefined}
+              ghostSlots={dragGhost ?? undefined}
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
             />
