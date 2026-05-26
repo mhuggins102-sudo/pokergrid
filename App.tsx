@@ -359,6 +359,7 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
       onHome={onHome}
       kicker={contextKicker(context)}
       maxUndos={contextMaxUndos(context)}
+      showTierRewards={context.mode === 'targets-up'}
     />
   );
 };
