@@ -129,16 +129,20 @@ const AppShell = () => {
   );
 };
 
-// Natural "phone frame" width used by WebScaler when the app runs on a
-// browser. The app was designed mobile-first around a ~390pt-wide portrait
-// device. The FRAME HEIGHT is matched to the actual viewport (in unscaled
-// coordinates) so flex: 1 layouts fill the visible area exactly — no dead
-// space below the bottom buttons on tall iPhone Safari sessions, no
-// vertical scrolling on shorter Android browsers.
+// Natural "phone frame" dimensions used by WebScaler when the app runs on
+// a browser. The app is designed mobile-first around a ~390pt-wide
+// portrait device. The frame height normally matches the actual viewport
+// (in unscaled coordinates) so flex: 1 layouts fill the visible area
+// exactly — but it's floored at WEB_MIN_HEIGHT so the GameScreen (whose
+// natural minimum is ~674px: ScoreBar 76 + BonusCardStrip 72 + GridView
+// 368 + Bottom 158) always has room. On iPhone Safari with the URL bar
+// showing (~660px viewport) that triggers a small additional shrink so
+// nothing gets clipped; on PWA / taller browsers it's a no-op.
 const WEB_NATURAL_WIDTH = 390;
+const WEB_MIN_HEIGHT = 700;
 
 const WebScaler = ({ children }: { children: React.ReactNode }) => {
-  const [dims, setDims] = useState({ scale: 1, frameHeight: 800 });
+  const [dims, setDims] = useState({ scale: 1, frameHeight: WEB_MIN_HEIGHT });
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -147,11 +151,18 @@ const WebScaler = ({ children }: { children: React.ReactNode }) => {
       const h = window.innerHeight;
       // Shrink only when the viewport is narrower than our design width;
       // never upscale past 1.0 on wide / desktop browsers.
-      const scale = Math.min(1, w / WEB_NATURAL_WIDTH);
-      // Frame height = viewport height in unscaled space. The frame is
-      // rendered scaled by `scale`, so the visible height ends up matching
-      // the viewport exactly.
-      setDims({ scale, frameHeight: h / scale });
+      const widthScale = Math.min(1, w / WEB_NATURAL_WIDTH);
+      // Default: match viewport at the width-derived scale.
+      let scale = widthScale;
+      let frameHeight = h / widthScale;
+      // If that leaves the unscaled frame shorter than the tallest screen
+      // needs, shrink the whole thing further so the GameScreen never gets
+      // clipped at the bottom.
+      if (frameHeight < WEB_MIN_HEIGHT) {
+        scale = h / WEB_MIN_HEIGHT;
+        frameHeight = WEB_MIN_HEIGHT;
+      }
+      setDims({ scale, frameHeight });
     };
     fit();
     window.addEventListener('resize', fit);
