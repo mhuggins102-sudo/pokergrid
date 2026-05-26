@@ -319,9 +319,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     if (tainted) return;
     // Per-card attribution: pair every held bonus card with its Shapley
     // value so recordRun can fold them into the all-time aggregate that
-    // powers the StatsScreen's bonus-card analytics.
+    // powers the StatsScreen's bonus-card analytics. Strip any "-pwrN"
+    // suffix so a powered-up variant aggregates under its base card id
+    // (a Pair ×4 and a Pair ×4.8 still share the "Pair" stats row).
     const bonusCardsForRecord = state.bonusCards.map((card, i) => ({
-      cardId: card.id,
+      cardId: card.id.replace(/-pwr\d+$/, ''),
       shapley: bonusValues[i] ?? 0,
     }));
     switch (context.mode) {
