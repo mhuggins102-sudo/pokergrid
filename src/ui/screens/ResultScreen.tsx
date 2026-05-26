@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
+  Easing,
   useSharedValue,
   useAnimatedStyle,
   withTiming,
@@ -47,16 +48,115 @@ const HAND_LABEL: Record<HandRank, string> = {
   ROYAL_FLUSH: 'Royal Flush',
 };
 
+type Tier = 'D' | 'C' | 'B' | 'A' | 'S' | 'SS';
+
+const tierFor = (score: number, target: number, won: boolean): Tier => {
+  const ratio = score / Math.max(1, target);
+  if (won) {
+    if (ratio >= 1.6) return 'SS';
+    if (ratio >= 1.3) return 'S';
+    return 'A';
+  }
+  if (ratio >= 0.85) return 'B';
+  if (ratio >= 0.5) return 'C';
+  return 'D';
+};
+
+const TIER_COLOR: Record<Tier, string> = {
+  D: colors.danger,
+  C: colors.warn,
+  B: colors.accent,
+  A: colors.success,
+  S: colors.success,
+  SS: colors.joker,
+};
+
+const TIER_LABEL: Record<Tier, string> = {
+  D: 'D · Survived',
+  C: 'C · Close',
+  B: 'B · So Close',
+  A: 'A · Win',
+  S: 'S · Strong',
+  SS: 'SS · Perfect',
+};
+
+const CONFETTI_COLORS = [
+  colors.suitH,
+  colors.suitS,
+  colors.suitD,
+  colors.suitC,
+  colors.joker,
+];
+
+interface ParticleSpec {
+  angle: number;
+  distance: number;
+  size: number;
+  color: string;
+  delay: number;
+}
+
+const Particle = ({ spec }: { spec: ParticleSpec }) => {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withDelay(spec.delay, withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) }));
+  }, [t, spec.delay]);
+  const style = useAnimatedStyle(() => {
+    const eased = t.value;
+    const x = Math.cos(spec.angle) * spec.distance * eased;
+    const y = Math.sin(spec.angle) * spec.distance * eased + eased * eased * 60;
+    return {
+      transform: [{ translateX: x }, { translateY: y }],
+      opacity: 1 - eased,
+    };
+  });
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.particle,
+        { backgroundColor: spec.color, width: spec.size, height: spec.size },
+        style,
+      ]}
+    />
+  );
+};
+
+const ConfettiBurst = () => {
+  const specs = useMemo<ParticleSpec[]>(
+    () =>
+      Array.from({ length: 28 }, (_, i) => ({
+        angle: (i / 28) * Math.PI * 2 + (Math.random() - 0.5) * 0.4,
+        distance: 70 + Math.random() * 90,
+        size: 5 + Math.random() * 4,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        delay: Math.random() * 120,
+      })),
+    []
+  );
+  return (
+    <View pointerEvents="none" style={styles.confettiContainer}>
+      {specs.map((s, i) => (
+        <Particle key={i} spec={s} />
+      ))}
+    </View>
+  );
+};
+
 const BannerHero = ({
   won,
   score,
   target,
   kicker,
+  tier,
+  isNewBest,
 }: {
   won: boolean;
   score: number;
   target: number;
   kicker?: string;
+  tier: Tier;
+  isNewBest: boolean;
 }) => {
   const { settings } = useSettings();
   const haptic = useHaptic();
@@ -89,6 +189,9 @@ const BannerHero = ({
   }));
 
   const accent = won ? colors.success : colors.danger;
+  const tierColor = TIER_COLOR[tier];
+  // Confetti only on A+ tiers, and only when reduce-motion is off.
+  const showConfetti = (tier === 'A' || tier === 'S' || tier === 'SS') && !settings.reduceMotion;
 
   return (
     <Animated.View style={[styles.banner, { borderColor: accent }, glow(accent, 18, 0.55), animStyle]}>
@@ -100,6 +203,17 @@ const BannerHero = ({
         {score}
       </Text>
       <Text style={styles.bannerTarget}>target {target}</Text>
+      <View style={[styles.tierBadge, { borderColor: tierColor }, glow(tierColor, 10, 0.5)]}>
+        <Text style={[styles.tierText, { color: tierColor, textShadowColor: tierColor }]}>
+          {TIER_LABEL[tier]}
+        </Text>
+      </View>
+      {isNewBest && (
+        <View style={[styles.bestBadge, glow(colors.warn, 10, 0.55)]}>
+          <Text style={styles.bestBadgeText}>★ NEW BEST ★</Text>
+        </View>
+      )}
+      {showConfetti && <ConfettiBurst />}
     </Animated.View>
   );
 };
@@ -108,8 +222,15 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const [linesExpanded, setLinesExpanded] = useState(false);
-  const { record, recordTargetsUp, recordChallenge } = useStats();
+  const [logExpanded, setLogExpanded] = useState(false);
+  const { stats, record, recordTargetsUp, recordChallenge } = useStats();
   const recorded = useRef(false);
+  // Snapshot stats on first render so the "NEW BEST" check compares against
+  // the player's prior best — not the post-record best (which would always
+  // tie or beat itself on win runs).
+  const statsAtMount = useRef<typeof stats | undefined>(undefined);
+  if (!statsAtMount.current) statsAtMount.current = stats;
+  const prevStats = statsAtMount.current;
 
   const report = useMemo(
     () => scoreGrid(state.grid, state.bonusCards, {
@@ -170,6 +291,25 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   // recording entirely so undos can't be used to game the leaderboard.
   const tainted = state.undoCount > 0;
 
+  const tier = tierFor(total, state.target, won);
+  // Personal-best detection. Tainted runs don't count — they wouldn't be
+  // recorded either, so flagging them as "new best" would be misleading.
+  const isNewBest = ((): boolean => {
+    if (tainted || !won) return false;
+    switch (context.mode) {
+      case 'free': {
+        const prev = prevStats.byDifficulty[state.difficulty].best;
+        return prev === null || total > prev;
+      }
+      case 'targets-up':
+        return context.level > prevStats.targetsUpBest;
+      case 'challenge':
+        return !prevStats.challengesDone.includes(context.id);
+      default:
+        return false;
+    }
+  })();
+
   // Record the run exactly once on mount — applying the correct stats
   // method based on the play context. Tainted runs are skipped.
   useEffect(() => {
@@ -223,7 +363,14 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <BannerHero won={won} score={total} target={state.target} kicker={kicker} />
+      <BannerHero
+        won={won}
+        score={total}
+        target={state.target}
+        kicker={kicker}
+        tier={tier}
+        isNewBest={isNewBest}
+      />
 
       {context.mode === 'targets-up' && (
         <Text style={styles.modeNote}>
@@ -320,6 +467,29 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={[styles.totalScore, won && styles.totalScoreWon]}>{total}</Text>
         </View>
+
+        <Pressable
+          style={[styles.accordionHeader, styles.logAccordionHeader]}
+          onPress={() => setLogExpanded(v => !v)}
+        >
+          <Text style={styles.accordionLabel}>
+            {logExpanded ? '▼' : '▶'} Run log
+          </Text>
+          <Text style={styles.accordionHint}>
+            {state.history.length} {state.history.length === 1 ? 'event' : 'events'}
+          </Text>
+        </Pressable>
+
+        {logExpanded && (
+          <View style={styles.logList}>
+            {state.history.map((entry, i) => (
+              <View key={i} style={styles.logRow}>
+                <Text style={styles.logTurn}>{String(i + 1).padStart(2, '0')}</Text>
+                <Text style={styles.logEntry}>{entry}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={styles.btnRow}>
@@ -394,6 +564,50 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: 320,
+  },
+  tierBadge: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.bgBase,
+  },
+  tierText: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textShadowRadius: 4,
+  },
+  bestBadge: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.warn,
+    backgroundColor: colors.bgBase,
+  },
+  bestBadgeText: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+  },
+  confettiContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 0,
+    height: 0,
+  },
+  particle: {
+    position: 'absolute',
+    borderRadius: 2,
   },
   bannerMode: {
     color: colors.textLow,
@@ -592,6 +806,38 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 13,
     fontWeight: '700',
+  },
+  logAccordionHeader: {
+    marginTop: spacing.md,
+  },
+  logList: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingVertical: 2,
+  },
+  logTurn: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '700',
+    width: 24,
+    letterSpacing: 0.5,
+  },
+  logEntry: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    flex: 1,
+    letterSpacing: 0.3,
   },
   // Mirror the breakdownBlock width so the buttons sit directly beneath it.
   btnRow: {
