@@ -119,20 +119,40 @@ const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boole
 export const StatsScreen = ({ onBack }: Props) => {
   const { stats } = useStats();
   const [metric, setMetric] = useState<Metric>('wl');
+  // Bonus card table sort. Default to frequency desc; tapping a column
+  // header switches sort key (resets to desc), tapping it again flips to
+  // asc — matches the pattern most data tables use so the gesture is
+  // self-discoverable.
+  const [bonusSortBy, setBonusSortBy] = useState<'held' | 'avg'>('held');
+  const [bonusSortDir, setBonusSortDir] = useState<'desc' | 'asc'>('desc');
 
-  // Bonus card analytics — sort by frequency desc; show only cards that
-  // appeared at least once.
+  const toggleBonusSort = (col: 'held' | 'avg') => {
+    if (bonusSortBy === col) {
+      setBonusSortDir(d => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setBonusSortBy(col);
+      setBonusSortDir('desc');
+    }
+  };
+
+  // Bonus card analytics — only cards that appeared at least once,
+  // sorted by the currently-selected column.
   const bonusRows = useMemo(() => {
-    return Object.entries(stats.bonusCardStats)
+    const rows = Object.entries(stats.bonusCardStats)
       .map(([cardId, s]) => ({
         cardId,
         card: BONUS_BY_ID.get(cardId),
         timesHeld: s.timesHeld,
         avg: s.timesHeld > 0 ? s.totalShapley / s.timesHeld : 0,
       }))
-      .filter(r => r.card && r.timesHeld > 0)
-      .sort((a, b) => b.timesHeld - a.timesHeld);
-  }, [stats.bonusCardStats]);
+      .filter(r => r.card && r.timesHeld > 0);
+    rows.sort((a, b) => {
+      const va = bonusSortBy === 'held' ? a.timesHeld : a.avg;
+      const vb = bonusSortBy === 'held' ? b.timesHeld : b.avg;
+      return bonusSortDir === 'desc' ? vb - va : va - vb;
+    });
+    return rows;
+  }, [stats.bonusCardStats, bonusSortBy, bonusSortDir]);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -249,9 +269,39 @@ export const StatsScreen = ({ onBack }: Props) => {
       ) : (
         <View style={styles.bonusBlock}>
           <View style={[styles.bonusRow, styles.bonusHeader]}>
-            <Text style={styles.bonusHeaderCell}>Card</Text>
-            <Text style={[styles.bonusHeaderCell, styles.bonusNumberCell]}>Held</Text>
-            <Text style={[styles.bonusHeaderCell, styles.bonusNumberCell]}>Avg</Text>
+            {/* swatch column spacer keeps "Card" left-aligned with row content */}
+            <View style={styles.bonusSwatchSpacer} />
+            <Text style={[styles.bonusHeaderCell, styles.bonusNameCell]}>Card</Text>
+            <Pressable
+              onPress={() => toggleBonusSort('held')}
+              style={styles.bonusHeaderBtn}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.bonusHeaderCell,
+                  styles.bonusNumberCell,
+                  bonusSortBy === 'held' && styles.bonusHeaderActive,
+                ]}
+              >
+                Held{bonusSortBy === 'held' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleBonusSort('avg')}
+              style={styles.bonusHeaderBtn}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.bonusHeaderCell,
+                  styles.bonusNumberCell,
+                  bonusSortBy === 'avg' && styles.bonusHeaderActive,
+                ]}
+              >
+                Avg{bonusSortBy === 'avg' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+              </Text>
+            </Pressable>
           </View>
           {bonusRows.map(r => {
             const tone = bonusStyleFor(r.card!);
@@ -546,6 +596,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     paddingVertical: 2,
   },
+  // Same 8px reserved space as the row's color swatch so "Card" aligns
+  // with the name column underneath rather than the swatch underneath.
+  bonusSwatchSpacer: { width: 8 },
   bonusHeaderCell: {
     color: colors.textLow,
     fontFamily: fonts.mono,
@@ -553,7 +606,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     fontWeight: '800',
     textTransform: 'uppercase',
-    flex: 1,
+  },
+  bonusNameCell: { flex: 1 },
+  // Match the data row's bonusNumberCell width so the Held / Avg columns
+  // line up across header and rows.
+  bonusHeaderBtn: { width: 56 },
+  bonusHeaderActive: {
+    color: colors.accent,
+    textShadowColor: colors.accent,
+    textShadowRadius: 3,
   },
   bonusSwatch: {
     width: 8,
