@@ -182,10 +182,20 @@ export const newGame = (
   // (per the user's "the second card should not be one of the other
   // superpowered cards" rule). Filter the standard pool to exclude held
   // base ids before drawing the starter.
+  //
+  // Also exclude any base ids that already exist in deckExtras as a
+  // powered variant — the powered version REPLACES the original copy
+  // in the deck rather than coexisting with it. Otherwise the player
+  // could draw both an upgraded Royal Touch ×1.8 AND a fresh Royal
+  // Touch ×1.5 in the same level.
   const heldBaseIds = new Set(
     keptBonusCards.map(c => c.id.replace(/-pwr\d+$/, ''))
   );
-  const drawable = BONUS_DECK_POOL.filter(c => !heldBaseIds.has(c.id));
+  const poweredBaseIds = new Set(
+    deckExtras.map(c => c.id.replace(/-pwr\d+$/, ''))
+  );
+  const excludedBaseIds = new Set<string>([...heldBaseIds, ...poweredBaseIds]);
+  const drawable = BONUS_DECK_POOL.filter(c => !excludedBaseIds.has(c.id));
   const shuffledBonus = shuffle(drawable, rng);
   const starterCount = STARTER_BONUS_BY_DIFFICULTY[difficulty];
   // Player's hand starts with the kept carry-overs first, then the
