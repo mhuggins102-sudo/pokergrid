@@ -234,15 +234,23 @@ const BannerHero = ({
 // The glow color matches the card's category tone so the visual reads
 // in step with the rest of the chip styling. Reduce-motion disables the
 // animation but the chip still shows the new (post-boost) value.
+//
+// `blocked` is the no-consecutive-same-card constraint: this chip's
+// base id matches the card the player kept last round, so they can't
+// keep it again. The chip still animates (its multiplier did get
+// powered up) but it's greyed out, unselectable, and carries a small
+// "kept last round" tag.
 const PickerChip = ({
   card,
   selected,
   dimmed,
+  blocked,
   onPress,
 }: {
   card: BonusCard;
   selected: boolean;
   dimmed: boolean;
+  blocked: boolean;
   onPress: () => void;
 }) => {
   const { settings } = useSettings();
@@ -278,11 +286,12 @@ const PickerChip = ({
         { borderColor: tone.borderColor, shadowColor: tone.borderColor, shadowRadius: 10 },
         selected && styles.pickerCardSelected,
         dimmed && styles.pickerCardDimmed,
+        blocked && styles.pickerCardBlocked,
         animStyle,
       ]}
     >
       <Pressable
-        onPress={onPress}
+        onPress={blocked ? undefined : onPress}
         style={styles.pickerCardInner}
       >
         <Text
@@ -295,9 +304,11 @@ const PickerChip = ({
         <Text style={styles.pickerCardMult} numberOfLines={1} adjustsFontSizeToFit>
           {card.mult}
         </Text>
-        {card.baseMultValue !== undefined && card.baseMultValue !== card.multValue && (
+        {blocked ? (
+          <Text style={styles.pickerCardBlockedTag}>kept last round</Text>
+        ) : card.baseMultValue !== undefined && card.baseMultValue !== card.multValue ? (
           <Text style={styles.pickerCardWas}>was ×{card.baseMultValue}</Text>
-        )}
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -424,13 +435,34 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   );
   const [keptIdx, setKeptIdx] = useState<number | null>(null);
 
+  // No consecutive same-card upgrade: any chip whose base id matches
+  // the card the player kept last round is blocked. Each chip's base
+  // id is the id with the -pwrN suffix stripped so Pair ×4 and Pair
+  // ×4.8 register as the same card.
+  const lastKeptBaseId = context.mode === 'targets-up'
+    ? (context.lastKeptBaseId ?? null)
+    : null;
+  const baseIdOf = (c: BonusCard): string => c.id.replace(/-pwr\d+$/, '');
+  const blockedIndices = useMemo(() => {
+    if (!lastKeptBaseId) return new Set<number>();
+    return new Set(
+      poweredCards
+        .map((c, i) => (baseIdOf(c) === lastKeptBaseId ? i : -1))
+        .filter(i => i >= 0)
+    );
+  }, [poweredCards, lastKeptBaseId]);
+  const allBlocked = isTUWin && poweredCards.length > 0
+    && blockedIndices.size === poweredCards.length;
+
   // Single-card hands auto-pick (the player has no real choice — keep
-  // the one card they had). 0-card hands skip the picker entirely.
+  // the one card they had) UNLESS that single card is the blocked one,
+  // in which case the round just yields no keep. 0-card hands skip
+  // the picker entirely.
   useEffect(() => {
-    if (poweredCards.length === 1 && keptIdx === null) {
+    if (poweredCards.length === 1 && keptIdx === null && !blockedIndices.has(0)) {
       setKeptIdx(0);
     }
-  }, [poweredCards.length, keptIdx]);
+  }, [poweredCards.length, keptIdx, blockedIndices]);
 
   // Cumulative deck extras for TU runs: previous levels' returned cards
   // plus the two from this round that the player DIDN'T keep.
@@ -462,9 +494,34 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       context.wins + 1,
       keptCard,
       allDeckExtras,
-      context.mode === 'targets-up' ? context.superchargedDeckCards : undefined
+      context.mode === 'targets-up' ? context.superchargedDeckCards : undefined,
+      nextLastKeptBaseId
     );
-  }, [isTUWin, keptIdx, keptCard, allDeckExtras, context, saveTUProgress]);
+  }, [
+    isTUWin,
+    keptIdx,
+    keptCard,
+    allDeckExtras,
+    context,
+    nextLastKeptBaseId,
+    saveTUProgress,
+  ]);
+
+  // When every chip is blocked (all 3 would repeat last round) we also
+  // overwrite the save's lastKeptBaseId to null so the player gets a
+  // clean slate next round — otherwise they'd carry the same block
+  // forward forever.
+  useEffect(() => {
+    if (!isTUWin || !allBlocked) return;
+    saveTUProgress(
+      context.level + 1,
+      context.wins + 1,
+      undefined,
+      allDeckExtras,
+      context.mode === 'targets-up' ? context.superchargedDeckCards : undefined,
+      null
+    );
+  }, [isTUWin, allBlocked, allDeckExtras, context, saveTUProgress]);
 
   // ---- S-tier grid supercharge picker --------------------------------
   // An S or SS finish on a TU level earns the right to supercharge one
@@ -537,9 +594,20 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
 
   // TU win blocks the Next button until the picker(s) resolve. For all
   // other modes (loss, free play, challenge) Next/Replay are immediate.
-  const keepPickerDone = !isTUWin || keptIdx !== null || poweredCards.length === 0;
+  // `allBlocked` short-circuits the keep picker: every chip matched
+  // last round's pick so no choice is possible — the round forfeits
+  // its kept-card boost and proceeds.
+  const keepPickerDone =
+    !isTUWin || keptIdx !== null || poweredCards.length === 0 || allBlocked;
   const superchargePickerDone = !earnedSupercharge || superchargedSlot !== null;
   const pickerComplete = keepPickerDone && superchargePickerDone;
+  // Base id passed forward as next round's `lastKeptBaseId`. null when
+  // the player picked nothing (0-card hand, all blocked, or never
+  // resolved the picker) so next round has no constraint.
+  const nextLastKeptBaseId =
+    keptIdx !== null && poweredCards[keptIdx]
+      ? baseIdOf(poweredCards[keptIdx])
+      : null;
 
   // Personal-best detection. Tainted runs don't count — they wouldn't be
   // recorded either, so flagging them as "new best" would be misleading.
@@ -763,12 +831,17 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         </View>
       </View>
 
-      {isTUWin && poweredCards.length >= 2 && (
+      {isTUWin && poweredCards.length >= 1 && (
         <View style={styles.pickerBlock}>
           <Text style={styles.pickerLabel}>Power up · keep one</Text>
           <Text style={styles.pickerHint}>
-            Each card's multiplier was boosted ×1.2. Pick one to carry into Level {context.level + 1}; the others go back into the bonus deck powered up.
+            Each card's multiplier was boosted ×1.2. Pick one to carry into Level {context.level + 1}; the others go back into the bonus deck powered up. You can't keep the same card type two rounds in a row.
           </Text>
+          {allBlocked && (
+            <Text style={styles.pickerAllBlocked}>
+              All three cards match last round's pick — no card kept this round, but you can repeat any of them next round.
+            </Text>
+          )}
           <View style={styles.pickerRow}>
             {poweredCards.map((c, i) => (
               <PickerChip
@@ -776,6 +849,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
                 card={c}
                 selected={keptIdx === i}
                 dimmed={keptIdx !== null && keptIdx !== i}
+                blocked={blockedIndices.has(i)}
                 onPress={() => setKeptIdx(i)}
               />
             ))}
@@ -808,7 +882,14 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
             variant="primary"
             size="lg"
             disabled={!pickerComplete}
-            onPress={() => onAdvance(keptCard, allDeckExtras, allSuperchargedDeckCards)}
+            onPress={() =>
+              onAdvance(
+                keptCard,
+                allDeckExtras,
+                allSuperchargedDeckCards,
+                nextLastKeptBaseId
+              )
+            }
             style={{ flex: 1 }}
           />
         ) : (
@@ -1170,6 +1251,30 @@ const styles = StyleSheet.create({
   },
   pickerCardDimmed: {
     opacity: 0.45,
+  },
+  pickerCardBlocked: {
+    opacity: 0.4,
+    borderStyle: 'dashed',
+  },
+  pickerCardBlockedTag: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    fontStyle: 'italic',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  pickerAllBlocked: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontStyle: 'italic',
+    lineHeight: 15,
+    marginBottom: spacing.sm,
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
   },
   pickerCardTitle: {
     fontFamily: fonts.mono,

@@ -31,6 +31,10 @@ export interface TUSave {
   // Plain Card objects survive JSON round-tripping (no functions on them),
   // so we just store them directly.
   superchargedDeckCards?: Card[];
+  // Base id of the card kept in the previous round, used by the next
+  // keep-one picker to block consecutive same-card power-ups. null /
+  // undefined = no constraint (first round, or last round had no kept).
+  lastKeptBaseId?: string | null;
 }
 
 const STORAGE_KEY = 'pokergrid:tu-save:v1';
@@ -65,6 +69,7 @@ export const loadTUSave = async (): Promise<TUSave | null> => {
       keptCard: parsed.keptCard ?? null,
       deckExtras: parsed.deckExtras ?? [],
       superchargedDeckCards: parsed.superchargedDeckCards ?? [],
+      lastKeptBaseId: parsed.lastKeptBaseId ?? null,
     };
   } catch {
     return null;
@@ -116,7 +121,8 @@ interface TUSaveContextValue {
     wins: number,
     keptCard?: BonusCard,
     deckExtras?: BonusCard[],
-    superchargedDeckCards?: Card[]
+    superchargedDeckCards?: Card[],
+    lastKeptBaseId?: string | null
   ) => void;
   clearProgress: () => void;
 }
@@ -140,7 +146,8 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
       wins: number,
       keptCard?: BonusCard,
       deckExtras?: BonusCard[],
-      superchargedDeckCards?: Card[]
+      superchargedDeckCards?: Card[],
+      lastKeptBaseId?: string | null
     ) => {
       const s: TUSave = {
         level,
@@ -149,6 +156,7 @@ export const TUSaveProvider = ({ children }: { children: React.ReactNode }) => {
         keptCard: keptCard ? serializeBonusCard(keptCard) : null,
         deckExtras: (deckExtras ?? []).map(serializeBonusCard),
         superchargedDeckCards: superchargedDeckCards ?? [],
+        lastKeptBaseId: lastKeptBaseId ?? null,
       };
       setSave(s);
       writeTUSave(s);
