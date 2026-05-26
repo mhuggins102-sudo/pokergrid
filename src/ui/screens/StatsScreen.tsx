@@ -1,27 +1,32 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BONUS_DECK_POOL } from '../../game/bonusCards';
-import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
+import { Difficulty } from '../../game/rules';
 import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { NeonButton } from '../components/NeonButton';
-import { DifficultyStat, RunRecord, useStats } from '../stats';
+import {
+  BonusCardStat,
+  DifficultyStat,
+  RunRecord,
+  Tier,
+  TIER_ORDER,
+  useStats,
+} from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   onBack: () => void;
 }
 
-const Difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
-
-type Metric = 'wl' | 'best' | 'average' | 'streak';
-
-const METRIC_ORDER: Metric[] = ['wl', 'best', 'average', 'streak'];
-
-const METRIC_LABEL: Record<Metric, string> = {
-  wl: 'W/L',
-  best: 'Best',
-  average: 'Avg',
-  streak: 'Streak',
+// Filter selector across the top — "All" plus each difficulty.
+type Filter = 'all' | Difficulty;
+const FILTER_ORDER: Filter[] = ['all', 'easy', 'medium', 'hard', 'extreme'];
+const FILTER_LABEL: Record<Filter, string> = {
+  all: 'All',
+  easy: 'Easy',
+  medium: 'Med',
+  hard: 'Hard',
+  extreme: 'Extr',
 };
 
 const fmtDate = (ts: number): string => {
@@ -29,47 +34,98 @@ const fmtDate = (ts: number): string => {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
-// Score-trend sparkline. Each data point is one historical run (oldest on
-// the left, newest on the right); bar height is the score normalized
-// against the series max + the target reference. Bars are colored by
-// outcome so the win / loss pattern reads at a glance.
-//
-// Implemented with plain Views — no SVG / chart library — so it stays
-// within the existing render tooling and respects the WebScaler width.
-const SPARKLINE_HEIGHT = 56;
+// id → BonusCard lookup so we can show the human title in the analytics
+// table without keeping a copy of the whole card on every record.
+const BONUS_BY_ID = new Map(BONUS_DECK_POOL.map(c => [c.id, c]));
 
-interface SparkPoint {
-  score: number;
-  won: boolean;
-}
+// Histogram tier colors mirror the tier badge palette on the result
+// screen so the distribution reads at a glance — SS jokers-purple,
+// the win bands green / cyan, loss bands warn / danger.
+const TIER_COLOR: Record<Tier, string> = {
+  SS: colors.joker,
+  S: colors.success,
+  A: colors.accent,
+  B: colors.warn,
+  C: colors.danger,
+  D: colors.danger,
+};
 
-const Sparkline = ({ data, target }: { data: SparkPoint[]; target: number }) => {
-  if (data.length === 0) return null;
-  const max = Math.max(target, ...data.map(d => d.score), 1);
-  const targetY = (target / max) * SPARKLINE_HEIGHT;
+// Aggregate a DifficultyStat across multiple entries — used by the
+// "All" filter to roll Easy / Medium / Hard / Extreme into one block.
+const sumDifficultyStats = (entries: DifficultyStat[]): DifficultyStat => {
+  let best: number | null = null;
+  let totalScore = 0;
+  let totalRuns = 0;
+  let wins = 0;
+  let bestStreak = 0;
+  // currentStreak doesn't compose across difficulties cleanly — fall back
+  // to 0 in the "All" rollup, since streaks are tracked per-difficulty.
+  for (const e of entries) {
+    if (e.best !== null && (best === null || e.best > best)) best = e.best;
+    totalScore += e.totalScore;
+    totalRuns += e.totalRuns;
+    wins += e.wins;
+    if (e.bestStreak > bestStreak) bestStreak = e.bestStreak;
+  }
+  return { best, totalScore, totalRuns, wins, bestStreak, currentStreak: 0 };
+};
+
+const sumTierCounts = (entries: Record<Tier, number>[]): Record<Tier, number> => {
+  const out: Record<Tier, number> = { SS: 0, S: 0, A: 0, B: 0, C: 0, D: 0 };
+  for (const e of entries) {
+    for (const t of TIER_ORDER) out[t] += e[t];
+  }
+  return out;
+};
+
+const sumBonusStats = (
+  entries: Record<string, BonusCardStat>[]
+): Record<string, BonusCardStat> => {
+  const out: Record<string, BonusCardStat> = {};
+  for (const e of entries) {
+    for (const [id, s] of Object.entries(e)) {
+      const cur = out[id] ?? { timesHeld: 0, totalShapley: 0 };
+      out[id] = {
+        timesHeld: cur.timesHeld + s.timesHeld,
+        totalShapley: cur.totalShapley + s.totalShapley,
+      };
+    }
+  }
+  return out;
+};
+
+const TierHistogram = ({ counts }: { counts: Record<Tier, number> }) => {
+  const max = Math.max(...TIER_ORDER.map(t => counts[t]), 1);
+  const total = TIER_ORDER.reduce((acc, t) => acc + counts[t], 0);
+  if (total === 0) {
+    return <Text style={styles.empty}>No runs in this filter yet.</Text>;
+  }
   return (
-    <View style={[styles.sparkline, { height: SPARKLINE_HEIGHT }]}>
-      <View
-        pointerEvents="none"
-        style={[styles.sparkTargetLine, { bottom: targetY }]}
-      />
-      {data.map((d, i) => {
-        const h = Math.max(2, (d.score / max) * SPARKLINE_HEIGHT);
-        const color = d.won ? colors.success : colors.danger;
+    <View style={styles.histogram}>
+      {TIER_ORDER.map(t => {
+        const count = counts[t];
+        const pct = count / max;
+        const color = TIER_COLOR[t];
         return (
-          <View key={i} style={styles.sparkSlot}>
-            <View
-              style={[
-                styles.sparkBar,
-                {
-                  height: h,
-                  backgroundColor: color,
-                  shadowColor: color,
-                  shadowOpacity: 0.5,
-                  shadowRadius: 2,
-                },
-              ]}
-            />
+          <View key={t} style={styles.histRow}>
+            <Text style={[styles.histTier, { color, textShadowColor: color }]}>
+              {t}
+            </Text>
+            <View style={styles.histBarTrack}>
+              <View
+                style={[
+                  styles.histBar,
+                  {
+                    width: `${Math.max(2, pct * 100)}%`,
+                    backgroundColor: color,
+                    shadowColor: color,
+                    shadowOpacity: 0.5,
+                    shadowRadius: 3,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.histCount}>{count}</Text>
           </View>
         );
       })}
@@ -77,51 +133,47 @@ const Sparkline = ({ data, target }: { data: SparkPoint[]; target: number }) => 
   );
 };
 
-const recentForDifficulty = (recent: RunRecord[], d: Difficulty): SparkPoint[] => {
-  // Oldest → newest left-to-right; cap and reverse since `recent` is newest-first.
-  return recent
-    .filter(r => r.difficulty === d)
-    .map(r => ({ score: r.score, won: r.won }))
-    .reverse();
-};
-
-// Target each difficulty's chart line is drawn against. Imported below
-// from the single source of truth in src/game/rules.ts so the chart
-// reference line stays in step with the engine's win threshold.
-
-// id → BonusCard lookup so we can show the human title in the analytics
-// table without keeping a copy of the whole card on every record.
-const BONUS_BY_ID = new Map(BONUS_DECK_POOL.map(c => [c.id, c]));
-
-const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boolean } => {
-  switch (m) {
-    case 'wl':
-      if (s.totalRuns === 0) return { value: '—', isEmpty: true };
-      return { value: `${s.wins}-${s.totalRuns - s.wins}`, isEmpty: false };
-    case 'best':
-      return s.best === null
-        ? { value: '—', isEmpty: true }
-        : { value: `${s.best}`, isEmpty: false };
-    case 'average':
-      if (s.totalRuns === 0) return { value: '—', isEmpty: true };
-      return { value: `${Math.round(s.totalScore / s.totalRuns)}`, isEmpty: false };
-    case 'streak':
-      return s.bestStreak === 0
-        ? { value: '—', isEmpty: true }
-        : { value: `${s.bestStreak}`, isEmpty: false };
-  }
-};
-
 export const StatsScreen = ({ onBack }: Props) => {
   const { stats } = useStats();
-  const [metric, setMetric] = useState<Metric>('wl');
-  // Bonus card table sort. Default to frequency desc; tapping a column
-  // header switches sort key (resets to desc), tapping it again flips to
-  // asc — matches the pattern most data tables use so the gesture is
-  // self-discoverable.
+  // Default to "All" so the page opens with the most complete summary.
+  const [filter, setFilter] = useState<Filter>('all');
+
+  // Aggregated DifficultyStat for the selected filter.
+  const filteredStat: DifficultyStat = useMemo(() => {
+    if (filter === 'all') {
+      return sumDifficultyStats(Object.values(stats.byDifficulty));
+    }
+    return stats.byDifficulty[filter];
+  }, [filter, stats.byDifficulty]);
+
+  // Tier histogram for the selected filter.
+  const filteredTiers: Record<Tier, number> = useMemo(() => {
+    if (filter === 'all') {
+      return sumTierCounts(Object.values(stats.tierCounts));
+    }
+    return stats.tierCounts[filter];
+  }, [filter, stats.tierCounts]);
+
+  // Recent-run rows filtered by the selected difficulty (or unfiltered
+  // for "All"). The buffer is still the same RECENT_RUNS_CAP — picking
+  // a difficulty just narrows the visible subset.
+  const filteredRecent: RunRecord[] = useMemo(() => {
+    if (filter === 'all') return stats.recent;
+    return stats.recent.filter(r => r.difficulty === filter);
+  }, [filter, stats.recent]);
+
+  // Bonus card analytics source for the selected filter. "All" reads
+  // the global all-time aggregate (preserves any data recorded before
+  // per-difficulty tracking was added); a specific difficulty reads its
+  // own per-difficulty aggregate.
+  const filteredBonusStats = useMemo<Record<string, BonusCardStat>>(() => {
+    if (filter === 'all') return stats.bonusCardStats;
+    return stats.bonusCardStatsByDifficulty[filter];
+  }, [filter, stats.bonusCardStats, stats.bonusCardStatsByDifficulty]);
+
+  // Bonus card table sort.
   const [bonusSortBy, setBonusSortBy] = useState<'held' | 'avg'>('held');
   const [bonusSortDir, setBonusSortDir] = useState<'desc' | 'asc'>('desc');
-
   const toggleBonusSort = (col: 'held' | 'avg') => {
     if (bonusSortBy === col) {
       setBonusSortDir(d => (d === 'desc' ? 'asc' : 'desc'));
@@ -130,11 +182,8 @@ export const StatsScreen = ({ onBack }: Props) => {
       setBonusSortDir('desc');
     }
   };
-
-  // Bonus card analytics — only cards that appeared at least once,
-  // sorted by the currently-selected column.
   const bonusRows = useMemo(() => {
-    const rows = Object.entries(stats.bonusCardStats)
+    const rows = Object.entries(filteredBonusStats)
       .map(([cardId, s]) => ({
         cardId,
         card: BONUS_BY_ID.get(cardId),
@@ -148,7 +197,19 @@ export const StatsScreen = ({ onBack }: Props) => {
       return bonusSortDir === 'desc' ? vb - va : va - vb;
     });
     return rows;
-  }, [stats.bonusCardStats, bonusSortBy, bonusSortDir]);
+  }, [filteredBonusStats, bonusSortBy, bonusSortDir]);
+
+  // Pre-format the four headline stats so the JSX stays readable.
+  const wlText = filteredStat.totalRuns === 0
+    ? '—'
+    : `${filteredStat.wins}-${filteredStat.totalRuns - filteredStat.wins}`;
+  const bestText = filteredStat.best === null ? '—' : `${filteredStat.best}`;
+  const avgText = filteredStat.totalRuns === 0
+    ? '—'
+    : `${Math.round(filteredStat.totalScore / filteredStat.totalRuns)}`;
+  const streakText = filteredStat.bestStreak === 0 ? '—' : `${filteredStat.bestStreak}`;
+  const showCurrentStreak =
+    filter !== 'all' && filteredStat.currentStreak > 0;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -157,86 +218,55 @@ export const StatsScreen = ({ onBack }: Props) => {
         <NeonButton label="Back" variant="ghost" size="sm" onPress={onBack} />
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>Difficulty</Text>
-        <View style={styles.toggle}>
-          {METRIC_ORDER.map(m => {
-            const active = metric === m;
-            return (
-              <Pressable
-                key={m}
-                onPress={() => setMetric(m)}
-                style={[styles.toggleBtn, active && styles.toggleBtnActive]}
-              >
-                <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
-                  {METRIC_LABEL[m]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.diffList}>
-        {Difficulties.map(d => {
-          const s = stats.byDifficulty[d];
-          const { value, isEmpty } = valueFor(s, metric);
-          const showActiveStreak = metric === 'streak' && s.currentStreak > 0;
+      <Text style={styles.sectionLabel}>Filter by difficulty</Text>
+      <View style={styles.toggle}>
+        {FILTER_ORDER.map(f => {
+          const active = filter === f;
           return (
-            <View key={d} style={styles.diffRow}>
-              <Text style={styles.diffLabel}>{d.toUpperCase()}</Text>
-              <View style={styles.diffRight}>
-                {showActiveStreak && (
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>ON {s.currentStreak}</Text>
-                  </View>
-                )}
-                <Text
-                  style={[
-                    styles.diffValue,
-                    !isEmpty && styles.diffValueActive,
-                  ]}
-                >
-                  {value}
-                </Text>
-              </View>
-            </View>
+            <Pressable
+              key={f}
+              onPress={() => setFilter(f)}
+              style={[styles.toggleBtn, active && styles.toggleBtnActive]}
+            >
+              <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
+                {FILTER_LABEL[f]}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
 
-      <Text style={styles.sectionLabel}>Score trend</Text>
-      <View style={styles.trendBlock}>
-        {Difficulties.map(d => {
-          const series = recentForDifficulty(stats.recent, d);
-          return (
-            <View key={d} style={styles.trendRow}>
-              <View style={styles.trendLabelCol}>
-                <Text style={styles.trendLabel}>{d.toUpperCase()}</Text>
-                <Text style={styles.trendCount}>
-                  {series.length === 0
-                    ? 'no runs'
-                    : `${series.length} run${series.length === 1 ? '' : 's'}`}
-                </Text>
-              </View>
-              <View style={styles.trendChartCol}>
-                {series.length === 0 ? (
-                  <Text style={styles.trendEmpty}>—</Text>
-                ) : (
-                  <Sparkline data={series} target={TARGET_BY_DIFFICULTY[d]} />
-                )}
-              </View>
+      <View style={styles.summaryBlock}>
+        <SummaryRow label="W / L" value={wlText} active={filteredStat.totalRuns > 0} />
+        <SummaryRow label="Best" value={bestText} active={filteredStat.best !== null} />
+        <SummaryRow label="Average" value={avgText} active={filteredStat.totalRuns > 0} />
+        <SummaryRow
+          label="Streak"
+          value={streakText}
+          active={filteredStat.bestStreak > 0}
+          rightExtra={showCurrentStreak ? (
+            <View style={styles.activeBadge}>
+              <Text style={styles.activeBadgeText}>ON {filteredStat.currentStreak}</Text>
             </View>
-          );
-        })}
+          ) : undefined}
+        />
+      </View>
+
+      <Text style={styles.sectionLabel}>Score distribution</Text>
+      <View style={styles.histogramBlock}>
+        <TierHistogram counts={filteredTiers} />
       </View>
 
       <Text style={styles.sectionLabel}>Recent runs</Text>
-      {stats.recent.length === 0 ? (
-        <Text style={styles.empty}>No runs yet. Start a Free Play game to begin tracking.</Text>
+      {filteredRecent.length === 0 ? (
+        <Text style={styles.empty}>
+          {filter === 'all'
+            ? 'No runs yet. Start a Free Play game to begin tracking.'
+            : 'No recent runs at this difficulty.'}
+        </Text>
       ) : (
         <View style={styles.recentBlock}>
-          {stats.recent.map((r, i) => (
+          {filteredRecent.map((r, i) => (
             <View key={i} style={styles.recentRow}>
               <Text style={styles.recentDate}>{fmtDate(r.ts)}</Text>
               <Text style={styles.recentDiff}>{r.difficulty}</Text>
@@ -260,12 +290,13 @@ export const StatsScreen = ({ onBack }: Props) => {
       <Text style={styles.sectionLabel}>Bonus cards</Text>
       {bonusRows.length === 0 ? (
         <Text style={styles.empty}>
-          No bonus card history yet. They get tracked as you finish Free Play runs.
+          {filter === 'all'
+            ? 'No bonus card history yet. They get tracked as you finish Free Play runs.'
+            : 'No bonus card history at this difficulty yet.'}
         </Text>
       ) : (
         <View style={styles.bonusBlock}>
           <View style={[styles.bonusRow, styles.bonusHeader]}>
-            {/* swatch column spacer keeps "Card" left-aligned with row content */}
             <View style={styles.bonusSwatchSpacer} />
             <Text style={[styles.bonusHeaderCell, styles.bonusNameCell]}>Card</Text>
             <Pressable
@@ -334,6 +365,28 @@ export const StatsScreen = ({ onBack }: Props) => {
   );
 };
 
+const SummaryRow = ({
+  label,
+  value,
+  active,
+  rightExtra,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  rightExtra?: React.ReactNode;
+}) => (
+  <View style={styles.summaryRow}>
+    <Text style={styles.summaryLabel}>{label}</Text>
+    <View style={styles.summaryRight}>
+      {rightExtra}
+      <Text style={[styles.summaryValue, active && styles.summaryValueActive]}>
+        {value}
+      </Text>
+    </View>
+  </View>
+);
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
@@ -351,13 +404,6 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
   sectionLabel: {
     color: colors.textMid,
     fontFamily: fonts.mono,
@@ -368,6 +414,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
+  // Five-button filter pill across the top. Same visual treatment as
+  // the old metric toggle so the difference is just what each button
+  // does, not how the row looks.
   toggle: {
     flexDirection: 'row',
     backgroundColor: colors.bgPanel,
@@ -375,11 +424,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outline,
     padding: 2,
+    gap: 2,
   },
   toggleBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    flex: 1,
+    paddingVertical: 6,
     borderRadius: radius.sm,
+    alignItems: 'center',
   },
   toggleBtnActive: {
     backgroundColor: 'rgba(107, 214, 255, 0.15)',
@@ -398,8 +449,8 @@ const styles = StyleSheet.create({
     textShadowColor: colors.accent,
     textShadowRadius: 3,
   },
-  diffList: { gap: 4 },
-  diffRow: {
+  summaryBlock: { gap: 4, marginTop: spacing.md },
+  summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -410,27 +461,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineSoft,
   },
-  diffLabel: {
+  summaryLabel: {
     fontFamily: fonts.mono,
     color: colors.textMid,
     fontSize: 12,
     letterSpacing: 1.5,
     fontWeight: '700',
+    textTransform: 'uppercase',
   },
-  diffRight: {
+  summaryRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  diffValue: {
+  summaryValue: {
     fontFamily: fonts.mono,
     color: colors.textLow,
     fontSize: 18,
     fontWeight: '800',
-    minWidth: 50,
+    minWidth: 64,
     textAlign: 'right',
   },
-  diffValueActive: {
+  summaryValueActive: {
     color: colors.success,
     textShadowColor: colors.success,
     textShadowRadius: 6,
@@ -452,6 +504,50 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textShadowColor: colors.warn,
     textShadowRadius: 3,
+  },
+  // Score-distribution histogram. One horizontal bar per tier; the bar
+  // width is the tier's run count normalized to the largest bin in the
+  // current filter.
+  histogramBlock: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+  },
+  histogram: { gap: 6 },
+  histRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  histTier: {
+    width: 26,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textShadowRadius: 4,
+  },
+  histBarTrack: {
+    flex: 1,
+    height: 14,
+    backgroundColor: colors.bgBase,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  histBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  histCount: {
+    width: 32,
+    textAlign: 'right',
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
   },
   empty: {
     color: colors.textLow,
@@ -514,67 +610,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textShadowRadius: 4,
   },
-  trendBlock: { gap: 6 },
-  trendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.bgPanel,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.outlineSoft,
-    gap: spacing.md,
-  },
-  trendLabelCol: { width: 64 },
-  trendLabel: {
-    color: colors.textMid,
-    fontFamily: fonts.mono,
-    fontSize: 12,
-    letterSpacing: 1.5,
-    fontWeight: '700',
-  },
-  trendCount: {
-    color: colors.textLow,
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    marginTop: 2,
-  },
-  trendChartCol: { flex: 1 },
-  trendEmpty: {
-    color: colors.textLow,
-    fontFamily: fonts.mono,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  sparkline: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    position: 'relative',
-  },
-  sparkSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: '100%',
-  },
-  sparkBar: {
-    width: '70%',
-    borderRadius: 1.5,
-  },
-  // Faint horizontal line at the target score so it's obvious which runs
-  // cleared the threshold and which fell short — without needing a per-bar
-  // tooltip.
-  sparkTargetLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    borderTopWidth: 1,
-    borderColor: colors.outlineStrong,
-    borderStyle: 'dashed',
-  },
   bonusBlock: { gap: 2 },
   bonusRow: {
     flexDirection: 'row',
@@ -592,8 +627,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     paddingVertical: 2,
   },
-  // Same 8px reserved space as the row's color swatch so "Card" aligns
-  // with the name column underneath rather than the swatch underneath.
   bonusSwatchSpacer: { width: 8 },
   bonusHeaderCell: {
     color: colors.textLow,
@@ -604,8 +637,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   bonusNameCell: { flex: 1 },
-  // Match the data row's bonusNumberCell width so the Held / Avg columns
-  // line up across header and rows.
   bonusHeaderBtn: { width: 56 },
   bonusHeaderActive: {
     color: colors.accent,
