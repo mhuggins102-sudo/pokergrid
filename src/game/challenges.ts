@@ -28,6 +28,7 @@ export type ChallengeId =
   | 'dynamite'
   | 'jokerless'
   | 'no-swap'
+  | 'no-discards'
   | 'grid-only'
   | 'line-only'
   | 'short-deck'
@@ -98,6 +99,16 @@ export const CHALLENGES: Challenge[] = [
     goal: 'Score 500+ without swapping out a bonus card at the cap.',
     scoreTarget: 500,
     conditionMet: (state) => !state.swappedBonus,
+  },
+  {
+    id: 'no-discards',
+    name: 'No Discards',
+    goal: 'Score 500+ without using the Discard button — every drawn card must be placed or spent on a suit perk.',
+    scoreTarget: 500,
+    // The Discard button is hidden in this challenge and the DISCARD_NONE
+    // action is rejected by the reducer, so reaching the score target is
+    // the only structural requirement.
+    conditionMet: () => true,
   },
   {
     id: 'short-deck',
