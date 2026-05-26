@@ -229,6 +229,113 @@ const BannerHero = ({
   );
 };
 
+// Picker chip with a mount-time "power-up" animation: scale pulses up
+// briefly + a bright glow flash, then settles into its resting state.
+// The glow color matches the card's category tone so the visual reads
+// in step with the rest of the chip styling. Reduce-motion disables the
+// animation but the chip still shows the new (post-boost) value.
+const PickerChip = ({
+  card,
+  selected,
+  dimmed,
+  onPress,
+}: {
+  card: BonusCard;
+  selected: boolean;
+  dimmed: boolean;
+  onPress: () => void;
+}) => {
+  const { settings } = useSettings();
+  const tone = bonusStyleFor(card);
+  const scale = useSharedValue(settings.reduceMotion ? 1 : 0.85);
+  const glowOpacity = useSharedValue(settings.reduceMotion ? 0.3 : 0);
+
+  useEffect(() => {
+    if (settings.reduceMotion) {
+      scale.value = 1;
+      glowOpacity.value = 0.3;
+      return;
+    }
+    scale.value = withSequence(
+      withTiming(1.12, { duration: 320, easing: Easing.out(Easing.cubic) }),
+      withTiming(1, { duration: 260 })
+    );
+    glowOpacity.value = withSequence(
+      withTiming(1, { duration: 320 }),
+      withTiming(0.3, { duration: 540 })
+    );
+  }, [scale, glowOpacity, settings.reduceMotion]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    shadowOpacity: glowOpacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.pickerCard,
+        { borderColor: tone.borderColor, shadowColor: tone.borderColor, shadowRadius: 10 },
+        selected && styles.pickerCardSelected,
+        dimmed && styles.pickerCardDimmed,
+        animStyle,
+      ]}
+    >
+      <Pressable
+        onPress={onPress}
+        style={styles.pickerCardInner}
+      >
+        <Text
+          style={[styles.pickerCardTitle, { color: tone.titleColor, textShadowColor: tone.titleColor }]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+        >
+          {card.title}
+        </Text>
+        <Text style={styles.pickerCardMult} numberOfLines={1} adjustsFontSizeToFit>
+          {card.mult}
+        </Text>
+        {card.baseMultValue !== undefined && card.baseMultValue !== card.multValue && (
+          <Text style={styles.pickerCardWas}>was ×{card.baseMultValue}</Text>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+};
+
+// Supercharge reveal text: fades + scales in when the player taps a card
+// on the grid and the wild/double coin flip resolves. Anchored under the
+// "S-tier reward" prompt so the player's attention is pulled from the
+// grid tap to the rolled outcome.
+const SuperchargeReveal = ({ supercharge }: { supercharge: Supercharge }) => {
+  const { settings } = useSettings();
+  const opacity = useSharedValue(settings.reduceMotion ? 1 : 0);
+  const scale = useSharedValue(settings.reduceMotion ? 1 : 0.8);
+  useEffect(() => {
+    if (settings.reduceMotion) {
+      opacity.value = 1;
+      scale.value = 1;
+      return;
+    }
+    opacity.value = withTiming(1, { duration: 360 });
+    scale.value = withSequence(
+      withTiming(1.18, { duration: 260, easing: Easing.out(Easing.cubic) }),
+      withTiming(1, { duration: 220 })
+    );
+  }, [opacity, scale, settings.reduceMotion, supercharge]);
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+  return (
+    <Animated.Text style={[styles.superchargeRevealText, animStyle]}>
+      {supercharge === 'wild'
+        ? '✦ WILD — suit is now flexible for flush / straight flush.'
+        : '×2 DOUBLE — counts as 2 same-rank cards.'}
+    </Animated.Text>
+  );
+};
+
 export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
@@ -384,6 +491,15 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     if (!c || isJoker(c)) return undefined;
     return { ...c, supercharge };
   }, [superchargedSlot, supercharge, state.grid]);
+
+  // Apply the picked supercharge to the displayed grid so the suit glyph
+  // (or ×2 badge) updates immediately when the player taps a card.
+  const gridForDisplay = useMemo(() => {
+    if (!superchargedCard || superchargedSlot === null) return state.grid;
+    const next = [...state.grid];
+    next[superchargedSlot] = superchargedCard;
+    return next;
+  }, [state.grid, superchargedCard, superchargedSlot]);
 
   // Cumulative supercharged-deck list = previous-level supercharges +
   // this level's pick (if any).
@@ -557,7 +673,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       />
       <View style={styles.gridArea}>
         <GridView
-          grid={state.grid}
+          grid={gridForDisplay}
           onLinePress={(kind, index) => setInspectLine({ kind, index })}
           onSlotPress={
             earnedSupercharge && keepPickerDone && superchargedSlot === null
@@ -654,38 +770,15 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
             Each card's multiplier was boosted ×1.2. Pick one to carry into Level {context.level + 1}; the others go back into the bonus deck powered up.
           </Text>
           <View style={styles.pickerRow}>
-            {poweredCards.map((c, i) => {
-              const tone = bonusStyleFor(c);
-              const selected = keptIdx === i;
-              const dimmed = keptIdx !== null && !selected;
-              return (
-                <Pressable
-                  key={i}
-                  onPress={() => setKeptIdx(i)}
-                  style={[
-                    styles.pickerCard,
-                    { borderColor: tone.borderColor },
-                    glow(tone.borderColor, 6, selected ? 0.7 : 0.3),
-                    selected && styles.pickerCardSelected,
-                    dimmed && styles.pickerCardDimmed,
-                  ]}
-                >
-                  <Text
-                    style={[styles.pickerCardTitle, { color: tone.titleColor, textShadowColor: tone.titleColor }]}
-                    numberOfLines={2}
-                    adjustsFontSizeToFit
-                  >
-                    {c.title}
-                  </Text>
-                  <Text style={styles.pickerCardMult} numberOfLines={1} adjustsFontSizeToFit>
-                    {c.mult}
-                  </Text>
-                  {c.baseMultValue !== undefined && c.baseMultValue !== c.multValue && (
-                    <Text style={styles.pickerCardWas}>was ×{c.baseMultValue}</Text>
-                  )}
-                </Pressable>
-              );
-            })}
+            {poweredCards.map((c, i) => (
+              <PickerChip
+                key={i}
+                card={c}
+                selected={keptIdx === i}
+                dimmed={keptIdx !== null && keptIdx !== i}
+                onPress={() => setKeptIdx(i)}
+              />
+            ))}
           </View>
         </View>
       )}
@@ -703,11 +796,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
               supercharge follows the card into the next level's deck.
             </Text>
           ) : (
-            <Text style={styles.superchargeRevealText}>
-              {supercharge === 'wild'
-                ? '✦ WILD — suit is now flexible for flush / straight flush.'
-                : '×2 DOUBLE — counts as 2 same-rank cards.'}
-            </Text>
+            supercharge && <SuperchargeReveal supercharge={supercharge} />
           )}
         </View>
       )}
@@ -1067,10 +1156,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgGlass,
     borderWidth: 1.5,
     borderRadius: radius.md,
+    minHeight: 76,
+  },
+  pickerCardInner: {
+    flex: 1,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
     alignItems: 'center',
-    minHeight: 76,
     justifyContent: 'center',
   },
   pickerCardSelected: {
