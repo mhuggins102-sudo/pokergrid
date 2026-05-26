@@ -129,27 +129,29 @@ const AppShell = () => {
   );
 };
 
-// Natural "phone frame" dimensions used by WebScaler when the app runs on
-// mobile / desktop browsers. The app was designed mobile-first around a
-// ~390pt-wide portrait device with enough headroom for the in-game layout
-// (score bar + bonus strip + 5x5 grid + drawn-card row). On any viewport
-// smaller than this the scaler shrinks the whole frame uniformly so there's
-// no vertical scroll on mobile browsers; on larger viewports the frame caps
-// at 1:1 and gets centered with the page background showing through.
+// Natural "phone frame" width used by WebScaler when the app runs on a
+// browser. The app was designed mobile-first around a ~390pt-wide portrait
+// device. The FRAME HEIGHT is matched to the actual viewport (in unscaled
+// coordinates) so flex: 1 layouts fill the visible area exactly — no dead
+// space below the bottom buttons on tall iPhone Safari sessions, no
+// vertical scrolling on shorter Android browsers.
 const WEB_NATURAL_WIDTH = 390;
-const WEB_NATURAL_HEIGHT = 800;
 
 const WebScaler = ({ children }: { children: React.ReactNode }) => {
-  const [scale, setScale] = useState(1);
+  const [dims, setDims] = useState({ scale: 1, frameHeight: 800 });
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const fit = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      setScale(
-        Math.min(w / WEB_NATURAL_WIDTH, h / WEB_NATURAL_HEIGHT, 1)
-      );
+      // Shrink only when the viewport is narrower than our design width;
+      // never upscale past 1.0 on wide / desktop browsers.
+      const scale = Math.min(1, w / WEB_NATURAL_WIDTH);
+      // Frame height = viewport height in unscaled space. The frame is
+      // rendered scaled by `scale`, so the visible height ends up matching
+      // the viewport exactly.
+      setDims({ scale, frameHeight: h / scale });
     };
     fit();
     window.addEventListener('resize', fit);
@@ -162,8 +164,8 @@ const WebScaler = ({ children }: { children: React.ReactNode }) => {
   // ViewStyle types — cast on the inline style to avoid noise.
   const innerStyle = {
     width: WEB_NATURAL_WIDTH,
-    height: WEB_NATURAL_HEIGHT,
-    transform: [{ scale }],
+    height: dims.frameHeight,
+    transform: [{ scale: dims.scale }],
     transformOrigin: 'top center',
   } as unknown as object;
 
