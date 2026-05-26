@@ -108,6 +108,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const [linesExpanded, setLinesExpanded] = useState(false);
+  const [logExpanded, setLogExpanded] = useState(false);
   const { record, recordTargetsUp, recordChallenge } = useStats();
   const recorded = useRef(false);
 
@@ -320,6 +321,29 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={[styles.totalScore, won && styles.totalScoreWon]}>{total}</Text>
         </View>
+
+        <Pressable
+          style={[styles.accordionHeader, styles.logAccordionHeader]}
+          onPress={() => setLogExpanded(v => !v)}
+        >
+          <Text style={styles.accordionLabel}>
+            {logExpanded ? '▼' : '▶'} Run log
+          </Text>
+          <Text style={styles.accordionHint}>
+            {state.history.length} {state.history.length === 1 ? 'event' : 'events'}
+          </Text>
+        </Pressable>
+
+        {logExpanded && (
+          <View style={styles.logList}>
+            {state.history.map((entry, i) => (
+              <View key={i} style={styles.logRow}>
+                <Text style={styles.logTurn}>{String(i + 1).padStart(2, '0')}</Text>
+                <Text style={styles.logEntry}>{entry}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={styles.btnRow}>
@@ -592,6 +616,38 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 13,
     fontWeight: '700',
+  },
+  logAccordionHeader: {
+    marginTop: spacing.md,
+  },
+  logList: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingVertical: 2,
+  },
+  logTurn: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '700',
+    width: 24,
+    letterSpacing: 0.5,
+  },
+  logEntry: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    flex: 1,
+    letterSpacing: 0.3,
   },
   // Mirror the breakdownBlock width so the buttons sit directly beneath it.
   btnRow: {
