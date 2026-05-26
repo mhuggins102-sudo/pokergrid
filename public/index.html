@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <title>PokerGrid</title>
+
+    <!--
+      Match the in-app dark background everywhere the OS / browser chrome
+      colors itself from the page:
+
+        - theme-color   → modern browsers' chrome tint (Safari URL bar on iOS,
+                          Chrome top bar on Android). Without it the bar
+                          renders white above our dark canvas.
+        - apple-mobile-web-app-capable + apple-mobile-web-app-status-bar-style
+                        → "Add to Home Screen" PWA on iOS. black-translucent
+                          renders the status bar transparently over the page
+                          so the body background (also #06070d) shows through
+                          and there's no white slab at the top of the phone.
+    -->
+    <meta name="theme-color" content="#06070d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PokerGrid" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <link rel="icon" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+
+    <style>
+      /*
+        Lock the page to the (dynamic) viewport so the app's flex: 1 root
+        actually fills the available height on mobile web. 100dvh accounts
+        for the iOS Safari URL bar collapsing; the 100vh line is the
+        fallback for older browsers that don't understand dvh.
+      */
+      html,
+      body,
+      #root {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        height: 100dvh;
+        background-color: #06070d;
+        color-scheme: dark;
+      }
+      body {
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
