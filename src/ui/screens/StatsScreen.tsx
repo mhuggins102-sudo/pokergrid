@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BONUS_DECK_POOL } from '../../game/bonusCards';
 import type { Difficulty } from '../../game/rules';
+import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { NeonButton } from '../components/NeonButton';
-import { DifficultyStat, useStats } from '../stats';
+import { DifficultyStat, RunRecord, useStats } from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -27,6 +29,74 @@ const fmtDate = (ts: number): string => {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
+// Score-trend sparkline. Each data point is one historical run (oldest on
+// the left, newest on the right); bar height is the score normalized
+// against the series max + the target reference. Bars are colored by
+// outcome so the win / loss pattern reads at a glance.
+//
+// Implemented with plain Views — no SVG / chart library — so it stays
+// within the existing render tooling and respects the WebScaler width.
+const SPARKLINE_HEIGHT = 56;
+
+interface SparkPoint {
+  score: number;
+  won: boolean;
+}
+
+const Sparkline = ({ data, target }: { data: SparkPoint[]; target: number }) => {
+  if (data.length === 0) return null;
+  const max = Math.max(target, ...data.map(d => d.score), 1);
+  const targetY = (target / max) * SPARKLINE_HEIGHT;
+  return (
+    <View style={[styles.sparkline, { height: SPARKLINE_HEIGHT }]}>
+      <View
+        pointerEvents="none"
+        style={[styles.sparkTargetLine, { bottom: targetY }]}
+      />
+      {data.map((d, i) => {
+        const h = Math.max(2, (d.score / max) * SPARKLINE_HEIGHT);
+        const color = d.won ? colors.success : colors.danger;
+        return (
+          <View key={i} style={styles.sparkSlot}>
+            <View
+              style={[
+                styles.sparkBar,
+                {
+                  height: h,
+                  backgroundColor: color,
+                  shadowColor: color,
+                  shadowOpacity: 0.5,
+                  shadowRadius: 2,
+                },
+              ]}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+const recentForDifficulty = (recent: RunRecord[], d: Difficulty): SparkPoint[] => {
+  // Oldest → newest left-to-right; cap and reverse since `recent` is newest-first.
+  return recent
+    .filter(r => r.difficulty === d)
+    .map(r => ({ score: r.score, won: r.won }))
+    .reverse();
+};
+
+// Target each difficulty's chart line is drawn against. Mirrors the score
+// thresholds in src/game/rules.ts.
+const TARGET_BY_DIFFICULTY: Record<Difficulty, number> = {
+  easy: 300,
+  medium: 400,
+  hard: 500,
+};
+
+// id → BonusCard lookup so we can show the human title in the analytics
+// table without keeping a copy of the whole card on every record.
+const BONUS_BY_ID = new Map(BONUS_DECK_POOL.map(c => [c.id, c]));
+
 const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boolean } => {
   switch (m) {
     case 'wl':
@@ -49,6 +119,20 @@ const valueFor = (s: DifficultyStat, m: Metric): { value: string; isEmpty: boole
 export const StatsScreen = ({ onBack }: Props) => {
   const { stats } = useStats();
   const [metric, setMetric] = useState<Metric>('wl');
+
+  // Bonus card analytics — sort by frequency desc; show only cards that
+  // appeared at least once.
+  const bonusRows = useMemo(() => {
+    return Object.entries(stats.bonusCardStats)
+      .map(([cardId, s]) => ({
+        cardId,
+        card: BONUS_BY_ID.get(cardId),
+        timesHeld: s.timesHeld,
+        avg: s.timesHeld > 0 ? s.totalShapley / s.timesHeld : 0,
+      }))
+      .filter(r => r.card && r.timesHeld > 0)
+      .sort((a, b) => b.timesHeld - a.timesHeld);
+  }, [stats.bonusCardStats]);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -105,6 +189,32 @@ export const StatsScreen = ({ onBack }: Props) => {
         })}
       </View>
 
+      <Text style={styles.sectionLabel}>Score trend</Text>
+      <View style={styles.trendBlock}>
+        {Difficulties.map(d => {
+          const series = recentForDifficulty(stats.recent, d);
+          return (
+            <View key={d} style={styles.trendRow}>
+              <View style={styles.trendLabelCol}>
+                <Text style={styles.trendLabel}>{d.toUpperCase()}</Text>
+                <Text style={styles.trendCount}>
+                  {series.length === 0
+                    ? 'no runs'
+                    : `${series.length} run${series.length === 1 ? '' : 's'}`}
+                </Text>
+              </View>
+              <View style={styles.trendChartCol}>
+                {series.length === 0 ? (
+                  <Text style={styles.trendEmpty}>—</Text>
+                ) : (
+                  <Sparkline data={series} target={TARGET_BY_DIFFICULTY[d]} />
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
       <Text style={styles.sectionLabel}>Recent runs</Text>
       {stats.recent.length === 0 ? (
         <Text style={styles.empty}>No runs yet. Start a Free Play game to begin tracking.</Text>
@@ -128,6 +238,50 @@ export const StatsScreen = ({ onBack }: Props) => {
               </Text>
             </View>
           ))}
+        </View>
+      )}
+
+      <Text style={styles.sectionLabel}>Bonus cards</Text>
+      {bonusRows.length === 0 ? (
+        <Text style={styles.empty}>
+          No bonus card history yet. They get tracked as you finish Free Play runs.
+        </Text>
+      ) : (
+        <View style={styles.bonusBlock}>
+          <View style={[styles.bonusRow, styles.bonusHeader]}>
+            <Text style={styles.bonusHeaderCell}>Card</Text>
+            <Text style={[styles.bonusHeaderCell, styles.bonusNumberCell]}>Held</Text>
+            <Text style={[styles.bonusHeaderCell, styles.bonusNumberCell]}>Avg</Text>
+          </View>
+          {bonusRows.map(r => {
+            const tone = bonusStyleFor(r.card!);
+            const avgInt = Math.round(r.avg);
+            const sign = avgInt > 0 ? '+' : '';
+            return (
+              <View key={r.cardId} style={styles.bonusRow}>
+                <View style={[styles.bonusSwatch, { backgroundColor: tone.borderColor }]} />
+                <Text
+                  style={[styles.bonusName, { color: tone.titleColor }]}
+                  numberOfLines={1}
+                >
+                  {r.card!.title}
+                </Text>
+                <Text style={[styles.bonusNumber, styles.bonusNumberCell]}>
+                  ×{r.timesHeld}
+                </Text>
+                <Text
+                  style={[
+                    styles.bonusNumber,
+                    styles.bonusNumberCell,
+                    avgInt > 0 && styles.bonusNumberActive,
+                    avgInt < 0 && styles.bonusNumberLoss,
+                  ]}
+                >
+                  {avgInt === 0 ? '—' : `${sign}${avgInt}`}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       )}
     </ScrollView>
@@ -313,5 +467,123 @@ const styles = StyleSheet.create({
     width: 16,
     textAlign: 'center',
     textShadowRadius: 4,
+  },
+  trendBlock: { gap: 6 },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+    gap: spacing.md,
+  },
+  trendLabelCol: { width: 64 },
+  trendLabel: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: '700',
+  },
+  trendCount: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  trendChartCol: { flex: 1 },
+  trendEmpty: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  sparkline: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 2,
+    position: 'relative',
+  },
+  sparkSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+  },
+  sparkBar: {
+    width: '70%',
+    borderRadius: 1.5,
+  },
+  // Faint horizontal line at the target score so it's obvious which runs
+  // cleared the threshold and which fell short — without needing a per-bar
+  // tooltip.
+  sparkTargetLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    borderTopWidth: 1,
+    borderColor: colors.outlineStrong,
+    borderStyle: 'dashed',
+  },
+  bonusBlock: { gap: 2 },
+  bonusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+    gap: spacing.sm,
+  },
+  bonusHeader: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    paddingVertical: 2,
+  },
+  bonusHeaderCell: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    flex: 1,
+  },
+  bonusSwatch: {
+    width: 8,
+    height: 24,
+    borderRadius: 2,
+  },
+  bonusName: {
+    flex: 1,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  bonusNumberCell: {
+    width: 56,
+    textAlign: 'right',
+    flex: 0,
+  },
+  bonusNumber: {
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textMid,
+  },
+  bonusNumberActive: {
+    color: colors.success,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
+  },
+  bonusNumberLoss: {
+    color: colors.danger,
   },
 });
