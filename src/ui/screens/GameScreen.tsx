@@ -139,6 +139,8 @@ export const GameScreen = ({
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
+  const [slideGhost, setSlideGhost] = useState<Set<number> | null>(null);
+  const slideGhostKeyRef = useRef<string>('');
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const haptic = useHaptic();
@@ -501,9 +503,70 @@ export const GameScreen = ({
     playSound('tap');
   };
 
+  // Mid-drag preview: compute where the chain will land at the current
+  // direction + distance and surface the slots to GridView as ghost
+  // outlines. State updates are gated on the slot-set actually changing so
+  // we don't re-render the grid every gesture frame.
+  const setSlideGhostIfChanged = (next: Set<number> | null) => {
+    const key = next ? Array.from(next).sort((a, b) => a - b).join(',') : '';
+    if (key === slideGhostKeyRef.current) return;
+    slideGhostKeyRef.current = key;
+    setSlideGhost(next);
+  };
+
+  const onDragUpdate = (dx: number, dy: number) => {
+    const source = dragSourceRef.current;
+    if (source === null) {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    if (state.phase.kind !== 'awaiting-target-slide-source') {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    // Below the activeOffset threshold there's no committed direction yet.
+    if (absX < 18 && absY < 18) {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    const direction: Direction =
+      absX > absY
+        ? dx > 0 ? 'right' : 'left'
+        : dy > 0 ? 'down' : 'up';
+    const moves = slideDestinationsFrom(state.grid, source)
+      .filter(m => m.direction === direction);
+    if (moves.length === 0) {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    const CELL = gridCellSize;
+    const draggedCells = Math.max(
+      1,
+      Math.round(
+        (direction === 'left' || direction === 'right' ? absX : absY) / CELL
+      )
+    );
+    const move =
+      moves.find(m => m.distance === draggedCells) ??
+      moves.reduce((max, m) => (m.distance > max.distance ? m : max));
+    // Project every chain member's landing slot — the whole chain moves
+    // together, so the preview shows the full footprint, not just where
+    // the leading card ends up.
+    const chainSlots = slideChain(state.grid, source, direction);
+    const step =
+      direction === 'left' ? -1 :
+      direction === 'right' ? 1 :
+      direction === 'up' ? -5 : 5;
+    const landings = new Set(chainSlots.map(s => s + step * move.distance));
+    setSlideGhostIfChanged(landings);
+  };
+
   const onDragEnd = (dx: number, dy: number) => {
     const source = dragSourceRef.current;
     dragSourceRef.current = null;
+    setSlideGhostIfChanged(null);
     if (source === null) return;
     if (state.phase.kind !== 'awaiting-target-slide-source') return;
 
@@ -554,17 +617,22 @@ export const GameScreen = ({
           'worklet';
           runOnJS(onDragStart)(e.x, e.y);
         })
+        .onUpdate(e => {
+          'worklet';
+          runOnJS(onDragUpdate)(e.translationX, e.translationY);
+        })
         .onEnd(e => {
           'worklet';
           runOnJS(onDragEnd)(e.translationX, e.translationY);
         })
         .onFinalize(() => {
           'worklet';
-          // Ensure stale refs don't survive a cancel.
+          // Ensure stale refs / ghost slots don't survive a cancel.
           runOnJS(clearDragRef)();
+          runOnJS(setSlideGhostIfChanged)(null);
         }),
     // We intentionally rebuild the gesture per relevant state change so the
-    // onDragStart / onDragEnd closures see fresh values.
+    // onDragStart / onDragUpdate / onDragEnd closures see fresh values.
     [state.phase, state.grid, anim]
   );
 
@@ -594,6 +662,7 @@ export const GameScreen = ({
               hiddenSlots={hiddenSlotsFor(anim)}
               selected={selectedSlot}
               nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
+              slideGhostSlots={slideGhost ?? undefined}
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
             />
