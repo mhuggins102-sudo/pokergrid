@@ -471,6 +471,17 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const allBlocked = isTUWin && poweredCards.length > 0
     && blockedIndices.size === poweredCards.length;
 
+  // Base id passed forward as next round's `lastKeptBaseId`. null when
+  // the player picked nothing (0-card hand, all blocked, or never
+  // resolved the picker) so next round has no constraint. Declared
+  // before the picker-state useEffects so they can reference it via
+  // their dependency arrays without hitting a temporal-dead-zone
+  // ReferenceError at render time.
+  const nextLastKeptBaseId =
+    keptIdx !== null && poweredCards[keptIdx]
+      ? baseIdOf(poweredCards[keptIdx])
+      : null;
+
   // Single-card hands auto-pick (the player has no real choice — keep
   // the one card they had) UNLESS that single card is the blocked one,
   // in which case the round just yields no keep. 0-card hands skip
@@ -614,13 +625,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     !showBonusPicker || keptIdx !== null || poweredCards.length === 0 || allBlocked;
   const superchargePickerDone = !showGridPicker || superchargedSlot !== null;
   const pickerComplete = !showTierChoice && keepPickerDone && superchargePickerDone;
-  // Base id passed forward as next round's `lastKeptBaseId`. null when
-  // the player picked nothing (0-card hand, all blocked, or never
-  // resolved the picker) so next round has no constraint.
-  const nextLastKeptBaseId =
-    keptIdx !== null && poweredCards[keptIdx]
-      ? baseIdOf(poweredCards[keptIdx])
-      : null;
 
   // Personal-best detection. Tainted runs don't count — they wouldn't be
   // recorded either, so flagging them as "new best" would be misleading.
