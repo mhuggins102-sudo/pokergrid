@@ -128,16 +128,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
+  // Matches the aesthetic of the other in-game popups (DifficultyInfo,
+  // TierBreakdown, BonusCardDetail, RemainingDeck): accent-tinted
+  // border + softer glow rather than the older outline-grey shell.
   sheet: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 380,
     maxHeight: '88%',
     backgroundColor: colors.bgPanel,
-    borderColor: colors.outline,
+    borderColor: colors.accent,
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: spacing.lg,
-    ...glow(colors.accent, 24, 0.25),
+    ...glow(colors.accent, 18, 0.3),
   },
   headerRow: {
     flexDirection: 'row',

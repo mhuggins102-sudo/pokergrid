@@ -27,16 +27,17 @@ interface Row {
   value: (d: Difficulty) => string;
 }
 
-// Each row is a setting, with a per-difficulty cell formatter. Numbers
-// render as numerals; booleans as ✓ / ✗ so the table reads at a glance.
+// Row order matches the spec: most-important / always-true (Target,
+// Jokers, Starting Bonus) at the top, situational toggles (Deck Peek,
+// Discards, Decline Bonus) in the middle, and Undos at the bottom.
 const ROWS: Row[] = [
-  { label: 'Target score',     value: d => `${TARGET_BY_DIFFICULTY[d]}` },
-  { label: 'Jokers in deck',   value: d => `${JOKERS_BY_DIFFICULTY[d]}` },
-  { label: 'Peek deck',        value: d => CAN_PREVIEW_DECK_BY_DIFFICULTY[d] ? '✓' : '✗' },
-  { label: 'Undos',            value: d => `${UNDOS_BY_DIFFICULTY[d]}` },
-  { label: 'Starting bonuses', value: d => `${STARTER_BONUS_BY_DIFFICULTY[d]}` },
-  { label: 'Can decline at cap', value: d => BONUS_DECLINE_AT_CAP_BY_DIFFICULTY[d] ? '✓' : '✗' },
-  { label: 'Discards allowed', value: d => NO_DISCARDS_BY_DIFFICULTY[d] ? '✗' : '✓' },
+  { label: 'Target',         value: d => `${TARGET_BY_DIFFICULTY[d]}` },
+  { label: 'Jokers',         value: d => `${JOKERS_BY_DIFFICULTY[d]}` },
+  { label: 'Starting Bonus', value: d => `${STARTER_BONUS_BY_DIFFICULTY[d]}` },
+  { label: 'Deck Peek',      value: d => CAN_PREVIEW_DECK_BY_DIFFICULTY[d] ? '✓' : '✗' },
+  { label: 'Discards',       value: d => NO_DISCARDS_BY_DIFFICULTY[d] ? '✗' : '✓' },
+  { label: 'Decline Bonus',  value: d => BONUS_DECLINE_AT_CAP_BY_DIFFICULTY[d] ? '✓' : '✗' },
+  { label: 'Undos',          value: d => `${UNDOS_BY_DIFFICULTY[d]}` },
 ];
 
 interface Props {
@@ -102,7 +103,7 @@ export const DifficultyInfoModal = ({ visible, onClose }: Props) => (
         </ScrollView>
 
         <Text style={styles.footnote}>
-          "Can decline at cap" — when you're holding 3 bonus cards and draw a ♣, you may pass on the new pair instead of being forced to swap one out.
+          "Decline Bonus" — when you're holding 3 bonus cards and draw a ♣, you may pass on the new pair instead of being forced to swap one out.
         </Text>
       </Pressable>
     </Pressable>

@@ -3,11 +3,6 @@ import React from 'react';
 import type { ChallengeId } from '../game/challenges';
 import type { Difficulty } from '../game/rules';
 
-// Per-bonus-card attribution captured at game end. Index-aligned with the
-// player's held bonus cards at scoring time; the `shapley` is the Shapley-
-// value attribution (fair allocation across multiplicatively-stacking
-// bonuses) so summing them across the hand equals the total bonus
-// contribution to the run's final score.
 export interface BonusCardAttribution {
   cardId: string;
   shapley: number;
@@ -19,21 +14,16 @@ export interface RunRecord {
   score: number;
   target: number;
   won: boolean;
-  // Optional for backwards compatibility with pre-charts saves — runs
-  // recorded before this field was added simply won't contribute to the
-  // bonus-card analytics on StatsScreen.
   bonusCards?: BonusCardAttribution[];
 }
 
-// Per-difficulty roll-up of completed runs. Populated by recordRun whenever
-// a Free Play game ends; the StatsScreen renders these directly.
 export interface DifficultyStat {
-  best: number | null;       // best score across all runs at this difficulty
-  totalScore: number;        // sum of scores — used to derive the average
+  best: number | null;
+  totalScore: number;
   totalRuns: number;
-  wins: number;              // count of won runs (losses = totalRuns - wins)
-  bestStreak: number;        // longest run of consecutive wins
-  currentStreak: number;     // currently active streak (resets on loss)
+  wins: number;
+  bestStreak: number;
+  currentStreak: number;
 }
 
 const emptyDifficultyStat = (): DifficultyStat => ({
@@ -45,14 +35,33 @@ const emptyDifficultyStat = (): DifficultyStat => ({
   currentStreak: 0,
 });
 
-// All-time aggregate of a single bonus card across the player's history.
-// timesHeld counts runs that ended with this card in hand; totalShapley is
-// the sum of its end-game contributions, so the average is totalShapley /
-// timesHeld.
 export interface BonusCardStat {
   timesHeld: number;
   totalShapley: number;
 }
+
+// Six tiers — matches the result-screen banner and the in-game tier
+// breakdown popup. Stored in tierCounts for the per-difficulty histogram
+// on the stats screen.
+export type Tier = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D';
+
+export const TIER_ORDER: Tier[] = ['SS', 'S', 'A', 'B', 'C', 'D'];
+
+const emptyTierCounts = (): Record<Tier, number> => ({
+  SS: 0, S: 0, A: 0, B: 0, C: 0, D: 0,
+});
+
+export const tierForRun = (run: RunRecord): Tier => {
+  const ratio = run.score / Math.max(1, run.target);
+  if (run.won) {
+    if (ratio >= 1.6) return 'SS';
+    if (ratio >= 1.3) return 'S';
+    return 'A';
+  }
+  if (ratio >= 0.85) return 'B';
+  if (ratio >= 0.5) return 'C';
+  return 'D';
+};
 
 export interface Stats {
   // Legacy aggregate field — kept so old saves migrate cleanly. The
@@ -63,12 +72,11 @@ export interface Stats {
   losses: number;
   streak: number;
   longestStreak: number;
-  // Rolling buffer of the most recent runs (newest first). Cap raised to
-  // 20 so the StatsScreen's score-trend sparkline has enough data points
-  // to actually look like a trend.
+  // Rolling buffer of the most recent runs (newest first). Used by the
+  // Recent Runs section on the stats screen.
   recent: RunRecord[];
 
-  // Per-difficulty breakdown.
+  // Per-difficulty roll-up of every completed run.
   byDifficulty: Record<Difficulty, DifficultyStat>;
 
   // Highest Targets-Up level reached, and which Challenges have been completed.
@@ -76,9 +84,19 @@ export interface Stats {
   challengesDone: ChallengeId[];
 
   // All-time aggregate of bonus cards held at end of game, keyed by
-  // BonusCard.id. Updated by recordRun from the optional bonusCards field
-  // on the incoming RunRecord.
+  // BonusCard.id (with any -pwrN suffix stripped by the caller). This
+  // is the "All difficulties" view on the stats screen.
   bonusCardStats: Record<string, BonusCardStat>;
+
+  // Per-difficulty version of bonusCardStats. The stats screen filters
+  // through this when the player picks a specific difficulty in the
+  // top-of-page filter row.
+  bonusCardStatsByDifficulty: Record<Difficulty, Record<string, BonusCardStat>>;
+
+  // Per-difficulty histogram of tier outcomes. Drives the "Score
+  // distribution" section on the stats screen — bars for each tier
+  // count the number of completed runs that landed there.
+  tierCounts: Record<Difficulty, Record<Tier, number>>;
 }
 
 export const RECENT_RUNS_CAP = 20;
@@ -99,9 +117,33 @@ export const EMPTY_STATS: Stats = {
   targetsUpBest: 0,
   challengesDone: [],
   bonusCardStats: {},
+  bonusCardStatsByDifficulty: {
+    easy: {},
+    medium: {},
+    hard: {},
+    extreme: {},
+  },
+  tierCounts: {
+    easy: emptyTierCounts(),
+    medium: emptyTierCounts(),
+    hard: emptyTierCounts(),
+    extreme: emptyTierCounts(),
+  },
 };
 
 const STORAGE_KEY = 'pokergrid:stats:v1';
+
+// Per-difficulty merge helper — fills in missing keys with empty
+// records so old saves that pre-date these fields hydrate cleanly.
+const mergeByDifficultyMap = <T>(
+  parsed: Partial<Record<Difficulty, T>> | undefined,
+  defaultFor: () => T
+): Record<Difficulty, T> => ({
+  easy: parsed?.easy ?? defaultFor(),
+  medium: parsed?.medium ?? defaultFor(),
+  hard: parsed?.hard ?? defaultFor(),
+  extreme: parsed?.extreme ?? defaultFor(),
+});
 
 export const loadStats = async (): Promise<Stats> => {
   try {
@@ -119,6 +161,16 @@ export const loadStats = async (): Promise<Stats> => {
         extreme: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.extreme },
       },
       bonusCardStats: parsed.bonusCardStats ?? {},
+      bonusCardStatsByDifficulty: mergeByDifficultyMap(
+        parsed.bonusCardStatsByDifficulty,
+        () => ({})
+      ),
+      tierCounts: {
+        easy: { ...emptyTierCounts(), ...parsed.tierCounts?.easy },
+        medium: { ...emptyTierCounts(), ...parsed.tierCounts?.medium },
+        hard: { ...emptyTierCounts(), ...parsed.tierCounts?.hard },
+        extreme: { ...emptyTierCounts(), ...parsed.tierCounts?.extreme },
+      },
     };
   } catch {
     return EMPTY_STATS;
@@ -154,10 +206,11 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
     bestStreak: Math.max(diffPrev.bestStreak, newCurrentStreak),
   };
 
-  // Fold per-card attribution into the all-time aggregate so the bonus
-  // card analytics on StatsScreen can show frequency + average score
-  // across the full run history without keeping every record forever.
+  // Fold per-card attribution into BOTH the all-time global aggregate
+  // (used by the "All" filter) and the per-difficulty aggregate (used
+  // by each difficulty filter).
   const bonusCardStats = { ...prev.bonusCardStats };
+  const perDiffBonus = { ...prev.bonusCardStatsByDifficulty[run.difficulty] };
   if (run.bonusCards) {
     for (const { cardId, shapley } of run.bonusCards) {
       const cur = bonusCardStats[cardId] ?? { timesHeld: 0, totalShapley: 0 };
@@ -165,8 +218,18 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
         timesHeld: cur.timesHeld + 1,
         totalShapley: cur.totalShapley + shapley,
       };
+      const curD = perDiffBonus[cardId] ?? { timesHeld: 0, totalShapley: 0 };
+      perDiffBonus[cardId] = {
+        timesHeld: curD.timesHeld + 1,
+        totalShapley: curD.totalShapley + shapley,
+      };
     }
   }
+
+  // Update the tier histogram for this difficulty.
+  const tier = tierForRun(run);
+  const tierPrev = prev.tierCounts[run.difficulty];
+  const tierNext = { ...tierPrev, [tier]: tierPrev[tier] + 1 };
 
   return {
     ...prev,
@@ -178,6 +241,14 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
     recent,
     byDifficulty: { ...prev.byDifficulty, [run.difficulty]: diffNext },
     bonusCardStats,
+    bonusCardStatsByDifficulty: {
+      ...prev.bonusCardStatsByDifficulty,
+      [run.difficulty]: perDiffBonus,
+    },
+    tierCounts: {
+      ...prev.tierCounts,
+      [run.difficulty]: tierNext,
+    },
   };
 };
 

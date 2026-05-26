@@ -91,7 +91,7 @@ export const HomeScreen = ({
       <View style={styles.startWrap}>
         <View style={styles.startRow}>
           <NeonButton
-            label={`Start · target ${TARGET_BY_DIFFICULTY[diff]}`}
+            label={`Start · ${diff[0].toUpperCase()}${diff.slice(1)} (${TARGET_BY_DIFFICULTY[diff]})`}
             size="lg"
             onPress={() => onStartFree(diff)}
             style={styles.startBtn}

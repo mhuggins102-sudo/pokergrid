@@ -51,17 +51,28 @@ export const RemainingDeckModal = ({
   }
 
   const standardRemaining = Array.from(inDeck).length;
-  const jokerInDeck = deck.some(isJoker);
-  const jokerOnGrid = grid.some(c => c !== null && isJoker(c));
-  const jokerDestroyed =
-    discards.some(isJoker) || perkSpent.some(isJoker);
-  const jokerStatus = jokerInDeck
-    ? 'in the deck'
-    : jokerOnGrid
-    ? 'on the grid'
-    : jokerDestroyed
-    ? 'destroyed'
-    : 'unknown';
+  // Easy ships two jokers, Extreme zero — count every location rather
+  // than assuming a single joker.
+  const jokerInDeckCount = deck.filter(isJoker).length;
+  const jokerOnGridCount = grid.filter(c => c !== null && isJoker(c)).length;
+  const jokerDestroyedCount =
+    discards.filter(isJoker).length + perkSpent.filter(isJoker).length;
+  const totalJokers = jokerInDeckCount + jokerOnGridCount + jokerDestroyedCount;
+
+  const jokerSummary = ((): string => {
+    if (totalJokers === 0) return 'No jokers in this deck.';
+    if (totalJokers === 1) {
+      if (jokerInDeckCount === 1) return 'The joker is in the deck.';
+      if (jokerOnGridCount === 1) return 'The joker is on the grid.';
+      return 'The joker has been destroyed.';
+    }
+    // Two or more jokers — list each non-zero location with its count.
+    const parts: string[] = [];
+    if (jokerInDeckCount > 0) parts.push(`${jokerInDeckCount} in the deck`);
+    if (jokerOnGridCount > 0) parts.push(`${jokerOnGridCount} on the grid`);
+    if (jokerDestroyedCount > 0) parts.push(`${jokerDestroyedCount} destroyed`);
+    return `${totalJokers} jokers · ${parts.join(', ')}.`;
+  })();
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -75,7 +86,7 @@ export const RemainingDeckModal = ({
           </View>
 
           <Text style={styles.sub}>
-            {standardRemaining} of 52 standard cards remain. The joker is {jokerStatus}.
+            {standardRemaining} of 52 standard cards remain. {jokerSummary}
           </Text>
 
           <ScrollView style={styles.scroll}>
