@@ -300,7 +300,14 @@ const monochromeBorder: BonusCard = {
   multValue: 2,
   baseMultValue: 2,
   gridEffect: ({ grid }, card) => {
-    const cards = BORDER_SLOTS.map(i => grid[i]).filter((c): c is Card => c !== null && !isJoker(c));
+    // Wild cards are suit-flexible so they don't count against the color
+    // check (they can be either red or black for evaluation purposes).
+    // Jokers and empty slots are also excluded — only the filled,
+    // non-wild standard cards on the border have to share a color.
+    const cards = BORDER_SLOTS.map(i => grid[i]).filter(
+      (c): c is Card =>
+        c !== null && !isJoker(c) && c.supercharge !== 'wild'
+    );
     if (cards.length === 0) return {};
     const isRed = (c: Card) => !isJoker(c) && (c.suit === 'H' || c.suit === 'D');
     const allRed = cards.every(isRed);

@@ -43,6 +43,11 @@ export type PlayContext =
       // to supercharge on past grids. newGame swaps these in for the
       // matching rank+suit in the shuffled deck.
       superchargedDeckCards?: Card[];
+      // Base id of the card the player kept LAST round (or null if no
+      // card was kept). The next round's keep-one picker disables any
+      // chip whose base id matches — so the player can't power-up the
+      // same bonus card on consecutive rounds.
+      lastKeptBaseId?: string | null;
     }
   | { mode: 'challenge'; id: ChallengeId };
 
@@ -95,6 +100,7 @@ const AppShell = () => {
       keptCard,
       deckExtras,
       superchargedDeckCards,
+      lastKeptBaseId: tuSave.lastKeptBaseId ?? null,
     });
     setNonce(n => n + 1);
     setScreen('game');
@@ -107,7 +113,11 @@ const AppShell = () => {
   const advanceTargetsUp = (
     keptCard?: BonusCard,
     deckExtras?: BonusCard[],
-    superchargedDeckCards?: Card[]
+    superchargedDeckCards?: Card[],
+    // null = picker resolved with no kept card (auto-skip when all
+    // chips matched last round's pick); undefined = caller didn't
+    // touch this field, preserve whatever was there.
+    lastKeptBaseId?: string | null
   ) => {
     if (playContext?.mode !== 'targets-up') return;
     setPlayContext({
@@ -118,6 +128,8 @@ const AppShell = () => {
       deckExtras: deckExtras ?? playContext.deckExtras,
       superchargedDeckCards:
         superchargedDeckCards ?? playContext.superchargedDeckCards,
+      lastKeptBaseId:
+        lastKeptBaseId !== undefined ? lastKeptBaseId : playContext.lastKeptBaseId,
     });
     setNonce(n => n + 1);
   };
@@ -255,7 +267,8 @@ interface GameContainerProps {
   onAdvance: (
     keptCard?: BonusCard,
     deckExtras?: BonusCard[],
-    superchargedDeckCards?: Card[]
+    superchargedDeckCards?: Card[],
+    lastKeptBaseId?: string | null
   ) => void;
 }
 

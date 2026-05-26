@@ -51,8 +51,11 @@ const cardGlowColor = (card: Card, twoColor: boolean): string => {
 };
 
 // Wild cards render with a ✦ in place of the suit symbol. Joker uses ★;
-// keeping them distinct so the two never read as the same effect.
+// keeping them distinct so the two never read as the same effect. The
+// ✦ glyph renders ~70% the visual height of the suit glyphs in most
+// fonts, so we scale its font size by 1.4 to match them optically.
 const WILD_GLYPH = '✦';
+const WILD_GLYPH_SCALE = 1.4;
 
 export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Props) => {
   const { settings } = useSettings();
@@ -149,9 +152,9 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
   // "10" is two characters and needs to be slightly smaller to fit nicely.
   const isWide = card.rank === '10';
   const rankSize = isWide ? dim.rank * 0.74 : dim.rank;
-  const suitGlyph = card.supercharge === 'wild'
-    ? WILD_GLYPH
-    : SUIT_GLYPH[card.suit];
+  const isWild = card.supercharge === 'wild';
+  const suitGlyph = isWild ? WILD_GLYPH : SUIT_GLYPH[card.suit];
+  const suitGlyphSize = isWild ? pipSize * WILD_GLYPH_SCALE : pipSize;
   const isDouble = card.supercharge === 'double';
 
   return (
@@ -166,7 +169,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
       <Text
         style={[
           styles.cornerTL,
-          { color: pipColor, fontSize: pipSize, top: dim.padding, left: dim.padding + 1 },
+          { color: pipColor, fontSize: suitGlyphSize, top: dim.padding, left: dim.padding + 1 },
         ]}
       >
         {suitGlyph}
@@ -205,7 +208,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
           <Text
             style={[
               styles.cornerBR,
-              { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
+              { color: pipColor, fontSize: suitGlyphSize, bottom: dim.padding, right: dim.padding + 1 },
             ]}
           >
             {suitGlyph}
@@ -215,7 +218,7 @@ export const CardTile = ({ card, highlighted, dimmed, size = 'md', style }: Prop
         <Text
           style={[
             styles.cornerBR,
-            { color: pipColor, fontSize: pipSize, bottom: dim.padding, right: dim.padding + 1 },
+            { color: pipColor, fontSize: suitGlyphSize, bottom: dim.padding, right: dim.padding + 1 },
           ]}
         >
           {suitGlyph}
