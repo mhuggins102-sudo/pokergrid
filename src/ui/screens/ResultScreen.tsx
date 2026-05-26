@@ -315,6 +315,13 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     if (recorded.current) return;
     recorded.current = true;
     if (tainted) return;
+    // Per-card attribution: pair every held bonus card with its Shapley
+    // value so recordRun can fold them into the all-time aggregate that
+    // powers the StatsScreen's bonus-card analytics.
+    const bonusCardsForRecord = state.bonusCards.map((card, i) => ({
+      cardId: card.id,
+      shapley: bonusValues[i] ?? 0,
+    }));
     switch (context.mode) {
       case 'free':
         record({
@@ -323,6 +330,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           score: total,
           target: state.target,
           won,
+          bonusCards: bonusCardsForRecord,
         });
         break;
       case 'targets-up':
@@ -332,7 +340,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         if (won) recordChallenge(context.id);
         break;
     }
-  }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won, tainted]);
+  }, [record, recordTargetsUp, recordChallenge, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues]);
 
   const [shareLabel, setShareLabel] = useState<string | null>(null);
   const handleShare = async () => {

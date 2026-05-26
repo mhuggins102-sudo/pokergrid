@@ -3,12 +3,26 @@ import React from 'react';
 import type { ChallengeId } from '../game/challenges';
 import type { Difficulty } from '../game/rules';
 
+// Per-bonus-card attribution captured at game end. Index-aligned with the
+// player's held bonus cards at scoring time; the `shapley` is the Shapley-
+// value attribution (fair allocation across multiplicatively-stacking
+// bonuses) so summing them across the hand equals the total bonus
+// contribution to the run's final score.
+export interface BonusCardAttribution {
+  cardId: string;
+  shapley: number;
+}
+
 export interface RunRecord {
   ts: number;       // Date.now()
   difficulty: Difficulty;
   score: number;
   target: number;
   won: boolean;
+  // Optional for backwards compatibility with pre-charts saves — runs
+  // recorded before this field was added simply won't contribute to the
+  // bonus-card analytics on StatsScreen.
+  bonusCards?: BonusCardAttribution[];
 }
 
 // Per-difficulty roll-up of completed runs. Populated by recordRun whenever
@@ -31,6 +45,15 @@ const emptyDifficultyStat = (): DifficultyStat => ({
   currentStreak: 0,
 });
 
+// All-time aggregate of a single bonus card across the player's history.
+// timesHeld counts runs that ended with this card in hand; totalShapley is
+// the sum of its end-game contributions, so the average is totalShapley /
+// timesHeld.
+export interface BonusCardStat {
+  timesHeld: number;
+  totalShapley: number;
+}
+
 export interface Stats {
   // Legacy aggregate field — kept so old saves migrate cleanly. The
   // StatsScreen no longer renders these as the top-of-page chips; it
@@ -40,6 +63,9 @@ export interface Stats {
   losses: number;
   streak: number;
   longestStreak: number;
+  // Rolling buffer of the most recent runs (newest first). Cap raised to
+  // 20 so the StatsScreen's score-trend sparkline has enough data points
+  // to actually look like a trend.
   recent: RunRecord[];
 
   // Per-difficulty breakdown.
@@ -48,7 +74,14 @@ export interface Stats {
   // Highest Targets-Up level reached, and which Challenges have been completed.
   targetsUpBest: number;
   challengesDone: ChallengeId[];
+
+  // All-time aggregate of bonus cards held at end of game, keyed by
+  // BonusCard.id. Updated by recordRun from the optional bonusCards field
+  // on the incoming RunRecord.
+  bonusCardStats: Record<string, BonusCardStat>;
 }
+
+export const RECENT_RUNS_CAP = 20;
 
 export const EMPTY_STATS: Stats = {
   best: { easy: null, medium: null, hard: null },
@@ -64,6 +97,7 @@ export const EMPTY_STATS: Stats = {
   },
   targetsUpBest: 0,
   challengesDone: [],
+  bonusCardStats: {},
 };
 
 const STORAGE_KEY = 'pokergrid:stats:v1';
@@ -82,6 +116,7 @@ export const loadStats = async (): Promise<Stats> => {
         medium: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.medium },
         hard: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.hard },
       },
+      bonusCardStats: parsed.bonusCardStats ?? {},
     };
   } catch {
     return EMPTY_STATS;
@@ -103,7 +138,7 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
   const losses = prev.losses + (run.won ? 0 : 1);
   const streak = run.won ? prev.streak + 1 : 0;
   const longestStreak = Math.max(prev.longestStreak, streak);
-  const recent = [run, ...prev.recent].slice(0, 10);
+  const recent = [run, ...prev.recent].slice(0, RECENT_RUNS_CAP);
 
   // Update the per-difficulty roll-up that the StatsScreen renders.
   const diffPrev = prev.byDifficulty[run.difficulty];
@@ -117,6 +152,20 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
     bestStreak: Math.max(diffPrev.bestStreak, newCurrentStreak),
   };
 
+  // Fold per-card attribution into the all-time aggregate so the bonus
+  // card analytics on StatsScreen can show frequency + average score
+  // across the full run history without keeping every record forever.
+  const bonusCardStats = { ...prev.bonusCardStats };
+  if (run.bonusCards) {
+    for (const { cardId, shapley } of run.bonusCards) {
+      const cur = bonusCardStats[cardId] ?? { timesHeld: 0, totalShapley: 0 };
+      bonusCardStats[cardId] = {
+        timesHeld: cur.timesHeld + 1,
+        totalShapley: cur.totalShapley + shapley,
+      };
+    }
+  }
+
   return {
     ...prev,
     best: { ...prev.best, [run.difficulty]: newBest },
@@ -126,6 +175,7 @@ export const recordRun = (prev: Stats, run: RunRecord): Stats => {
     longestStreak,
     recent,
     byDifficulty: { ...prev.byDifficulty, [run.difficulty]: diffNext },
+    bonusCardStats,
   };
 };
 
