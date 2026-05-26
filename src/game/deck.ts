@@ -9,8 +9,10 @@ export const shuffle = <T>(arr: readonly T[], rng: () => number = Math.random): 
   return a;
 };
 
-export const freshShuffledDeck = (rng?: () => number): Card[] =>
-  shuffle(fullDeck(), rng);
+export const freshShuffledDeck = (
+  rng?: () => number,
+  jokerCount: number = 1
+): Card[] => shuffle(fullDeck(jokerCount), rng);
 
 // Simple Mulberry32 seeded RNG for deterministic tests / replays.
 export const seededRng = (seed: number): (() => number) => {

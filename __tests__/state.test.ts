@@ -24,6 +24,7 @@ const baseState = (overrides: Partial<GameState>): GameState => ({
   swappedBonus: false,
   noSwap: false,
   noDiscards: false,
+  bonusDeclineAllowed: false,
   ...overrides,
 });
 

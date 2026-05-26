@@ -1371,7 +1371,7 @@ const renderBottom = (
             );
           })}
         </View>
-        {!atMax && (
+        {(!atMax || state.bonusDeclineAllowed) && (
           <NeonButton
             label="Decline both"
             variant="secondary"

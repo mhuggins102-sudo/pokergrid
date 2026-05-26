@@ -7,7 +7,21 @@ import {
   BONUS_DECK_POOL,
   BONUS_HAND_LIMIT,
 } from './bonusCards';
-import { Difficulty, TARGET_BY_DIFFICULTY } from './rules';
+import {
+  BONUS_DECLINE_AT_CAP_BY_DIFFICULTY,
+  CAN_PREVIEW_DECK_BY_DIFFICULTY,
+  Difficulty,
+  JOKERS_BY_DIFFICULTY,
+  NO_DISCARDS_BY_DIFFICULTY,
+  STARTER_BONUS_BY_DIFFICULTY,
+  TARGET_BY_DIFFICULTY,
+} from './rules';
+
+// Re-exports for the few consumers that imported these from state.ts
+// before the move. New code should import from ./rules directly.
+export { STARTER_BONUS_BY_DIFFICULTY };
+export const canPreviewDeck = (difficulty: Difficulty): boolean =>
+  CAN_PREVIEW_DECK_BY_DIFFICULTY[difficulty];
 import {
   canDrawBonus,
   canDestroy,
@@ -87,10 +101,15 @@ export interface GameState {
   // bonus-hand cap so the player can't accidentally lose the run by drawing
   // a bonus with no choice but to swap.
   noSwap: boolean;
-  // True when the No Discards challenge is active. Disables the Discard
-  // button entirely — every drawn card must be placed or spent on a
-  // suit perk.
+  // True when the No Discards challenge or Extreme difficulty is
+  // active. Disables the Discard button entirely — every drawn card
+  // must be placed or spent on a suit perk.
   noDiscards: boolean;
+  // True when the player is allowed to decline a ♣ Bonus draw even at
+  // the bonus-hand cap (skip the forced swap). Easy difficulty sets
+  // this; Medium / Hard / Extreme leave it false so hitting ♣ at cap
+  // forces the swap.
+  bonusDeclineAllowed: boolean;
 }
 
 export type Action =
@@ -132,17 +151,9 @@ const drawNext = (state: GameState): GameState => {
   }
 };
 
-// Easy and Medium players start with one random bonus card already in hand;
-// Hard begins empty. Easy also gets to peek the remaining-deck composition
-// during play (wired in the UI; see RemainingDeckModal).
-export const STARTER_BONUS_BY_DIFFICULTY: Record<Difficulty, number> = {
-  easy: 1,
-  medium: 1,
-  hard: 0,
-};
-
-export const canPreviewDeck = (difficulty: Difficulty): boolean =>
-  difficulty === 'easy';
+// STARTER_BONUS_BY_DIFFICULTY + canPreviewDeck used to live here; they're
+// now in src/game/rules.ts alongside every other per-difficulty knob so
+// the engine, UI popups, and rules screen all read from one place.
 
 export const newGame = (
   difficulty: Difficulty,
@@ -170,7 +181,12 @@ export const newGame = (
   // supercharged version can be drawn in this level.
   superchargedDeckCards: Card[] = []
 ): GameState => {
-  let deck = freshShuffledDeck(rng);
+  // Joker count is determined by difficulty (Easy ships 2 jokers, Hard
+  // ships 1, Extreme ships 0). Targets-Up infers difficulty from level
+  // and Challenges always use Hard, so this single lookup covers every
+  // mode without per-mode special casing.
+  const jokerCount = JOKERS_BY_DIFFICULTY[difficulty];
+  let deck = freshShuffledDeck(rng, jokerCount);
   if (deckLimit !== undefined && deckLimit < deck.length) {
     deck = deck.slice(0, deckLimit);
   }
@@ -233,7 +249,11 @@ export const newGame = (
     undoCount: 0,
     swappedBonus: false,
     noSwap,
-    noDiscards,
+    // Free Play / Targets-Up derive these from difficulty; Challenges
+    // override via their own flags (No Discards → true regardless of
+    // difficulty; otherwise difficulty-based).
+    noDiscards: noDiscards || NO_DISCARDS_BY_DIFFICULTY[difficulty],
+    bonusDeclineAllowed: BONUS_DECLINE_AT_CAP_BY_DIFFICULTY[difficulty],
   };
   return drawNext(initial);
 };
@@ -445,9 +465,15 @@ const handleBonusDecline = (s: GameState): GameState => {
   ) {
     return s;
   }
-  // At the cap, declining is not allowed — the player must take one of the
-  // drawn cards and swap out an old one.
-  if (s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
+  // At the cap, declining is normally not allowed — the player must take
+  // one of the drawn cards and swap one out. Easy difficulty flips this
+  // via bonusDeclineAllowed so the player can keep their existing hand.
+  if (
+    s.bonusCards.length >= BONUS_HAND_LIMIT &&
+    !s.bonusDeclineAllowed
+  ) {
+    return s;
+  }
   return finishBonusFlow(s, s.phase.drawn, s.bonusCards);
 };
 

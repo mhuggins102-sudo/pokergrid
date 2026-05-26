@@ -84,7 +84,7 @@ export interface Stats {
 export const RECENT_RUNS_CAP = 20;
 
 export const EMPTY_STATS: Stats = {
-  best: { easy: null, medium: null, hard: null },
+  best: { easy: null, medium: null, hard: null, extreme: null },
   wins: 0,
   losses: 0,
   streak: 0,
@@ -94,6 +94,7 @@ export const EMPTY_STATS: Stats = {
     easy: emptyDifficultyStat(),
     medium: emptyDifficultyStat(),
     hard: emptyDifficultyStat(),
+    extreme: emptyDifficultyStat(),
   },
   targetsUpBest: 0,
   challengesDone: [],
@@ -115,6 +116,7 @@ export const loadStats = async (): Promise<Stats> => {
         easy: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.easy },
         medium: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.medium },
         hard: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.hard },
+        extreme: { ...emptyDifficultyStat(), ...parsed.byDifficulty?.extreme },
       },
       bonusCardStats: parsed.bonusCardStats ?? {},
     };
