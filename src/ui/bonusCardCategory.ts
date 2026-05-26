@@ -3,9 +3,17 @@ import { Suit } from '../game/cards';
 import { colors } from './theme';
 
 // Each bonus card belongs to one of five categories based on its id prefix.
-// This metadata is the single source of truth used by the in-game strip,
-// the detail modal, and the How-to-Play catalog so the three displays look
-// like the same card system rather than three separate UIs.
+// Two visual signals are derived from the category:
+//
+//   - A "tone" (yellow / blue / purple) that drives the chip's border,
+//     title-text, and glow color. This is the always-on signal that tells
+//     the player how the card pays out — multi-trigger in-game (yellow),
+//     single-trigger in-game (blue), or end-game multiplier (purple).
+//
+//   - A category glyph that's shown ONLY when the colorBlindAssist setting
+//     is on, so colorblind players have a non-color cue and everyone else
+//     gets a cleaner chip. Suit-density cards override the generic icon
+//     with the actual suit glyph (♥/♠/♦/♣) in its native suit color.
 
 export type BonusCategory = 'hand' | 'line' | 'suit' | 'conditional' | 'grid';
 
@@ -34,8 +42,6 @@ const SUIT_COLOR: Record<Suit, string> = {
   C: colors.suitC,
 };
 
-// Suit-density cards override the generic category icon and color with the
-// actual suit they track. e.g. the ♥-density card gets a magenta ♥ glyph.
 const suitOf = (card: BonusCard): Suit | null => {
   if (!card.id.startsWith('suit-density-')) return null;
   const tail = card.id.slice('suit-density-'.length).toUpperCase();
@@ -50,12 +56,14 @@ const CATEGORY_ICON: Record<BonusCategory, string> = {
   grid: '▦',      // grid achievement — full-board pattern
 };
 
-const CATEGORY_COLOR: Record<BonusCategory, string> = {
-  hand: colors.warn,        // amber — the historical "bonus card" color
-  line: colors.accent,      // cyan
-  suit: colors.textMid,     // overridden below
-  conditional: colors.suitD, // gold
-  grid: colors.joker,       // violet
+// Color of the category icon itself (used only when colorBlindAssist is on).
+// Suit-density overrides this with the actual suit's color.
+const CATEGORY_ICON_COLOR: Record<BonusCategory, string> = {
+  hand: colors.warn,
+  line: colors.accent,
+  suit: colors.textMid,
+  conditional: colors.suitD,
+  grid: colors.joker,
 };
 
 export const CATEGORY_LABEL: Record<BonusCategory, string> = {
@@ -66,25 +74,57 @@ export const CATEGORY_LABEL: Record<BonusCategory, string> = {
   grid: 'Grid achievement',
 };
 
+// Three tones drive the always-on border / title / glow colors. Several
+// categories share a tone — the icon (when on) provides the finer-grained
+// signal.
+type CategoryTone = 'yellow' | 'blue' | 'purple';
+
+const TONE_OF: Record<BonusCategory, CategoryTone> = {
+  hand: 'yellow',
+  suit: 'yellow',
+  conditional: 'yellow',
+  line: 'blue',
+  grid: 'purple',
+};
+
+const TONE_COLOR: Record<CategoryTone, string> = {
+  yellow: colors.warn,
+  blue: colors.accent,
+  purple: colors.joker,
+};
+
+const withAlpha = (hex: string, alpha: number): string => {
+  // Expect #rrggbb. Convert to rgba(...) so it composes with Animated styles.
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 export interface CategoryStyle {
+  // Colorblind-assist glyph and its color. Callers should only render the
+  // icon when settings.colorBlindAssist is on.
   icon: string;
-  color: string;
+  iconColor: string;
+  // Always-on signals: chip / sheet border, title text, glow.
+  borderColor: string;
+  titleColor: string;
+  // rgba(...) string for the fired-flash overlay on the in-game chip.
+  flashColor: string;
   label: string;
 }
 
 export const styleFor = (card: BonusCard): CategoryStyle => {
   const cat = categoryOf(card);
   const suit = suitOf(card);
-  if (suit) {
-    return {
-      icon: SUIT_GLYPH[suit],
-      color: SUIT_COLOR[suit],
-      label: CATEGORY_LABEL.suit,
-    };
-  }
+  const tone = TONE_OF[cat];
+  const toneColor = TONE_COLOR[tone];
   return {
-    icon: CATEGORY_ICON[cat],
-    color: CATEGORY_COLOR[cat],
+    icon: suit ? SUIT_GLYPH[suit] : CATEGORY_ICON[cat],
+    iconColor: suit ? SUIT_COLOR[suit] : CATEGORY_ICON_COLOR[cat],
+    borderColor: toneColor,
+    titleColor: toneColor,
+    flashColor: withAlpha(toneColor, 0.55),
     label: CATEGORY_LABEL[cat],
   };
 };

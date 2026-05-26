@@ -26,6 +26,7 @@ import {
   AnimSpec,
   hiddenSlotsFor,
 } from '../components/AnimationLayer';
+import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { RemainingDeckModal } from '../components/RemainingDeckModal';
@@ -62,6 +63,26 @@ const SUIT_PERK_VARIANT: Record<string, 'primary' | 'warn' | 'danger'> = {
   S: 'warn',
   D: 'danger',
   C: 'warn',
+};
+
+// First-time contextual hints. Each fires exactly once per device the first
+// time the corresponding state appears mid-run, then is silenced via the
+// matching `seen*Hint` settings flag.
+type HintId = 'joker' | 'bonus-cap' | 'grid-effect';
+
+const HINT_TITLE: Record<HintId, string> = {
+  joker: 'Meet the joker',
+  'bonus-cap': 'Bonus hand is full',
+  'grid-effect': 'Grid achievement is live',
+};
+
+const HINT_BODY: Record<HintId, string> = {
+  joker:
+    'The joker is wild — its row and its column each score as the best 5-card hand they can. It auto-places when drawn and can\'t be discarded normally.',
+  'bonus-cap':
+    'You\'re holding 3 bonus cards — the maximum. Drawing another ♣ Bonus will now force you to swap one out instead of declining.',
+  'grid-effect':
+    'A grid achievement (purple border) is now satisfying its condition — it multiplies your TOTAL score at game end, on top of any per-line bonuses.',
 };
 
 // Drawn-card area: card fades + scales in on every change so each new draw
@@ -138,6 +159,9 @@ export const GameScreen = ({
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
+  const [slideGhost, setSlideGhost] = useState<Set<number> | null>(null);
+  const [activeHint, setActiveHint] = useState<HintId | null>(null);
+  const slideGhostKeyRef = useRef<string>('');
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const haptic = useHaptic();
@@ -249,20 +273,20 @@ export const GameScreen = ({
     const card = state.grid[current];
     if (!card) return;
     playSound('joker');
-    haptic('medium');
+    haptic('joker');
     setAnim({ kind: 'joker-place', card, toSlot: current });
     if (animTimer.current) clearTimeout(animTimer.current);
     animTimer.current = setTimeout(() => setAnim(null), ANIM_DURATION['joker-place']);
   }, [state.grid, settings.reduceMotion, playSound, haptic]);
 
-  const liveScore = useMemo(
+  const liveReport = useMemo(
     () =>
       scoreGrid(state.grid, state.bonusCards, {
         deckRemaining: state.deck.length,
         ignoreIncompletePenalty: true,
         discards: state.discards,
         perkSpent: state.perkSpent,
-      }).total,
+      }),
     [
       state.grid,
       state.bonusCards,
@@ -271,6 +295,7 @@ export const GameScreen = ({
       state.perkSpent,
     ]
   );
+  const liveScore = liveReport.total;
 
   // Shapley-value attribution of the bonus contribution, so multiple cards
   // stacking multiplicatively don't each "claim" the joint multiplier. Sum of
@@ -291,6 +316,49 @@ export const GameScreen = ({
       state.perkSpent,
     ]
   );
+
+  // First-time contextual hints — fire each one exactly once when its
+  // matching state first appears in a run. We guard on `anim` so the
+  // modal doesn't pop up over an in-flight place / slide animation, and
+  // on phase === 'awaiting-action' so it never interrupts a picker.
+  useEffect(() => {
+    if (activeHint !== null) return;
+    if (anim) return;
+    if (state.phase.kind !== 'awaiting-action') return;
+    if (!settings.seenJokerHint && state.grid.some(c => c !== null && isJoker(c))) {
+      setActiveHint('joker');
+      return;
+    }
+    if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
+      setActiveHint('bonus-cap');
+      return;
+    }
+    if (
+      !settings.seenGridEffectHint &&
+      (liveReport.gridMultiplier !== 1 || liveReport.gridFlat !== 0)
+    ) {
+      setActiveHint('grid-effect');
+      return;
+    }
+  }, [
+    activeHint,
+    anim,
+    state.phase.kind,
+    state.grid,
+    state.bonusCards.length,
+    liveReport.gridMultiplier,
+    liveReport.gridFlat,
+    settings.seenJokerHint,
+    settings.seenBonusCapHint,
+    settings.seenGridEffectHint,
+  ]);
+
+  const dismissHint = () => {
+    if (activeHint === 'joker') updateSettings({ seenJokerHint: true });
+    else if (activeHint === 'bonus-cap') updateSettings({ seenBonusCapHint: true });
+    else if (activeHint === 'grid-effect') updateSettings({ seenGridEffectHint: true });
+    setActiveHint(null);
+  };
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
 
@@ -322,7 +390,7 @@ export const GameScreen = ({
 
   const handlePlace = () => {
     if (!state.drawn || nextSlot === null) return;
-    haptic('medium');
+    haptic('place');
     playSound('place');
     performAnimated({ kind: 'place', card: state.drawn, toSlot: nextSlot }, { type: 'PLACE' });
   };
@@ -343,7 +411,7 @@ export const GameScreen = ({
         to: slot + step * distance,
       }))
       .filter((c): c is { card: Card; from: number; to: number } => c.card !== null);
-    haptic('medium');
+    haptic('slide');
     playSound('slide');
     // The drag path skips the explicit "select source" tap, so when we arrive
     // here the phase is still awaiting-target-slide-source — the reducer
@@ -380,7 +448,7 @@ export const GameScreen = ({
           const cardA = state.grid[pair[0]];
           const cardB = state.grid[pair[1]];
           if (cardA && cardB) {
-            haptic('medium');
+            haptic('swap');
             playSound('swap');
             performAnimated(
               { kind: 'swap', cardA, slotA: pair[0], cardB, slotB: pair[1] },
@@ -406,7 +474,7 @@ export const GameScreen = ({
       if (p.targets.includes(idx)) {
         const card = state.grid[idx];
         if (card) {
-          haptic('heavy');
+          haptic('destroy');
           playSound('destroy');
           performAnimated(
             { kind: 'destroy', card, slot: idx },
@@ -500,9 +568,70 @@ export const GameScreen = ({
     playSound('tap');
   };
 
+  // Mid-drag preview: compute where the chain will land at the current
+  // direction + distance and surface the slots to GridView as ghost
+  // outlines. State updates are gated on the slot-set actually changing so
+  // we don't re-render the grid every gesture frame.
+  const setSlideGhostIfChanged = (next: Set<number> | null) => {
+    const key = next ? Array.from(next).sort((a, b) => a - b).join(',') : '';
+    if (key === slideGhostKeyRef.current) return;
+    slideGhostKeyRef.current = key;
+    setSlideGhost(next);
+  };
+
+  const onDragUpdate = (dx: number, dy: number) => {
+    const source = dragSourceRef.current;
+    if (source === null) {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    if (state.phase.kind !== 'awaiting-target-slide-source') {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    // Below the activeOffset threshold there's no committed direction yet.
+    if (absX < 18 && absY < 18) {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    const direction: Direction =
+      absX > absY
+        ? dx > 0 ? 'right' : 'left'
+        : dy > 0 ? 'down' : 'up';
+    const moves = slideDestinationsFrom(state.grid, source)
+      .filter(m => m.direction === direction);
+    if (moves.length === 0) {
+      setSlideGhostIfChanged(null);
+      return;
+    }
+    const CELL = gridCellSize;
+    const draggedCells = Math.max(
+      1,
+      Math.round(
+        (direction === 'left' || direction === 'right' ? absX : absY) / CELL
+      )
+    );
+    const move =
+      moves.find(m => m.distance === draggedCells) ??
+      moves.reduce((max, m) => (m.distance > max.distance ? m : max));
+    // Project every chain member's landing slot — the whole chain moves
+    // together, so the preview shows the full footprint, not just where
+    // the leading card ends up.
+    const chainSlots = slideChain(state.grid, source, direction);
+    const step =
+      direction === 'left' ? -1 :
+      direction === 'right' ? 1 :
+      direction === 'up' ? -5 : 5;
+    const landings = new Set(chainSlots.map(s => s + step * move.distance));
+    setSlideGhostIfChanged(landings);
+  };
+
   const onDragEnd = (dx: number, dy: number) => {
     const source = dragSourceRef.current;
     dragSourceRef.current = null;
+    setSlideGhostIfChanged(null);
     if (source === null) return;
     if (state.phase.kind !== 'awaiting-target-slide-source') return;
 
@@ -553,17 +682,22 @@ export const GameScreen = ({
           'worklet';
           runOnJS(onDragStart)(e.x, e.y);
         })
+        .onUpdate(e => {
+          'worklet';
+          runOnJS(onDragUpdate)(e.translationX, e.translationY);
+        })
         .onEnd(e => {
           'worklet';
           runOnJS(onDragEnd)(e.translationX, e.translationY);
         })
         .onFinalize(() => {
           'worklet';
-          // Ensure stale refs don't survive a cancel.
+          // Ensure stale refs / ghost slots don't survive a cancel.
           runOnJS(clearDragRef)();
+          runOnJS(setSlideGhostIfChanged)(null);
         }),
     // We intentionally rebuild the gesture per relevant state change so the
-    // onDragStart / onDragEnd closures see fresh values.
+    // onDragStart / onDragUpdate / onDragEnd closures see fresh values.
     [state.phase, state.grid, anim]
   );
 
@@ -593,6 +727,7 @@ export const GameScreen = ({
               hiddenSlots={hiddenSlotsFor(anim)}
               selected={selectedSlot}
               nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
+              slideGhostSlots={slideGhost ?? undefined}
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
             />
@@ -611,6 +746,7 @@ export const GameScreen = ({
           suitOK,
           drawnKey,
           !!anim,
+          settings.colorBlindAssist,
           deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined
         )}
       </View>
@@ -649,9 +785,90 @@ export const GameScreen = ({
         onCancel={() => setUndoWarnOpen(false)}
         onConfirm={confirmUndoWarning}
       />
+      <HintModal
+        hint={activeHint}
+        onDismiss={dismissHint}
+      />
     </View>
   );
 };
+
+const HintModal = ({
+  hint,
+  onDismiss,
+}: {
+  hint: HintId | null;
+  onDismiss: () => void;
+}) => (
+  <Modal
+    visible={hint !== null}
+    transparent
+    animationType="fade"
+    onRequestClose={onDismiss}
+  >
+    <Pressable style={hintModalStyles.backdrop} onPress={onDismiss}>
+      <Pressable style={hintModalStyles.sheet} onPress={() => {}}>
+        <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
+        <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
+        <Text style={hintModalStyles.body}>{hint ? HINT_BODY[hint] : ''}</Text>
+        <View style={hintModalStyles.btnRow}>
+          <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
+        </View>
+      </Pressable>
+    </Pressable>
+  </Modal>
+);
+
+const hintModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 4, 12, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.accent, 14, 0.35),
+  },
+  kicker: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 3,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  title: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowColor: colors.accent,
+    textShadowRadius: 6,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  body: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: spacing.md,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+});
 
 const UndoWarningModal = ({
   visible,
@@ -736,11 +953,12 @@ const renderBottom = (
   state: GameState,
   onPlace: () => void,
   dispatch: (a: Action) => void,
-  haptic: (k: 'light' | 'medium' | 'heavy' | 'warning') => void,
+  haptic: (k: import('../haptics').HapticKind) => void,
   playSound: (k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus') => void,
   suitOK: boolean,
   drawnKey: string,
   animating: boolean,
+  colorBlindAssist: boolean,
   onDeckPress?: () => void
 ) => {
   const p = state.phase;
@@ -920,24 +1138,37 @@ const renderBottom = (
             : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
         <View style={styles.bonusRow}>
-          {p.drawn.map((b, i) => (
-            <Pressable
-              key={i}
-              style={styles.bonusPick}
-              onPress={() => {
-                haptic('light');
-                playSound('bonus');
-                dispatch(
-                  atMax
-                    ? { type: 'BONUS_SELECT_NEW', idx: i }
-                    : { type: 'BONUS_KEEP', idx: i }
-                );
-              }}
-            >
-              <Text style={styles.bonusName} numberOfLines={2}>{b.name}</Text>
-              <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
-            </Pressable>
-          ))}
+          {p.drawn.map((b, i) => {
+            const s = bonusStyleFor(b);
+            return (
+              <Pressable
+                key={i}
+                style={[styles.bonusPick, { borderColor: s.borderColor }, glow(s.borderColor, 8, 0.4)]}
+                onPress={() => {
+                  haptic('bonus');
+                  playSound('bonus');
+                  dispatch(
+                    atMax
+                      ? { type: 'BONUS_SELECT_NEW', idx: i }
+                      : { type: 'BONUS_KEEP', idx: i }
+                  );
+                }}
+              >
+                {colorBlindAssist && (
+                  <Text style={[styles.bonusIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}>
+                    {s.icon}
+                  </Text>
+                )}
+                <Text
+                  style={[styles.bonusName, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                  numberOfLines={2}
+                >
+                  {b.title} <Text style={styles.bonusMult}>{b.mult}</Text>
+                </Text>
+                <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
+              </Pressable>
+            );
+          })}
         </View>
         {!atMax && (
           <NeonButton
@@ -962,20 +1193,33 @@ const renderBottom = (
           Tap one of your 3 to replace with "{newCard?.name}". The old one is gone for good.
         </Text>
         <View style={styles.bonusRow}>
-          {state.bonusCards.map((b, i) => (
-            <Pressable
-              key={i}
-              style={styles.bonusPick}
-              onPress={() => {
-                haptic('medium');
-                playSound('bonus');
-                dispatch({ type: 'BONUS_REPLACE', oldIdx: i });
-              }}
-            >
-              <Text style={styles.bonusName} numberOfLines={2}>{b.name}</Text>
-              <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
-            </Pressable>
-          ))}
+          {state.bonusCards.map((b, i) => {
+            const s = bonusStyleFor(b);
+            return (
+              <Pressable
+                key={i}
+                style={[styles.bonusPick, { borderColor: s.borderColor }, glow(s.borderColor, 8, 0.4)]}
+                onPress={() => {
+                  haptic('bonus');
+                  playSound('bonus');
+                  dispatch({ type: 'BONUS_REPLACE', oldIdx: i });
+                }}
+              >
+                {colorBlindAssist && (
+                  <Text style={[styles.bonusIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}>
+                    {s.icon}
+                  </Text>
+                )}
+                <Text
+                  style={[styles.bonusName, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                  numberOfLines={2}
+                >
+                  {b.title} <Text style={styles.bonusMult}>{b.mult}</Text>
+                </Text>
+                <Text style={styles.bonusDesc} numberOfLines={4}>{b.description}</Text>
+              </Pressable>
+            );
+          })}
         </View>
         <NeonButton
           label="Back"
@@ -1075,18 +1319,32 @@ const styles = StyleSheet.create({
   bonusPick: {
     flex: 1,
     backgroundColor: colors.bgGlass,
-    borderColor: colors.warn,
+    // borderColor + glow set inline from the card's category tone.
     borderWidth: 1.5,
     borderRadius: radius.md,
     padding: spacing.sm,
     maxWidth: 170,
-    ...glow(colors.warn, 8, 0.4),
+  },
+  bonusIcon: {
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    fontWeight: '800',
+    textShadowRadius: 4,
+    marginBottom: 2,
   },
   bonusName: {
     fontFamily: fonts.mono,
     fontSize: 12,
     fontWeight: '800',
-    color: colors.warn,
+    // color + textShadowColor set inline from category tone.
+    letterSpacing: 0.5,
+    textShadowRadius: 4,
+  },
+  bonusMult: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.success,
     letterSpacing: 0.5,
   },
   bonusDesc: {

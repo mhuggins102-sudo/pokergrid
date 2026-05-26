@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BonusCard } from '../../game/bonusCards';
 import { styleFor } from '../bonusCardCategory';
+import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
@@ -14,18 +15,28 @@ interface Props {
 }
 
 export const BonusCardDetailModal = ({ visible, card, currentValue, onClose }: Props) => {
+  const { settings } = useSettings();
   if (!card) return null;
   const cat = styleFor(card);
   const showValue = currentValue !== undefined;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable
+          style={[
+            styles.sheet,
+            { borderColor: cat.borderColor },
+            glow(cat.borderColor, 16, 0.3),
+          ]}
+          onPress={() => {}}
+        >
           <View style={styles.headerRow}>
             <View style={styles.kickerRow}>
-              <Text style={[styles.icon, { color: cat.color, textShadowColor: cat.color }]}>
-                {cat.icon}
-              </Text>
+              {settings.colorBlindAssist && (
+                <Text style={[styles.icon, { color: cat.iconColor, textShadowColor: cat.iconColor }]}>
+                  {cat.icon}
+                </Text>
+              )}
               <Text style={styles.kicker}>{cat.label}</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={12}>
@@ -34,7 +45,12 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose }: P
           </View>
 
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={2}>{card.title}</Text>
+            <Text
+              style={[styles.title, { color: cat.titleColor, textShadowColor: cat.titleColor }]}
+              numberOfLines={2}
+            >
+              {card.title}
+            </Text>
             <Text style={styles.mult} numberOfLines={1}>{card.mult}</Text>
           </View>
           <Text style={styles.desc}>{card.description}</Text>
@@ -70,11 +86,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
     backgroundColor: colors.bgPanel,
-    borderColor: colors.warn,
+    // borderColor + glow set inline from the card's category tone.
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: spacing.lg,
-    ...glow(colors.warn, 16, 0.3),
   },
   headerRow: {
     flexDirection: 'row',
@@ -116,12 +131,11 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: colors.warn,
+    // color + textShadowColor set inline from category tone.
     fontFamily: fonts.mono,
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0.5,
-    textShadowColor: colors.warn,
     textShadowRadius: 6,
   },
   mult: {

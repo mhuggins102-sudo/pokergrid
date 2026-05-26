@@ -80,22 +80,32 @@ const BonusChip = ({ card, value, isSelected, onPress }: ChipProps) => {
     prevValue.current = value;
   }, [value, settings.reduceMotion, flash]);
 
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: flash.value,
+    backgroundColor: cat.flashColor,
+  }));
 
   return (
     <Pressable
       style={[
         styles.chip,
-        glow(colors.warn, 6, 0.35),
+        { borderColor: cat.borderColor },
+        glow(cat.borderColor, 6, 0.35),
         isSelected && styles.selected,
       ]}
       onPress={onPress}
     >
       <View style={styles.chipTextWrap}>
-        <Text style={[styles.icon, { color: cat.color, textShadowColor: cat.color }]}>
-          {cat.icon}
-        </Text>
-        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
+        {settings.colorBlindAssist && (
+          <Text style={[styles.icon, { color: cat.iconColor, textShadowColor: cat.iconColor }]}>
+            {cat.icon}
+          </Text>
+        )}
+        <Text
+          style={[styles.title, { color: cat.titleColor, textShadowColor: cat.titleColor }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
           {card.title}
         </Text>
         <Text style={styles.mult} numberOfLines={1} adjustsFontSizeToFit>
@@ -182,14 +192,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chip: {
-    borderColor: colors.warn,
+    // borderColor set inline based on category (yellow / blue / purple).
     borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     backgroundColor: colors.bgGlass,
     // Center the title both vertically and horizontally — chips now show
-    // only the "main" yellow text; the full description is in the popup.
+    // only the main accent text; the full description is in the popup.
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
@@ -231,9 +241,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 11,
     fontWeight: '800',
-    color: colors.warn,
+    // color + textShadowColor set inline from category tone.
     letterSpacing: 0.5,
-    textShadowColor: colors.warn,
     textShadowRadius: 4,
     textAlign: 'center',
   },
@@ -247,16 +256,16 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
     textAlign: 'center',
   },
-  // Briefly visible amber wash on the chip when its scoring contribution
-  // increases — "this card just fired." Semi-transparent so the existing
-  // title / icon / mult tint amber rather than getting hidden.
+  // Briefly visible category-color wash on the chip when its scoring
+  // contribution increases — "this card just fired." backgroundColor is
+  // set inline from the card's category tone so a row-bonus flashes blue,
+  // a grid-achievement flashes purple, etc.
   flashOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 183, 74, 0.55)',
     borderRadius: radius.md,
   },
 });

@@ -21,6 +21,11 @@ interface Props {
   hiddenSlots?: Set<number>;
   selected?: number | null;
   nextSlotHint?: number | null;
+  // Drag-to-slide preview: slots where the chain WILL land at the current
+  // drag distance / direction. Rendered as a green outline overlay on top
+  // of the existing slot content so the player sees the landing in real
+  // time without committing yet.
+  slideGhostSlots?: Set<number>;
   onSlotPress?: (idx: number) => void;
   onLinePress?: (kind: LineKind, index: number) => void;
   // Render with smaller cells + sm cards. Used by ResultScreen to keep the
@@ -63,6 +68,7 @@ export const GridView = ({
   hiddenSlots,
   selected,
   nextSlotHint,
+  slideGhostSlots,
   onSlotPress,
   onLinePress,
   compact,
@@ -102,6 +108,7 @@ export const GridView = ({
             const isEmpty = cardHere === null;
             const positionNum = SPIRAL_POSITION[idx];
 
+            const isGhost = slideGhostSlots?.has(idx) ?? false;
             return (
               <Pressable
                 key={idx}
@@ -123,6 +130,18 @@ export const GridView = ({
                     </Text>
                   )}
                   {isNext && <NextPulse size={compact ? cardSize.sm : cardSize.md} />}
+                  {isGhost && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.slideGhost,
+                        {
+                          width: compact ? cardSize.sm : cardSize.md,
+                          height: compact ? cardSize.sm : cardSize.md,
+                        },
+                      ]}
+                    />
+                  )}
                 </View>
               </Pressable>
             );
@@ -187,5 +206,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.accent,
     ...glow(colors.accent, 8, 0.6),
+  },
+  // Drag-to-slide preview: a thick success-green outline over the slots
+  // where the chain will land if the drag is released right now. Sits on
+  // top of any existing card art so it remains visible mid-chain.
+  slideGhost: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.success,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(92, 255, 154, 0.10)',
+    ...glow(colors.success, 8, 0.65),
   },
 });
