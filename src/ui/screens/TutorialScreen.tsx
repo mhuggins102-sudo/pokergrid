@@ -115,7 +115,7 @@ const GoalVisual = () => {
     <View style={demoStyles.wrap}>
       <GridView grid={emptyGrid()} />
       <Caption>
-        A 5×5 grid. One card drawn at a time. The deck has 52 cards plus a single joker.
+        A 5×5 grid. One card drawn at a time. The deck has 52 standard cards plus 0–2 jokers, depending on difficulty.
       </Caption>
     </View>
   );
@@ -623,7 +623,7 @@ const STEPS: Slide[] = [
   {
     kicker: '01 · GOAL',
     title: 'Beat your target',
-    copy: '5×5 poker solitaire. Place every drawn card on the grid; at game end, score the 5 rows and 5 columns as poker hands. Easy is 200, Medium 300, Hard 400.',
+    copy: '5×5 poker solitaire. Place every drawn card on the grid; at game end, score the 5 rows and 5 columns as poker hands. Free Play targets: Easy 300, Medium 400, Hard 500, Extreme 400 (no jokers + no discards).',
     accent: colors.accent,
     Visual: GoalVisual,
   },
@@ -658,7 +658,7 @@ const STEPS: Slide[] = [
   {
     kicker: '06 · ♣ BONUS',
     title: 'Clubs draw bonus cards',
-    copy: 'Spend a club to draw 2 from the bonus deck and keep 1. You can hold up to 3. At the cap, a ♣ forces a swap — the discarded one is gone for good.',
+    copy: 'Spend a club to draw 2 from the bonus deck and keep 1. You can hold up to 3. At the cap, Medium / Hard / Extreme force a swap; Easy still lets you decline.',
     accent: colors.suitC,
     Visual: BonusVisual,
   },

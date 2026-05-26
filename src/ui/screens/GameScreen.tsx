@@ -100,9 +100,9 @@ const HINT_TITLE: Record<HintId, string> = {
 
 const HINT_BODY: Record<HintId, string> = {
   joker:
-    'The joker is wild — its row and its column each score as the best 5-card hand they can. It auto-places when drawn and can\'t be discarded normally; only a ♦ Destroy can remove it.',
+    'A joker is wild — its row and its column each score as the best 5-card hand they can. Jokers auto-place when drawn and can\'t be discarded normally; only a ♦ Destroy removes one. Easy difficulty ships two jokers in the deck, Medium / Hard one, Extreme none.',
   'bonus-cap':
-    'You\'re holding 3 bonus cards — the maximum. Drawing another ♣ Bonus will now force you to swap one out instead of letting you decline.',
+    'You\'re holding 3 bonus cards — the maximum. On this difficulty, drawing another ♣ Bonus forces you to swap one out (no decline allowed).',
   'grid-effect':
     'A grid achievement (purple border) is now satisfying its condition — it multiplies your TOTAL score at game end, on top of any per-line bonuses.',
   'hearts-swap':
@@ -988,17 +988,33 @@ export const GameScreen = ({
       />
       <HintModal
         hint={activeHint}
+        bonusDeclineAllowed={state.bonusDeclineAllowed}
         onDismiss={dismissHint}
       />
     </View>
   );
 };
 
+// Look up a hint's body text, with one difficulty-dependent override:
+// the bonus-cap message changes depending on whether the current
+// difficulty lets the player decline at cap (Easy) or forces the swap
+// (Medium / Hard / Extreme).
+const hintBodyFor = (hint: HintId, bonusDeclineAllowed: boolean): string => {
+  if (hint === 'bonus-cap') {
+    return bonusDeclineAllowed
+      ? 'You\'re holding 3 bonus cards — the maximum. On this difficulty, you can still decline a ♣ Bonus draw at the cap if neither offered card is worth swapping for.'
+      : 'You\'re holding 3 bonus cards — the maximum. On this difficulty, drawing another ♣ Bonus forces you to swap one out (no decline allowed).';
+  }
+  return HINT_BODY[hint];
+};
+
 const HintModal = ({
   hint,
+  bonusDeclineAllowed,
   onDismiss,
 }: {
   hint: HintId | null;
+  bonusDeclineAllowed: boolean;
   onDismiss: () => void;
 }) => (
   <Modal
@@ -1011,7 +1027,9 @@ const HintModal = ({
       <Pressable style={hintModalStyles.sheet} onPress={() => {}}>
         <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
         <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
-        <Text style={hintModalStyles.body}>{hint ? HINT_BODY[hint] : ''}</Text>
+        <Text style={hintModalStyles.body}>
+          {hint ? hintBodyFor(hint, bonusDeclineAllowed) : ''}
+        </Text>
         <View style={hintModalStyles.btnRow}>
           <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
         </View>
@@ -1371,7 +1389,7 @@ const renderBottom = (
             );
           })}
         </View>
-        {!atMax && (
+        {(!atMax || state.bonusDeclineAllowed) && (
           <NeonButton
             label="Decline both"
             variant="secondary"

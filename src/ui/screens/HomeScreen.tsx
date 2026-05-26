@@ -8,6 +8,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
+import { DifficultyInfoModal } from '../components/DifficultyInfoModal';
 import { NeonButton } from '../components/NeonButton';
 import { useSettings } from '../settings';
 import { useStats } from '../stats';
@@ -24,7 +25,7 @@ interface Props {
   onOpenRules: () => void;
 }
 
-const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
+const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
 const NeonTitle = () => {
   const { settings } = useSettings();
@@ -52,6 +53,7 @@ export const HomeScreen = ({
 }: Props) => {
   const [diff, setDiff] = React.useState<Difficulty>('medium');
   const [confirmNewTU, setConfirmNewTU] = React.useState(false);
+  const [difficultyInfoOpen, setDifficultyInfoOpen] = React.useState(false);
   const { stats } = useStats();
   const { save: tuSave } = useTUSave();
 
@@ -87,11 +89,21 @@ export const HomeScreen = ({
         })}
       </View>
       <View style={styles.startWrap}>
-        <NeonButton
-          label={`Start · target ${TARGET_BY_DIFFICULTY[diff]}`}
-          size="lg"
-          onPress={() => onStartFree(diff)}
-        />
+        <View style={styles.startRow}>
+          <NeonButton
+            label={`Start · target ${TARGET_BY_DIFFICULTY[diff]}`}
+            size="lg"
+            onPress={() => onStartFree(diff)}
+            style={styles.startBtn}
+          />
+          <Pressable
+            onPress={() => setDifficultyInfoOpen(true)}
+            hitSlop={6}
+            style={styles.infoBtn}
+          >
+            <Text style={styles.infoBtnText}>ⓘ</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* GAME MODES --------------------------------------------------- */}
@@ -160,6 +172,11 @@ export const HomeScreen = ({
         <NeonButton label="Stats" variant="secondary" size="sm" onPress={onOpenStats} />
         <NeonButton label="Settings" variant="secondary" size="sm" onPress={onOpenSettings} />
       </View>
+
+      <DifficultyInfoModal
+        visible={difficultyInfoOpen}
+        onClose={() => setDifficultyInfoOpen(false)}
+      />
 
       <Modal
         visible={confirmNewTU}
@@ -277,13 +294,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginTop: spacing.lg,
   },
-  diffRow: { flexDirection: 'row', gap: spacing.sm },
+  diffRow: { flexDirection: 'row', gap: spacing.xs },
   diffCell: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.outline,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
+    paddingHorizontal: 2,
     alignItems: 'center',
     backgroundColor: colors.bgPanel,
   },
@@ -294,11 +312,11 @@ const styles = StyleSheet.create({
   },
   diffName: {
     fontFamily: fonts.mono,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
     color: colors.textMid,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
   },
   diffNameSel: {
     color: colors.accent,
@@ -321,6 +339,32 @@ const styles = StyleSheet.create({
   },
   diffBestSel: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 3 },
   startWrap: { marginTop: spacing.md, alignItems: 'stretch' },
+  startRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'stretch',
+  },
+  startBtn: { flex: 1 },
+  // Round info button sized to match the NeonButton's lg height (~48px)
+  // so the row aligns cleanly. ⓘ glyph uses the accent tint so it reads
+  // as a tappable affordance, not just decoration.
+  infoBtn: {
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    ...glow(colors.accent, 6, 0.3),
+  },
+  infoBtnText: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 22,
+    fontWeight: '800',
+    textShadowColor: colors.accent,
+    textShadowRadius: 4,
+  },
   modesCol: { gap: spacing.sm },
   modeCard: {
     backgroundColor: colors.bgPanel,

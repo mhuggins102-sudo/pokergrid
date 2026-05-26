@@ -101,10 +101,13 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
 
       <Section label="The joker">
         <Text style={styles.body}>
-          The joker is auto-placed when drawn — you don't get to choose where, and it can't be
+          A joker is auto-placed when drawn — you don't get to choose where, and it can't be
           discarded initially. On the grid it's a wild, taking whatever rank and suit make the
-          best hand in its row, and independently in its column. A ♦ Destroy can remove it
+          best hand in its row, and independently in its column. A ♦ Destroy can remove one
           mid-game (and triggers the "Trash Joker" bonus card if you hold it).
+        </Text>
+        <Text style={[styles.body, { marginTop: 6 }]}>
+          Joker count varies by difficulty: <Text style={styles.bodyHi}>Easy ships 2 jokers</Text>, Medium and Hard one, Extreme zero. With two jokers in the deck, a single line can contain both — the evaluator substitutes the best rank + suit for each.
         </Text>
       </Section>
 
@@ -121,8 +124,24 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
       <Section label="End of game">
         <Text style={styles.body}>
           The run ends when the grid is full or the deck runs out. Beat your target to win.
-          Free Play uses Easy 300, Medium 400, or Hard 500. Targets Up and Challenges set
-          their own targets.
+        </Text>
+      </Section>
+
+      <Section label="Difficulty modes">
+        <Text style={styles.body}>
+          Free Play offers four modes — <Text style={styles.bodyHi}>Easy</Text> (300),
+          {' '}<Text style={styles.bodyHi}>Medium</Text> (400),
+          {' '}<Text style={styles.bodyHi}>Hard</Text> (500), and
+          {' '}<Text style={styles.bodyHi}>Extreme</Text> (400, no jokers and no discards).
+          {' '}Each tunes the number of jokers, undos, starting bonus cards, and
+          whether the Discard button is available. Tap the ⓘ next to Start on the home
+          screen for the full comparison table.
+        </Text>
+        <Text style={[styles.body, { marginTop: 6 }]}>
+          <Text style={styles.bodyHi}>Targets Up</Text> climbs a ladder of rising score
+          targets and inherits the difficulty matching each level's target (300+ Easy,
+          400+ Medium, 500+ Hard). <Text style={styles.bodyHi}>Challenges</Text> always
+          run on the Hard ruleset.
         </Text>
       </Section>
 

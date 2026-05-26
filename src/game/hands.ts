@@ -96,25 +96,34 @@ const evalStandardFive = (cards: StandardCard[]): HandRank => {
   return 'HIGH_CARD';
 };
 
+// Recursive joker substitution — tries every rank+suit combination for
+// each joker in the line, returning the best resulting hand rank. Up to
+// 2 jokers per line is the realistic upper bound (Easy difficulty ships
+// 2 jokers in the deck), so worst case 52^2 = 2704 evaluations per line
+// — fast enough to run on every score recomputation.
+const evalWithJokers = (
+  standards: StandardCard[],
+  jokerCount: number
+): HandRank => {
+  if (jokerCount === 0) return evalStandardFive(standards);
+  let best: HandRank = 'HIGH_CARD';
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      const sub: StandardCard = { kind: 'standard', rank, suit };
+      const result = evalWithJokers([...standards, sub], jokerCount - 1);
+      if (HAND_TIER[result] > HAND_TIER[best]) best = result;
+    }
+  }
+  return best;
+};
+
 // Evaluate any 5-card line. Returns null if any slot is empty.
-// At most one joker is in the deck, so a line has at most one joker.
 export const evaluateLine = (line: (Card | null)[]): HandRank | null => {
   if (line.length !== 5) throw new Error('Line must have exactly 5 slots');
   if (line.some(c => c === null)) return null;
   const cards = line as Card[];
   const jokers = cards.filter(isJoker).length;
   if (jokers === 0) return evalStandardFive(cards as StandardCard[]);
-  if (jokers > 1) throw new Error('Only one joker exists in PokerGrid');
-
   const standards = cards.filter(c => !isJoker(c)) as StandardCard[];
-
-  let best: HandRank = 'HIGH_CARD';
-  for (const suit of SUITS) {
-    for (const rank of RANKS) {
-      const sub: StandardCard = { kind: 'standard', rank, suit };
-      const result = evalStandardFive([...standards, sub]);
-      if (HAND_TIER[result] > HAND_TIER[best]) best = result;
-    }
-  }
-  return best;
+  return evalWithJokers(standards, jokers);
 };

@@ -24,6 +24,10 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
         the extra rule. Hit both and the challenge is marked complete on your profile.
       </Text>
 
+      <Text style={styles.rulesetNote}>
+        All challenges run on the Hard ruleset: 1 joker, no undos, no starting bonus card, and ♣ at the bonus-hand cap forces a swap.
+      </Text>
+
       <View style={styles.list}>
         {CHALLENGES.map(c => {
           const done = stats.challengesDone.includes(c.id);
@@ -75,7 +79,23 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 13,
     lineHeight: 19,
+    marginBottom: spacing.sm,
+  },
+  // Sits between the intro and the challenge list. Tinted with the
+  // accent color + a subtle border so it reads as a callout rather
+  // than body copy — important info but not a section header.
+  rulesetNote: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.5,
     marginBottom: spacing.lg,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.accent,
+    backgroundColor: 'rgba(107, 214, 255, 0.06)',
   },
   list: { gap: spacing.sm },
   card: {

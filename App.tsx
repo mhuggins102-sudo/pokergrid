@@ -10,7 +10,7 @@ import {
   findChallenge,
   targetForLevel,
 } from './src/game/challenges';
-import { Difficulty } from './src/game/rules';
+import { Difficulty, UNDOS_BY_DIFFICULTY } from './src/game/rules';
 import { useGame } from './src/ui/hooks/useGame';
 import { BonusCardsScreen } from './src/ui/screens/BonusCardsScreen';
 import { ChallengesScreen } from './src/ui/screens/ChallengesScreen';
@@ -302,12 +302,12 @@ const contextKicker = (ctx: PlayContext): string | undefined => {
   }
 };
 
-// Per-mode undo cap. Challenge runs are honor-only: no undo. Targets Up lets
-// the player erase one misclick per run. Free play is unrestricted (each undo
-// taints the run for stats purposes).
+// Per-mode undo cap. Challenge runs are honor-only: no undo. Targets Up
+// lets the player erase one misclick per run. Free Play caps undos by
+// difficulty (Easy / Medium: 1; Hard / Extreme: 0) per UNDOS_BY_DIFFICULTY.
 const contextMaxUndos = (ctx: PlayContext): number => {
   switch (ctx.mode) {
-    case 'free': return Infinity;
+    case 'free': return UNDOS_BY_DIFFICULTY[ctx.difficulty];
     case 'targets-up': return 1;
     case 'challenge': return 0;
   }

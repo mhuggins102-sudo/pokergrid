@@ -54,14 +54,16 @@ export type Card = StandardCard | JokerCard;
 
 export const isJoker = (c: Card): c is JokerCard => c.kind === 'joker';
 
-export const fullDeck = (): Card[] => {
+export const fullDeck = (jokerCount: number = 1): Card[] => {
   const deck: Card[] = [];
   for (const suit of SUITS) {
     for (const rank of RANKS) {
       deck.push({ kind: 'standard', rank, suit });
     }
   }
-  deck.push({ kind: 'joker' });
+  for (let i = 0; i < jokerCount; i++) {
+    deck.push({ kind: 'joker' });
+  }
   return deck;
 };
 

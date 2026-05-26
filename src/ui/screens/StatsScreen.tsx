@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BONUS_DECK_POOL } from '../../game/bonusCards';
-import type { Difficulty } from '../../game/rules';
+import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { NeonButton } from '../components/NeonButton';
 import { DifficultyStat, RunRecord, useStats } from '../stats';
@@ -11,7 +11,7 @@ interface Props {
   onBack: () => void;
 }
 
-const Difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+const Difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
 type Metric = 'wl' | 'best' | 'average' | 'streak';
 
@@ -85,13 +85,9 @@ const recentForDifficulty = (recent: RunRecord[], d: Difficulty): SparkPoint[] =
     .reverse();
 };
 
-// Target each difficulty's chart line is drawn against. Mirrors the score
-// thresholds in src/game/rules.ts.
-const TARGET_BY_DIFFICULTY: Record<Difficulty, number> = {
-  easy: 300,
-  medium: 400,
-  hard: 500,
-};
+// Target each difficulty's chart line is drawn against. Imported below
+// from the single source of truth in src/game/rules.ts so the chart
+// reference line stays in step with the engine's win threshold.
 
 // id → BonusCard lookup so we can show the human title in the analytics
 // table without keeping a copy of the whole card on every record.
