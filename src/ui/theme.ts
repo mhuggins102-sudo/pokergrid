@@ -55,6 +55,19 @@ export const suitColor = (s: Suit): string => {
   }
 };
 
+// Per-difficulty neon tint — green → cyan → amber → red maps the
+// easy-to-extreme ramp onto the existing palette signals (success,
+// accent, warn, danger). Used on the home difficulty tiles and the
+// Difficulty Modes popup column headers so they share a language.
+export const difficultyColor = (d: 'easy' | 'medium' | 'hard' | 'extreme'): string => {
+  switch (d) {
+    case 'easy': return colors.success;
+    case 'medium': return colors.accent;
+    case 'hard': return colors.warn;
+    case 'extreme': return colors.danger;
+  }
+};
+
 // Glow helpers — used as elevation + suit-color halo.
 export const glow = (color: string, radius = 14, opacity = 0.65) => ({
   shadowColor: color,

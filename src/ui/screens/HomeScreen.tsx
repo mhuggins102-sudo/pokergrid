@@ -15,7 +15,7 @@ import { VariantsInfoModal } from '../components/VariantsInfoModal';
 import { useSettings } from '../settings';
 import { useStats } from '../stats';
 import { useTUSave } from '../targetsUpSave';
-import { colors, fonts, glow, radius, spacing } from '../theme';
+import { colors, difficultyColor, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   onStartFree: (d: Difficulty) => void;
@@ -29,17 +29,6 @@ interface Props {
 }
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
-
-// Per-difficulty neon tint — green → cyan → amber → red maps the
-// easy-to-extreme ramp onto the existing palette signals (success,
-// accent, warn, danger). Used for the label text + the cell border /
-// glow so each tile reads as its own button.
-const DIFF_COLOR: Record<Difficulty, string> = {
-  easy: colors.success,
-  medium: colors.accent,
-  hard: colors.warn,
-  extreme: colors.danger,
-};
 
 const NeonTitle = () => {
   const { settings } = useSettings();
@@ -93,10 +82,10 @@ export const HomeScreen = ({
         {DIFFS.map(d => (
           <Pressable
             key={d}
-            style={[styles.diffCell, { borderColor: DIFF_COLOR[d] }, glow(DIFF_COLOR[d], 8, 0.35)]}
+            style={[styles.diffCell, { borderColor: difficultyColor(d) }, glow(difficultyColor(d), 8, 0.35)]}
             onPress={() => onStartFree(d)}
           >
-            <Text style={[styles.diffName, { color: DIFF_COLOR[d], textShadowColor: DIFF_COLOR[d] }]}>
+            <Text style={[styles.diffName, { color: difficultyColor(d), textShadowColor: difficultyColor(d) }]}>
               {d}
             </Text>
             <Text style={styles.diffTarget}>target {TARGET_BY_DIFFICULTY[d]}</Text>
@@ -295,8 +284,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
   hero: {
-    paddingTop: spacing.xxl,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: 0,
     alignItems: 'center',
   },
   subtitle: {
