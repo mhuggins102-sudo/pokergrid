@@ -30,6 +30,17 @@ interface Props {
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
+// Per-difficulty neon tint — green → cyan → amber → red maps the
+// easy-to-extreme ramp onto the existing palette signals (success,
+// accent, warn, danger). Used for the label text + the cell border /
+// glow so each tile reads as its own button.
+const DIFF_COLOR: Record<Difficulty, string> = {
+  easy: colors.success,
+  medium: colors.accent,
+  hard: colors.warn,
+  extreme: colors.danger,
+};
+
 const NeonTitle = () => {
   const { settings } = useSettings();
   const pulse = useSharedValue(0.7);
@@ -55,7 +66,6 @@ export const HomeScreen = ({
   onOpenSettings,
   onOpenRules,
 }: Props) => {
-  const [diff, setDiff] = React.useState<Difficulty>('medium');
   const [confirmNewTU, setConfirmNewTU] = React.useState(false);
   const [difficultyInfoOpen, setDifficultyInfoOpen] = React.useState(false);
   const [variantsInfoOpen, setVariantsInfoOpen] = React.useState(false);
@@ -80,33 +90,21 @@ export const HomeScreen = ({
         </Pressable>
       </View>
       <View style={styles.diffRow}>
-        {DIFFS.map(d => {
-          const selected = d === diff;
-          return (
-            <Pressable
-              key={d}
-              style={[styles.diffCell, selected && styles.diffCellSel]}
-              onPress={() => setDiff(d)}
-            >
-              <Text style={[styles.diffName, selected && styles.diffNameSel]}>{d}</Text>
-              <Text style={[styles.diffTarget, selected && styles.diffTargetSel]}>
-                target {TARGET_BY_DIFFICULTY[d]}
-              </Text>
-              {stats.best[d] !== null && (
-                <Text style={[styles.diffBest, selected && styles.diffBestSel]}>
-                  best {stats.best[d]}
-                </Text>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={styles.startWrap}>
-        <NeonButton
-          label={`Start · ${diff[0].toUpperCase()}${diff.slice(1)} (${TARGET_BY_DIFFICULTY[diff]})`}
-          size="lg"
-          onPress={() => onStartFree(diff)}
-        />
+        {DIFFS.map(d => (
+          <Pressable
+            key={d}
+            style={[styles.diffCell, { borderColor: DIFF_COLOR[d] }, glow(DIFF_COLOR[d], 8, 0.35)]}
+            onPress={() => onStartFree(d)}
+          >
+            <Text style={[styles.diffName, { color: DIFF_COLOR[d], textShadowColor: DIFF_COLOR[d] }]}>
+              {d}
+            </Text>
+            <Text style={styles.diffTarget}>target {TARGET_BY_DIFFICULTY[d]}</Text>
+            {stats.best[d] !== null && (
+              <Text style={styles.diffBest}>best {stats.best[d]}</Text>
+            )}
+          </Pressable>
+        ))}
       </View>
 
       <View style={styles.sectionLabelRow}>
@@ -336,50 +334,44 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   diffRow: { flexDirection: 'row', gap: spacing.xs },
+  // Each cell is now a self-contained launcher — tap to start that
+  // difficulty. Border + glow tint come from the per-difficulty color
+  // applied inline so the four tiles read as a heat-ramp.
   diffCell: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.outline,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: 2,
     alignItems: 'center',
     backgroundColor: colors.bgPanel,
   },
-  diffCellSel: {
-    borderColor: colors.accent,
-    borderWidth: 2,
-    ...glow(colors.accent, 12, 0.6),
-  },
+  // Matches the modeTitle treatment (mono / 900 / uppercase / neon
+  // shadow) but a touch smaller so "EXTREME" fits the 4-across row on
+  // a 390-wide frame. Color + shadow tint are applied inline.
   diffName: {
     fontFamily: fonts.mono,
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.textMid,
+    fontSize: 14,
+    fontWeight: '900',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
+    textShadowRadius: 5,
   },
-  diffNameSel: {
-    color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 4,
-  },
+  // "target N" / "best N" use the same sans body voice as the mode
+  // card descriptions ("Climb the ladder…") rather than the mono
+  // numeric voice — keeps them as soft labels, not data readouts.
   diffTarget: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    color: colors.textMid,
+    marginTop: 6,
+  },
+  diffBest: {
+    fontFamily: fonts.sans,
     fontSize: 11,
     color: colors.textLow,
-    marginTop: 4,
-  },
-  diffTargetSel: { color: colors.textMid },
-  diffBest: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    color: colors.textLow,
     marginTop: 2,
-    letterSpacing: 1,
   },
-  diffBestSel: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 3 },
-  startWrap: { marginTop: spacing.md, alignItems: 'stretch' },
   headerInfoBtn: {
     width: 28,
     height: 28,
