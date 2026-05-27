@@ -19,6 +19,7 @@ import { HomeScreen } from './src/ui/screens/HomeScreen';
 import { ResultScreen } from './src/ui/screens/ResultScreen';
 import { RulesScreen } from './src/ui/screens/RulesScreen';
 import { SettingsScreen } from './src/ui/screens/SettingsScreen';
+import { AchievementsScreen } from './src/ui/screens/AchievementsScreen';
 import { StatsScreen } from './src/ui/screens/StatsScreen';
 import { markTutorialSeen, TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
 import { SettingsProvider } from './src/ui/settings';
@@ -55,6 +56,7 @@ type Screen =
   | 'game'
   | 'settings'
   | 'stats'
+  | 'achievements'
   | 'rules'
   | 'tutorial'
   | 'bonusCards'
@@ -139,6 +141,7 @@ const AppShell = () => {
           onContinueTargetsUp={continueTargetsUp}
           onOpenChallenges={() => setScreen('challenges')}
           onOpenStats={() => setScreen('stats')}
+          onOpenAchievements={() => setScreen('achievements')}
           onOpenSettings={() => setScreen('settings')}
           onOpenRules={() => setScreen('rules')}
         />
@@ -153,6 +156,9 @@ const AppShell = () => {
         />
       )}
       {screen === 'stats' && <StatsScreen onBack={() => setScreen('home')} />}
+      {screen === 'achievements' && (
+        <AchievementsScreen onBack={() => setScreen('home')} />
+      )}
       {screen === 'settings' && <SettingsScreen onBack={() => setScreen('home')} />}
       {screen === 'rules' && (
         <RulesScreen
@@ -318,9 +324,15 @@ const contextDeckLimit = (ctx: PlayContext): number | undefined => {
   return findChallenge(ctx.id).deckLimit;
 };
 
-const contextNoSwap = (ctx: PlayContext): boolean =>
-  ctx.mode === 'challenge' && ctx.id === 'no-swap';
+// No Swap was a challenge mode in the original set; it's now an
+// achievement (passive observation), so nothing at this layer needs to
+// flip a flag — newGame derives state.noSwap = false on every run and
+// the achievement just checks whether the player swapped or not.
+const contextNoSwap = (_ctx: PlayContext): boolean => false;
 
+// No Discards remains a playable challenge — when active it hides
+// the Discard button and the reducer rejects DISCARD_NONE. Extreme
+// difficulty also forces noDiscards on inside newGame.
 const contextNoDiscards = (ctx: PlayContext): boolean =>
   ctx.mode === 'challenge' && ctx.id === 'no-discards';
 

@@ -11,6 +11,11 @@ import Animated, {
 import type { PlayContext } from '../../../App';
 import { BonusCard, powerUpBonusCard } from '../../game/bonusCards';
 import { Card, isJoker, Supercharge } from '../../game/cards';
+import {
+  ACHIEVEMENTS,
+  Achievement,
+  achievementEarned,
+} from '../../game/achievements';
 import { challengeWon, findChallenge } from '../../game/challenges';
 import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
@@ -351,7 +356,13 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const [linesExpanded, setLinesExpanded] = useState(false);
-  const { stats, record, recordTargetsUp, recordChallenge } = useStats();
+  const {
+    stats,
+    record,
+    recordTargetsUp,
+    recordChallenge,
+    recordAchievement,
+  } = useStats();
   const { saveProgress: saveTUProgress, clearProgress: clearTUProgress } = useTUSave();
   const recorded = useRef(false);
   // Snapshot stats on first render so the "NEW BEST" check compares against
@@ -644,6 +655,20 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     }
   })();
 
+  // Achievements earned during this run that the player didn't already
+  // have on file. Empty for tainted runs, Easy / Medium runs, or runs
+  // that didn't clear the score bar — achievementEarned handles those
+  // gates. Memoized so the surrounding render + the record useEffect
+  // see the same list.
+  const newlyEarnedAchievements: Achievement[] = useMemo(() => {
+    if (tainted) return [];
+    return ACHIEVEMENTS.filter(
+      a =>
+        achievementEarned(a, state, report) &&
+        !prevStats.achievementsDone.includes(a.id)
+    );
+  }, [tainted, state, report, prevStats.achievementsDone]);
+
   // Record the run exactly once on mount — applying the correct stats
   // method based on the play context. Tainted runs are skipped.
   useEffect(() => {
@@ -698,7 +723,16 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         if (won) recordChallenge(context.id);
         break;
     }
-  }, [record, recordTargetsUp, recordChallenge, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues]);
+    // Achievements fire across every mode, gated only on Hard / Extreme
+    // difficulty and the per-achievement structural condition. Tainted
+    // runs (any undo used) still don't qualify — undos make every
+    // structural check trivially exploitable.
+    if (!tainted) {
+      for (const a of newlyEarnedAchievements) {
+        recordAchievement(a.id);
+      }
+    }
+  }, [record, recordTargetsUp, recordChallenge, recordAchievement, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues, newlyEarnedAchievements]);
 
   const [shareLabel, setShareLabel] = useState<string | null>(null);
   const handleShare = async () => {
@@ -751,6 +785,20 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         <Text style={styles.taintedNote}>
           Practice run · {state.undoCount} undo{state.undoCount === 1 ? '' : 's'} used · score not recorded
         </Text>
+      )}
+
+      {newlyEarnedAchievements.length > 0 && (
+        <View style={styles.achievementBlock}>
+          <Text style={styles.achievementHeading}>
+            ✦ Achievement{newlyEarnedAchievements.length === 1 ? '' : 's'} earned
+          </Text>
+          {newlyEarnedAchievements.map(a => (
+            <View key={a.id} style={styles.achievementRow}>
+              <Text style={styles.achievementName}>{a.name}</Text>
+              <Text style={styles.achievementDesc}>{a.description}</Text>
+            </View>
+          ))}
+        </View>
       )}
 
       <BonusCardStrip
@@ -1096,6 +1144,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     textShadowColor: colors.warn,
     textShadowRadius: 3,
+  },
+  // Achievement-earned callout. Joker-violet to match the SS-tier
+  // celebration and stand out from the score banner above. Sits
+  // between the banner / tainted notice and the bonus card strip so
+  // the player sees it before scanning their final grid.
+  achievementBlock: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.joker,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    ...glow(colors.joker, 10, 0.5),
+  },
+  achievementHeading: {
+    color: colors.joker,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    textShadowColor: colors.joker,
+    textShadowRadius: 4,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  achievementRow: {
+    marginTop: 4,
+  },
+  achievementName: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  achievementDesc: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 1,
   },
   bannerScore: {
     fontFamily: fonts.mono,

@@ -1,45 +1,23 @@
-import { isJoker } from './cards';
-import { Grid } from './grid';
-import { HandRank } from './hands';
 import { ScoreReport } from './scoring';
 import type { GameState } from './state';
 
-// Pair, Two Pair, and Three of a Kind — and anything that scored nothing
-// (no hand). Used by the Low Hands challenge.
-const LOW_OR_NONE: Set<HandRank> = new Set<HandRank>([
-  'HIGH_CARD',
-  'PAIR',
-  'TWO_PAIR',
-  'THREE_OF_A_KIND',
-]);
-
 // ============================================================================
-// Challenge definitions.
+// Challenges — playable game variants. The other entries that used to live
+// here are now Achievements (src/game/achievements.ts) — those check a
+// final-state condition on a normal Hard / Extreme run so they're earned
+// passively. Only the variants that actually MODIFY gameplay stay here:
 //
-// Each challenge has a target score AND a structural constraint on the final
-// run (grid + report + game-state history). They share the same in-game loop
-// as Free Play; the difference is only in how we evaluate "won" at the end
-// and how we present the goal. Some also override game-start parameters
-// (e.g. deck size) via `deckLimit`.
+//   - Short Deck: deck size capped at 45 (8 cards held out)
+//   - No Discards: the Discard button is unavailable
 // ============================================================================
 
-export type ChallengeId =
-  | 'balanced'
-  | 'dynamite'
-  | 'jokerless'
-  | 'no-swap'
-  | 'no-discards'
-  | 'grid-only'
-  | 'line-only'
-  | 'short-deck'
-  | 'low-hands'
-  | 'high-hands';
+export type ChallengeId = 'short-deck' | 'no-discards';
 
 export interface Challenge {
   id: ChallengeId;
   name: string;
   goal: string;
-  // Total score that must be reached (in addition to the structural constraint).
+  // Total score that must be reached.
   scoreTarget: number;
   // True if the structural condition is met by the final state + report.
   conditionMet: (state: GameState, report: ScoreReport) => boolean;
@@ -48,57 +26,13 @@ export interface Challenge {
 }
 
 export const CHALLENGES: Challenge[] = [
-  // Ordered easiest → hardest (rough gut feel; the score target is the same
-  // 500 for everyone, so the ordering reflects how restrictive the
-  // structural rule is in practice).
   {
-    id: 'dynamite',
-    name: 'Dynamite',
-    goal: 'Score 500+ with at least one row or column worth 300+.',
+    id: 'short-deck',
+    name: 'Short Deck',
+    goal: 'Score 500+ with a 45-card deck (8 cards held out at random).',
     scoreTarget: 500,
-    conditionMet: (_state, report) =>
-      report.lines.some(l => l.total >= 300),
-  },
-  {
-    id: 'line-only',
-    name: 'Line Only',
-    goal: 'Score 500+ holding no end-of-game multiplier bonus cards.',
-    scoreTarget: 500,
-    conditionMet: (state) =>
-      state.bonusCards.length > 0 &&
-      state.bonusCards.every(c => !c.gridEffect),
-  },
-  {
-    id: 'grid-only',
-    name: 'Grid Only',
-    goal: 'Score 500+ holding only end-of-game multiplier bonus cards.',
-    scoreTarget: 500,
-    conditionMet: (state) =>
-      state.bonusCards.length > 0 &&
-      state.bonusCards.every(c => !c.lineEffect),
-  },
-  {
-    id: 'balanced',
-    name: 'Balanced',
-    goal: 'Score 500+ without any single row or column worth 100+.',
-    scoreTarget: 500,
-    conditionMet: (_state, report) =>
-      report.lines.every(l => l.total < 100),
-  },
-  {
-    id: 'jokerless',
-    name: 'Jokerless',
-    goal: 'Score 500+ with no joker on the grid at game end.',
-    scoreTarget: 500,
-    conditionMet: (state) =>
-      !state.grid.some(c => c !== null && isJoker(c)),
-  },
-  {
-    id: 'no-swap',
-    name: 'No Swap',
-    goal: 'Score 500+ without swapping out a bonus card at the cap.',
-    scoreTarget: 500,
-    conditionMet: (state) => !state.swappedBonus,
+    deckLimit: 45,
+    conditionMet: () => true,
   },
   {
     id: 'no-discards',
@@ -109,30 +43,6 @@ export const CHALLENGES: Challenge[] = [
     // action is rejected by the reducer, so reaching the score target is
     // the only structural requirement.
     conditionMet: () => true,
-  },
-  {
-    id: 'short-deck',
-    name: 'Short Deck',
-    goal: 'Score 500+ with a 45-card deck (8 cards held out at random).',
-    scoreTarget: 500,
-    deckLimit: 45,
-    conditionMet: () => true,
-  },
-  {
-    id: 'high-hands',
-    name: 'High Hands',
-    goal: 'Score 500+ with every scoring line a Three of a Kind or higher (High Card lines don\'t count against).',
-    scoreTarget: 500,
-    conditionMet: (_state, report) =>
-      report.lines.every(l => l.hand !== 'PAIR' && l.hand !== 'TWO_PAIR'),
-  },
-  {
-    id: 'low-hands',
-    name: 'Low Hands',
-    goal: 'Score 500+ with no line scoring higher than Three of a Kind.',
-    scoreTarget: 500,
-    conditionMet: (_state, report) =>
-      report.lines.every(l => !l.hand || LOW_OR_NONE.has(l.hand)),
   },
 ];
 

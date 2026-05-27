@@ -20,8 +20,10 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
       </View>
 
       <Text style={styles.intro}>
-        Structural goals — every challenge requires you to clear a 500-point bar AND satisfy
-        the extra rule. Hit both and the challenge is marked complete on your profile.
+        Challenges are playable variants that change how the deck or
+        the rules work. Clear the 500-point bar to mark each one
+        complete. (Passive end-of-run goals that don't change the
+        gameplay live on the Achievements page now.)
       </Text>
 
       <Text style={styles.rulesetNote}>

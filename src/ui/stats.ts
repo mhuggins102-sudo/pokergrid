@@ -1,7 +1,31 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
+import type { AchievementId } from '../game/achievements';
 import type { ChallengeId } from '../game/challenges';
 import type { Difficulty } from '../game/rules';
+
+// IDs that used to live as Challenges but are now Achievements. Used
+// at load time to migrate entries out of stats.challengesDone and into
+// stats.achievementsDone — players don't lose progress just because
+// the categorization changed.
+const MIGRATED_ACHIEVEMENT_IDS: ReadonlySet<string> = new Set([
+  'balanced',
+  'dynamite',
+  'jokerless',
+  'no-swap',
+  'grid-only',
+  'line-only',
+  'low-hands',
+  'high-hands',
+]);
+
+// The reduced ChallengeId set — only the genuine "this changes how
+// the game plays" variants survive. Used to filter old saves'
+// challengesDone list.
+const KNOWN_CHALLENGE_IDS: ReadonlySet<string> = new Set([
+  'short-deck',
+  'no-discards',
+]);
 
 export interface BonusCardAttribution {
   cardId: string;
@@ -82,6 +106,11 @@ export interface Stats {
   // Highest Targets-Up level reached, and which Challenges have been completed.
   targetsUpBest: number;
   challengesDone: ChallengeId[];
+  // Achievements earned across the player's history. Tracked separately
+  // from challengesDone because Achievements are passive (earned during
+  // any qualifying Hard / Extreme run) while challengesDone tracks
+  // explicitly-launched challenge modes.
+  achievementsDone: AchievementId[];
 
   // All-time aggregate of bonus cards held at end of game, keyed by
   // BonusCard.id (with any -pwrN suffix stripped by the caller). This
@@ -116,6 +145,7 @@ export const EMPTY_STATS: Stats = {
   },
   targetsUpBest: 0,
   challengesDone: [],
+  achievementsDone: [],
   bonusCardStats: {},
   bonusCardStatsByDifficulty: {
     easy: {},
@@ -150,6 +180,23 @@ export const loadStats = async (): Promise<Stats> => {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return EMPTY_STATS;
     const parsed = JSON.parse(raw) as Partial<Stats>;
+    // Migration: nine of the original ten challenges have been
+    // reclassified as achievements. Pull those ids out of any
+    // legacy challengesDone array and fold them into
+    // achievementsDone so players don't lose recorded progress.
+    const oldChallenges = (parsed.challengesDone ?? []) as string[];
+    const migratedAchievements = oldChallenges.filter(id =>
+      MIGRATED_ACHIEVEMENT_IDS.has(id)
+    ) as AchievementId[];
+    const survivingChallenges = oldChallenges.filter(id =>
+      KNOWN_CHALLENGE_IDS.has(id)
+    ) as ChallengeId[];
+    const achievementsDone = Array.from(
+      new Set<AchievementId>([
+        ...migratedAchievements,
+        ...((parsed.achievementsDone ?? []) as AchievementId[]),
+      ])
+    );
     return {
       ...EMPTY_STATS,
       ...parsed,
@@ -171,6 +218,8 @@ export const loadStats = async (): Promise<Stats> => {
         hard: { ...emptyTierCounts(), ...parsed.tierCounts?.hard },
         extreme: { ...emptyTierCounts(), ...parsed.tierCounts?.extreme },
       },
+      challengesDone: survivingChallenges,
+      achievementsDone,
     };
   } catch {
     return EMPTY_STATS;
@@ -259,6 +308,7 @@ interface StatsContextValue {
   record: (run: RunRecord) => void;
   recordTargetsUp: (level: number) => void;
   recordChallenge: (id: ChallengeId) => void;
+  recordAchievement: (id: AchievementId) => void;
   reset: () => void;
 }
 
@@ -267,6 +317,7 @@ const StatsContext = React.createContext<StatsContextValue>({
   record: () => {},
   recordTargetsUp: () => {},
   recordChallenge: () => {},
+  recordAchievement: () => {},
   reset: () => {},
 });
 
@@ -303,14 +354,33 @@ export const StatsProvider = ({ children }: { children: React.ReactNode }) => {
     });
   }, []);
 
+  const recordAchievement = React.useCallback((id: AchievementId) => {
+    setStats(prev => {
+      if (prev.achievementsDone.includes(id)) return prev;
+      const next = {
+        ...prev,
+        achievementsDone: [...prev.achievementsDone, id],
+      };
+      saveStats(next);
+      return next;
+    });
+  }, []);
+
   const reset = React.useCallback(() => {
     setStats(EMPTY_STATS);
     saveStats(EMPTY_STATS);
   }, []);
 
   const value = React.useMemo(
-    () => ({ stats, record, recordTargetsUp, recordChallenge, reset }),
-    [stats, record, recordTargetsUp, recordChallenge, reset]
+    () => ({
+      stats,
+      record,
+      recordTargetsUp,
+      recordChallenge,
+      recordAchievement,
+      reset,
+    }),
+    [stats, record, recordTargetsUp, recordChallenge, recordAchievement, reset]
   );
   return React.createElement(StatsContext.Provider, { value }, children);
 };
