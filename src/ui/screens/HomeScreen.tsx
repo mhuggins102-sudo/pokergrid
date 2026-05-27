@@ -11,6 +11,7 @@ import { ACHIEVEMENTS } from '../../game/achievements';
 import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { DifficultyInfoModal } from '../components/DifficultyInfoModal';
 import { NeonButton } from '../components/NeonButton';
+import { VariantsInfoModal } from '../components/VariantsInfoModal';
 import { useSettings } from '../settings';
 import { useStats } from '../stats';
 import { useTUSave } from '../targetsUpSave';
@@ -57,6 +58,7 @@ export const HomeScreen = ({
   const [diff, setDiff] = React.useState<Difficulty>('medium');
   const [confirmNewTU, setConfirmNewTU] = React.useState(false);
   const [difficultyInfoOpen, setDifficultyInfoOpen] = React.useState(false);
+  const [variantsInfoOpen, setVariantsInfoOpen] = React.useState(false);
   const { stats } = useStats();
   const { save: tuSave } = useTUSave();
 
@@ -67,15 +69,8 @@ export const HomeScreen = ({
         <NeonTitle />
       </View>
 
-      {/* GAME MODES ---------------------------------------------------- */}
-      <Text style={styles.sectionLabel}>Game Modes</Text>
-
-      {/* Free Play — picker + Start button live inside the Game Modes
-          section now. The ⓘ that opens the difficulty comparison
-          popup sits next to the "Free Play" label so it reads as a
-          header-level tooltip rather than a per-Start affordance. */}
-      <View style={styles.subHeaderRow}>
-        <Text style={styles.subHeader}>Free Play</Text>
+      <View style={styles.sectionLabelRow}>
+        <Text style={styles.sectionLabel}>Free Play</Text>
         <Pressable
           onPress={() => setDifficultyInfoOpen(true)}
           hitSlop={10}
@@ -114,7 +109,16 @@ export const HomeScreen = ({
         />
       </View>
 
-      <Text style={styles.subHeader}>Variants</Text>
+      <View style={styles.sectionLabelRow}>
+        <Text style={styles.sectionLabel}>Variants</Text>
+        <Pressable
+          onPress={() => setVariantsInfoOpen(true)}
+          hitSlop={10}
+          style={styles.headerInfoBtn}
+        >
+          <Text style={styles.headerInfoBtnText}>ⓘ</Text>
+        </Pressable>
+      </View>
       <View style={styles.modesCol}>
         <Pressable
           style={styles.modeCard}
@@ -126,10 +130,7 @@ export const HomeScreen = ({
               <Text style={styles.modeBest}>best L{stats.targetsUpBest}</Text>
             )}
           </View>
-          <Text style={styles.modeBody}>
-            A ladder. Level 1 starts at target 300; each win pushes the bar +50. Lose once and the
-            run ends. Final score is the highest level you cleared.
-          </Text>
+          <Text style={styles.modeBody}>Climb the ladder — targets rise each level.</Text>
           {tuSave ? (
             <>
               <Text style={styles.modeCta}>Continue at Level {tuSave.level} →</Text>
@@ -157,16 +158,14 @@ export const HomeScreen = ({
               </Text>
             )}
           </View>
-          <Text style={styles.modeBody}>
-            Playable variants that change how a run is structured — modified deck size, the
-            Discard button locked, and more to come.
-          </Text>
+          <Text style={styles.modeBody}>Deck and rule twists. Hit 500 to clear.</Text>
           <Text style={styles.modeCta}>Pick a challenge →</Text>
         </Pressable>
       </View>
 
-      {/* PROGRESS ------------------------------------------------------ */}
-      <Text style={styles.sectionLabel}>Progress</Text>
+      <View style={styles.sectionLabelRow}>
+        <Text style={styles.sectionLabel}>Progress</Text>
+      </View>
       <View style={styles.modesCol}>
         <Pressable style={styles.modeCard} onPress={onOpenStats}>
           <View style={styles.modeHeader}>
@@ -208,6 +207,11 @@ export const HomeScreen = ({
       <DifficultyInfoModal
         visible={difficultyInfoOpen}
         onClose={() => setDifficultyInfoOpen(false)}
+      />
+
+      <VariantsInfoModal
+        visible={variantsInfoOpen}
+        onClose={() => setVariantsInfoOpen(false)}
       />
 
       <Modal
@@ -323,8 +327,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 2,
     fontWeight: '700',
-    marginBottom: spacing.sm,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   diffRow: { flexDirection: 'row', gap: spacing.xs },
   diffCell: {
@@ -371,28 +380,6 @@ const styles = StyleSheet.create({
   },
   diffBestSel: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 3 },
   startWrap: { marginTop: spacing.md, alignItems: 'stretch' },
-  // Subsection header inside "Game Modes" — "Free Play", "Variants".
-  // Smaller than sectionLabel; sits flush left with a hint of accent.
-  subHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  subHeader: {
-    color: colors.textHi,
-    fontFamily: fonts.mono,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  // The ⓘ next to the "Free Play" sub-header opens the difficulty
-  // comparison popup. Smaller than the old button-sized variant — it
-  // reads as a header glyph rather than a control bar.
   headerInfoBtn: {
     width: 28,
     height: 28,
