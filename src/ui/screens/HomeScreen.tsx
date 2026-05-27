@@ -89,9 +89,9 @@ export const HomeScreen = ({
               {d}
             </Text>
             <Text style={styles.diffTarget}>target {TARGET_BY_DIFFICULTY[d]}</Text>
-            {stats.best[d] !== null && (
-              <Text style={styles.diffBest}>best {stats.best[d]}</Text>
-            )}
+            <Text style={styles.diffBest}>
+              best {stats.best[d] ?? '—'}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -357,8 +357,9 @@ const styles = StyleSheet.create({
   },
   diffBest: {
     fontFamily: fonts.sans,
-    fontSize: 11,
-    color: colors.textLow,
+    fontSize: 12,
+    color: colors.textMid,
+    fontWeight: '600',
     marginTop: 2,
   },
   headerInfoBtn: {
