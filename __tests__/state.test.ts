@@ -25,6 +25,7 @@ const baseState = (overrides: Partial<GameState>): GameState => ({
   noSwap: false,
   noDiscards: false,
   bonusDeclineAllowed: false,
+  randomPerks: false,
   ...overrides,
 });
 
@@ -295,6 +296,73 @@ describe('GameState — No Swap challenge', () => {
     });
     const after = step(state, { type: 'BEGIN_SUIT_ACTION' });
     expect(after.phase.kind).toBe('bonus-card-resolving');
+  });
+});
+
+describe('GameState — Short Circuit challenge', () => {
+  // A simple rng() that always returns 0 deterministically picks the
+  // first item in any candidate list. We use it to verify the
+  // random-perk routing without bringing in real randomness.
+  const rngAlwaysZero = () => 0;
+
+  test('with randomPerks=false the drawn suit still picks the perk', () => {
+    // Drawing ♣ + bonusDeck non-empty → BEGIN_SUIT_ACTION goes to
+    // bonus-card-resolving, exactly like today.
+    const club = { kind: 'standard' as const, rank: '5' as const, suit: 'C' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+    const state = baseState({ deck: [filler], drawn: club, randomPerks: false });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' }, rngAlwaysZero);
+    expect(after.phase.kind).toBe('bonus-card-resolving');
+  });
+
+  test('with randomPerks=true the perk fired does NOT have to match drawn suit', () => {
+    // Drawing ♣ but with grid populated so hop/slide/destroy are
+    // also available; rng=0 will pick the first available perk
+    // (hop), proving the drawn suit didn't determine the outcome.
+    const club = { kind: 'standard' as const, rank: '5' as const, suit: 'C' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+    const onGridA = { kind: 'standard' as const, rank: 'A' as const, suit: 'C' as const };
+    const onGridB = { kind: 'standard' as const, rank: 'K' as const, suit: 'D' as const };
+    const grid = emptyGrid25();
+    grid[0] = onGridA; // same row as slot 3 → hop is legal
+    grid[3] = onGridB;
+    const state = baseState({
+      deck: [filler],
+      grid,
+      drawn: club,
+      randomPerks: true,
+    });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' }, rngAlwaysZero);
+    // rngAlwaysZero picks the FIRST candidate in
+    // pickRandomAvailablePerk's order (H, S, D, C). With these
+    // cards both hop AND slide are legal; hop comes first.
+    expect(after.phase.kind).toBe('awaiting-target-hop');
+  });
+
+  test('randomPerks pick falls back gracefully when only one perk is available', () => {
+    // Empty grid + non-empty bonus deck → only ♣ is available.
+    // Even with randomPerks=true, the only candidate is C, so
+    // BEGIN_SUIT_ACTION always routes to bonus-card-resolving.
+    const heart = { kind: 'standard' as const, rank: '5' as const, suit: 'H' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+    const state = baseState({ deck: [filler], drawn: heart, randomPerks: true });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' }, rngAlwaysZero);
+    expect(after.phase.kind).toBe('bonus-card-resolving');
+  });
+
+  test('randomPerks with no available perks is a no-op', () => {
+    // Empty grid + empty bonus deck → none of H/S/D/C is legal.
+    // BEGIN_SUIT_ACTION returns the state unchanged.
+    const heart = { kind: 'standard' as const, rank: '5' as const, suit: 'H' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+    const state = baseState({
+      deck: [filler],
+      drawn: heart,
+      bonusDeck: [],
+      randomPerks: true,
+    });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' }, rngAlwaysZero);
+    expect(after.phase.kind).toBe('awaiting-action');
   });
 });
 

@@ -1,4 +1,4 @@
-import { Card, isJoker, StandardCard } from './cards';
+import { Card, isJoker, StandardCard, Suit } from './cards';
 import { freshShuffledDeck, shuffle } from './deck';
 import { emptyGrid, Grid, isFull, nextSpiralSlot, placeAtSpiralNext } from './grid';
 import { HandRank } from './hands';
@@ -110,6 +110,12 @@ export interface GameState {
   // this; Medium / Hard / Extreme leave it false so hitting ♣ at cap
   // forces the swap.
   bonusDeclineAllowed: boolean;
+  // True when the Short Circuit challenge is active. The drawn card's
+  // suit no longer determines which perk fires — instead, on
+  // BEGIN_SUIT_ACTION the reducer picks a uniformly-random perk from
+  // those currently available (hop / slide / destroy / bonus). The
+  // drawn card is still spent in perkSpent.
+  randomPerks: boolean;
 }
 
 export type Action =
@@ -179,7 +185,11 @@ export const newGame = (
   // or 'double') the player earned in a previous level. We replace the
   // matching un-supercharged card in the fresh shuffled deck so the
   // supercharged version can be drawn in this level.
-  superchargedDeckCards: Card[] = []
+  superchargedDeckCards: Card[] = [],
+  // Optional: lock in Short Circuit rules — the drawn card's suit no
+  // longer dictates which perk fires; instead BEGIN_SUIT_ACTION picks
+  // a uniformly-random perk from those currently available.
+  randomPerks = false
 ): GameState => {
   // Joker count is determined by difficulty (Easy ships 2 jokers, Hard
   // ships 1, Extreme ships 0). Targets-Up infers difficulty from level
@@ -262,6 +272,7 @@ export const newGame = (
     // difficulty; otherwise difficulty-based).
     noDiscards: noDiscards || NO_DISCARDS_BY_DIFFICULTY[difficulty],
     bonusDeclineAllowed: BONUS_DECLINE_AT_CAP_BY_DIFFICULTY[difficulty],
+    randomPerks,
   };
   return drawNext(initial);
 };
@@ -296,10 +307,39 @@ const handleDiscardNone = (s: GameState): GameState => {
   return drawNext(log(pushDiscard(s, s.drawn), 'Discard'));
 };
 
+// Short Circuit: pick a uniformly-random suit whose perk would
+// currently fire. The same availability gates that the suit switch
+// below applies (canHop, canSlide, canDestroy, canDrawBonus + the
+// noSwap cap rule for ♣) decide which suits are valid candidates,
+// so the randomly-picked perk is guaranteed to actually run rather
+// than no-op.
+const pickRandomAvailablePerk = (s: GameState, rng: () => number): Suit | null => {
+  const candidates: Suit[] = [];
+  if (canHop(s.grid)) candidates.push('H');
+  if (canSlide(s.grid)) candidates.push('S');
+  if (canDestroy(s.grid)) candidates.push('D');
+  if (
+    canDrawBonus(s.bonusDeck.length) &&
+    !(s.noSwap && s.bonusCards.length >= BONUS_HAND_LIMIT)
+  ) {
+    candidates.push('C');
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(rng() * candidates.length)];
+};
+
 const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
   if (s.phase.kind !== 'awaiting-action' || !s.drawn || isJoker(s.drawn)) return s;
   const drawn = s.drawn;
-  switch (drawn.suit) {
+  // In Short Circuit, the perk that fires is randomized — pick a
+  // uniformly-random suit from those whose perk is currently
+  // available, then drop into the same switch below as if the drawn
+  // card had been that suit. perkSpent still records the actual
+  // drawn card so Burnout / Frugal stay correct.
+  const effectiveSuit: Suit = s.randomPerks
+    ? pickRandomAvailablePerk(s, rng) ?? drawn.suit
+    : drawn.suit;
+  switch (effectiveSuit) {
     case 'H': {
       if (!canHop(s.grid)) return s;
       return {
