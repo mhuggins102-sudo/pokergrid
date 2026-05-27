@@ -9,9 +9,11 @@ import type { GameState } from './state';
 //
 //   - Short Deck: deck size capped at 45 (8 cards held out)
 //   - No Discards: the Discard button is unavailable
+//   - Short Circuit: the suit perk you get is randomized — you don't know
+//     which of the four perks will fire until you commit
 // ============================================================================
 
-export type ChallengeId = 'short-deck' | 'no-discards';
+export type ChallengeId = 'short-deck' | 'no-discards' | 'short-circuit';
 
 export interface Challenge {
   id: ChallengeId;
@@ -42,6 +44,17 @@ export const CHALLENGES: Challenge[] = [
     // The Discard button is hidden in this challenge and the DISCARD_NONE
     // action is rejected by the reducer, so reaching the score target is
     // the only structural requirement.
+    conditionMet: () => true,
+  },
+  {
+    id: 'short-circuit',
+    name: 'Short Circuit',
+    goal: "Score 500+ with random suit perks — you won't know which of ♥/♠/♦/♣'s effects you'll get until you commit to spending the card.",
+    scoreTarget: 500,
+    // The randomness is enforced at the reducer level (state.randomPerks
+    // is true and handleBeginSuitAction picks a uniformly-random perk
+    // from those currently available). Hitting the score target is the
+    // only end-state check.
     conditionMet: () => true,
   },
 ];

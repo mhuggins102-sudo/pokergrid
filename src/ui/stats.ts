@@ -25,6 +25,7 @@ const MIGRATED_ACHIEVEMENT_IDS: ReadonlySet<string> = new Set([
 const KNOWN_CHALLENGE_IDS: ReadonlySet<string> = new Set([
   'short-deck',
   'no-discards',
+  'short-circuit',
 ]);
 
 export interface BonusCardAttribution {

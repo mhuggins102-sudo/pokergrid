@@ -7,7 +7,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { slideDestinationsFrom, suitActionAvailable } from '../../game/actions';
+import { anyPerkAvailable, slideDestinationsFrom, suitActionAvailable } from '../../game/actions';
 import { Card, isJoker } from '../../game/cards';
 import { BONUS_HAND_LIMIT } from '../../game/bonusCards';
 import {
@@ -438,9 +438,12 @@ export const GameScreen = ({
 
     // Suit perks — fire when the button itself is visible. suitOK
     // already encodes "phase=awaiting-action + the perk has at least
-    // one valid target" so the button is on screen.
+    // one valid target" so the button is on screen. Skipped under
+    // Short Circuit: the perk is randomized so the drawn card's suit
+    // doesn't predict what fires, and the player has presumably
+    // already learned all four perks in earlier modes.
     const drawn = state.drawn;
-    if (drawn && !isJoker(drawn)) {
+    if (drawn && !isJoker(drawn) && !state.randomPerks) {
       const perkAvailable = suitActionAvailable(
         drawn,
         state.grid,
@@ -635,15 +638,28 @@ export const GameScreen = ({
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
 
   const drawn = state.drawn;
+  // "Is the perk button shown?" — in Short Circuit the drawn suit
+  // doesn't gate the perk (the reducer will pick a random suit
+  // anyway), so we just need ANY perk to be currently runnable.
+  // Outside Short Circuit the behavior is unchanged.
   const suitOK =
     state.phase.kind === 'awaiting-action' &&
-    suitActionAvailable(
-      drawn,
-      state.grid,
-      state.bonusDeck.length,
-      state.bonusCards.length,
-      state.noSwap
-    );
+    !!drawn &&
+    !isJoker(drawn) &&
+    (state.randomPerks
+      ? anyPerkAvailable(
+          state.grid,
+          state.bonusDeck.length,
+          state.bonusCards.length,
+          state.noSwap
+        )
+      : suitActionAvailable(
+          drawn,
+          state.grid,
+          state.bonusDeck.length,
+          state.bonusCards.length,
+          state.noSwap
+        ));
 
   // Trigger an animation, then dispatch the action when it ends.
   const performAnimated = (spec: AnimSpec, action: Action) => {
@@ -1588,8 +1604,12 @@ const renderBottom = (
           {!isJk && suitOK && suit && (
             <View ref={perkButtonRef} collapsable={false}>
               <NeonButton
-                label={SUIT_PERK_LABEL[suit]}
-                variant={SUIT_PERK_VARIANT[suit]}
+                // Short Circuit hides which perk you'll get behind a
+                // generic label + warn tint — the drawn card's suit
+                // doesn't predict the outcome, so showing the suit's
+                // perk name would be a lie.
+                label={state.randomPerks ? 'Perk ?' : SUIT_PERK_LABEL[suit]}
+                variant={state.randomPerks ? 'warn' : SUIT_PERK_VARIANT[suit]}
                 disabled={disabled}
                 onPress={() => {
                   haptic('light');

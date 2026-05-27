@@ -178,3 +178,22 @@ export const suitActionAvailable = (
       return canDrawBonus(bonusDeckSize);
   }
 };
+
+// Short Circuit variant: any of the four suit perks is a valid pick,
+// so the perk button should appear as long as AT LEAST ONE of them
+// is currently legal. Returns true iff hop / slide / destroy / bonus
+// has at least one runnable option in the current state.
+export const anyPerkAvailable = (
+  grid: Grid,
+  bonusDeckSize: number,
+  bonusHandSize: number = 0,
+  noSwap: boolean = false
+): boolean => {
+  if (canHop(grid)) return true;
+  if (canSlide(grid)) return true;
+  if (canDestroy(grid)) return true;
+  if (canDrawBonus(bonusDeckSize) && !(noSwap && bonusHandSize >= BONUS_HAND_LIMIT)) {
+    return true;
+  }
+  return false;
+};

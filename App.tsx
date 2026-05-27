@@ -350,6 +350,12 @@ const contextNoSwap = (_ctx: PlayContext): boolean => false;
 const contextNoDiscards = (ctx: PlayContext): boolean =>
   ctx.mode === 'challenge' && ctx.id === 'no-discards';
 
+// Short Circuit: the suit perk that fires is randomized. Set the
+// state flag here; GameScreen renders a generic perk button and
+// handleBeginSuitAction picks a random available perk at fire time.
+const contextRandomPerks = (ctx: PlayContext): boolean =>
+  ctx.mode === 'challenge' && ctx.id === 'short-circuit';
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
   // No bonus cards carry between TU levels — the easy/medium free
@@ -369,7 +375,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     undefined,
     deckExtras,
     superchargedDeckCards,
-    contextNoDiscards(context)
+    contextNoDiscards(context),
+    contextRandomPerks(context)
   );
   if (state.phase.kind === 'game-over') {
     return (
