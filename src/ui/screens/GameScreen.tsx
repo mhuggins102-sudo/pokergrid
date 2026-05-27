@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -26,7 +26,7 @@ import {
   AnimSpec,
   hiddenSlotsFor,
 } from '../components/AnimationLayer';
-import { styleFor as bonusStyleFor } from '../bonusCardCategory';
+import { categoryOf, styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { RemainingDeckModal } from '../components/RemainingDeckModal';
@@ -122,23 +122,21 @@ const HINT_BODY: Record<HintId, string> = {
     'The deck is almost empty. The run ends when the deck runs out or the grid fills up. Lines you haven\'t completed by then cost -25 each, so plan your last few placements carefully.',
 };
 
-// Which UI region each hint points at. Used by the popup to draw an
-// arrow from the centered modal to the relevant element. 'none' = the
-// hint stays a free-floating modal (no obvious single target).
-type HintAnchorRegion = 'grid' | 'bonus-strip' | 'drawn-area' | 'score-bar' | 'none';
+// Lower bound on cards-placed before the grid-effect hint can fire.
+// Easy / Medium ship a free starter bonus card and several of those
+// (Frugal, No Flushes, etc.) are already-satisfied on turn 1, which
+// would make the hint pop up before the player has done anything
+// "wrong" and tie the lesson to a confusing example. Waiting a few
+// turns gives the player time to interact and ensures the hint
+// arrives at a moment when the gameplay actually caused the trigger.
+const GRID_EFFECT_MIN_TURNS = 5;
 
-const HINT_ANCHOR: Record<HintId, HintAnchorRegion> = {
-  joker: 'grid',
-  'bonus-cap': 'bonus-strip',
-  'grid-effect': 'grid',
-  'hearts-swap': 'drawn-area',
-  'spades-slide': 'drawn-area',
-  'diamonds-destroy': 'drawn-area',
-  'clubs-bonus': 'drawn-area',
-  'bonus-held': 'bonus-strip',
-  'first-scoring-line': 'grid',
-  'low-deck': 'score-bar',
-};
+// Delay before any first-game hint actually shows after its trigger
+// condition first becomes true. Lets the underlying animation +
+// sound (joker landing, scoring flash, bonus card draw) finish so the
+// player has registered what just happened before the popup explains
+// it.
+const HINT_REVEAL_DELAY_MS = 700;
 
 const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
   joker: 'seenJokerHint',
@@ -161,6 +159,7 @@ const DrawnArea = ({
   deckCount,
   perkCount,
   onDeckPress,
+  deckCountRef,
 }: {
   drawnKey: string;
   children: React.ReactNode;
@@ -171,6 +170,9 @@ const DrawnArea = ({
   // When provided, tapping anywhere on the drawn card area opens the
   // remaining-deck preview (Easy difficulty only).
   onDeckPress?: () => void;
+  // First-game hint plumbing — when set, the deck-count label gets
+  // this ref so the low-deck hint can anchor its arrow on the count.
+  deckCountRef?: React.Ref<Text>;
 }) => {
   const { settings } = useSettings();
   const opacity = useSharedValue(1);
@@ -192,6 +194,7 @@ const DrawnArea = ({
       {children}
       {deckLabel !== null && (
         <Text
+          ref={deckCountRef}
           style={[
             styles.deckUnderDrawn,
             onDeckPress && styles.deckUnderDrawnLink,
@@ -238,13 +241,37 @@ export const GameScreen = ({
   const dragGhostKeyRef = useRef<string>('');
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Refs on the four anchor regions a hint can point at. Each region
-  // wraps an already-rendered subtree, so adding the ref doesn't
-  // change layout — only enables measureInWindow.
+  // Refs on the regions a hint can point at. We measureInWindow these
+  // on demand when a hint activates so the popup can position itself
+  // relative to the relevant element and the spotlight can punch a
+  // hole at the right place.
+  //
+  // Region wrappers (existing): used for whole-area anchors and for
+  // resolving more specific child positions below.
   const scoreBarRef = useRef<View>(null);
   const bonusStripRef = useRef<View>(null);
   const gridWrapRef = useRef<View>(null);
   const bottomRef = useRef<View>(null);
+  // Per-element anchors:
+  // - bonusCardRefs[i] points at the i-th chip in the bonus strip, so
+  //   the "first bonus card" + "specific grid-achievement card" hints
+  //   can highlight just that chip instead of the whole row.
+  // - gridCellRefs[idx] points at a single grid cell, used for the
+  //   joker hint (anchor on the joker's tile) and to compute the
+  //   bounds of a full row/column for the first-scoring-line hint.
+  // - perkButtonRef points at the active suit-perk action button so
+  //   the suit hint fires when the BUTTON first appears (not after
+  //   the player taps it).
+  // - deckCountRef points at the "deck N" text under the drawn card.
+  const bonusCardRefs = useRef<(View | null)[]>([]);
+  const gridCellRefs = useRef<(View | null)[]>([]);
+  const perkButtonRef = useRef<View>(null);
+  const deckCountRef = useRef<Text>(null);
+
+  // Pending-hint timer — we delay the popup by HINT_REVEAL_DELAY_MS so
+  // the triggering animation/sound has time to land. Stored in a ref
+  // so the dismiss handler can also cancel it if needed.
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const haptic = useHaptic();
   const playSound = useSound();
@@ -399,79 +426,187 @@ export const GameScreen = ({
     ]
   );
 
-  // First-time contextual hints — each fires once when its trigger state
-  // first appears in a run. Phase-specific hints (the four suit-action
-  // targets + the bonus picker) fire when their phase becomes active so
-  // the teach moment lines up with the new UI; everything else waits for
-  // 'awaiting-action' + no in-flight anim so a modal never pops up over a
-  // placement animation.
+  // Determine which first-time hint (if any) the current state should
+  // fire. Returns null when no hint is wanted or the current hint has
+  // already been seen. Phase-anchored hints (suit perks) fire when
+  // their option BUTTON first appears — i.e. the player has a card
+  // drawn whose suit perk is available — NOT after they've already
+  // selected it. State-based hints (joker, scoring, bonus, deck) fire
+  // when their state condition first becomes true.
+  const selectPendingHint = (): HintId | null => {
+    if (state.phase.kind !== 'awaiting-action') return null;
+
+    // Suit perks — fire when the button itself is visible. suitOK
+    // already encodes "phase=awaiting-action + the perk has at least
+    // one valid target" so the button is on screen.
+    const drawn = state.drawn;
+    if (drawn && !isJoker(drawn)) {
+      const perkAvailable = suitActionAvailable(
+        drawn,
+        state.grid,
+        state.bonusDeck.length,
+        state.bonusCards.length,
+        state.noSwap
+      );
+      if (perkAvailable) {
+        const s = drawn.suit;
+        if (s === 'H' && !settings.seenHeartsSwapHint) return 'hearts-swap';
+        if (s === 'S' && !settings.seenSpadesSlideHint) return 'spades-slide';
+        if (s === 'D' && !settings.seenDiamondsDestroyHint) return 'diamonds-destroy';
+        if (s === 'C' && !settings.seenClubsBonusHint) return 'clubs-bonus';
+      }
+    }
+
+    if (!settings.seenJokerHint && state.grid.some(c => c !== null && isJoker(c))) {
+      return 'joker';
+    }
+    if (!settings.seenBonusHeldHint && state.bonusCards.length >= 1) {
+      return 'bonus-held';
+    }
+    if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
+      return 'bonus-cap';
+    }
+    if (!settings.seenFirstScoringLineHint &&
+        liveReport.lines.some(l => l.hand !== null)) {
+      return 'first-scoring-line';
+    }
+    if (!settings.seenGridEffectHint &&
+        (liveReport.gridMultiplier !== 1 || liveReport.gridFlat !== 0)) {
+      // Skip grid-effect on the early turns when a free starter bonus
+      // card (Frugal / No Flushes / etc.) trivially satisfies its own
+      // condition on turn 1 — the lesson lands better when the
+      // multiplier shows up as a CONSEQUENCE of play, not as part of
+      // the starting state.
+      const placed = state.grid.filter(c => c !== null).length;
+      if (placed >= GRID_EFFECT_MIN_TURNS) return 'grid-effect';
+    }
+    if (!settings.seenLowDeckHint &&
+        state.deck.length > 0 && state.deck.length <= 5) {
+      return 'low-deck';
+    }
+    return null;
+  };
+
+  // Find the index of the held bonus card most plausibly responsible
+  // for the current grid-wide multiplier — used as the anchor for the
+  // 'grid-effect' hint. Picks a grid-category card whose Shapley value
+  // is non-zero (i.e. it's actually contributing); falls back to the
+  // first grid-category card if none are scoring yet.
+  const gridContributingCardIdx = (): number => {
+    let fallback = -1;
+    for (let i = 0; i < state.bonusCards.length; i++) {
+      const card = state.bonusCards[i];
+      if (categoryOf(card) !== 'grid') continue;
+      if (fallback < 0) fallback = i;
+      if ((bonusValues[i] ?? 0) !== 0) return i;
+    }
+    return fallback;
+  };
+
+  // Resolve the anchor rect (in screen coords) for a given hint. Some
+  // anchors are computed (joker tile, scoring line) and some come
+  // directly from a ref's measureInWindow. Returns null if the
+  // target element isn't currently on screen.
+  const resolveHintAnchor = (hint: HintId): Promise<HintAnchorRect | null> => {
+    const measure = (v: View | Text | null): Promise<HintAnchorRect | null> =>
+      new Promise(resolve => {
+        if (!v) return resolve(null);
+        v.measureInWindow((x, y, w, h) => {
+          if (w === 0 || h === 0) resolve(null);
+          else resolve({ x, y, w, h });
+        });
+      });
+
+    switch (hint) {
+      case 'bonus-held':
+        return measure(bonusCardRefs.current[0]);
+      case 'bonus-cap':
+        // Span all three chips together — the lesson IS that the hand
+        // is full, so highlighting the whole row reads better than
+        // singling out one chip.
+        return measure(bonusStripRef.current);
+      case 'grid-effect': {
+        const idx = gridContributingCardIdx();
+        if (idx >= 0) return measure(bonusCardRefs.current[idx]);
+        return measure(bonusStripRef.current);
+      }
+      case 'joker': {
+        const slot = state.grid.findIndex(c => c !== null && isJoker(c));
+        if (slot < 0) return Promise.resolve(null);
+        return measure(gridCellRefs.current[slot]);
+      }
+      case 'first-scoring-line': {
+        const line = liveReport.lines.find(l => l.hand !== null);
+        if (!line) return Promise.resolve(null);
+        // Bounds = first cell ∪ last cell of the line. measureInWindow
+        // both endpoints and union them so the spotlight covers the
+        // whole row/column, not just one tile.
+        const firstSlot = line.kind === 'row'
+          ? line.index * GRID_SIZE
+          : line.index;
+        const lastSlot = line.kind === 'row'
+          ? line.index * GRID_SIZE + (GRID_SIZE - 1)
+          : line.index + (GRID_SIZE - 1) * GRID_SIZE;
+        return Promise.all([
+          measure(gridCellRefs.current[firstSlot]),
+          measure(gridCellRefs.current[lastSlot]),
+        ]).then(([a, b]) => {
+          if (!a || !b) return a ?? b;
+          const x = Math.min(a.x, b.x);
+          const y = Math.min(a.y, b.y);
+          const x2 = Math.max(a.x + a.w, b.x + b.w);
+          const y2 = Math.max(a.y + a.h, b.y + b.h);
+          return { x, y, w: x2 - x, h: y2 - y };
+        });
+      }
+      case 'hearts-swap':
+      case 'spades-slide':
+      case 'diamonds-destroy':
+      case 'clubs-bonus':
+        return measure(perkButtonRef.current);
+      case 'low-deck':
+        return measure(deckCountRef.current);
+    }
+  };
+
+  // First-time contextual hints — fire after HINT_REVEAL_DELAY_MS so
+  // the underlying placement / scoring / draw animation has time to
+  // settle before the popup explains it. The dep array re-runs the
+  // effect on any state change relevant to a hint trigger; the
+  // setTimeout cleanup cancels the pending fire if the player acts
+  // before it elapses, and on fire we measure the anchor.
   useEffect(() => {
     if (activeHint !== null) return;
     if (anim) return;
-    const phase = state.phase.kind;
-
-    // Phase-anchored hints fire as soon as their UI shows.
-    if (phase === 'awaiting-target-hop' && !settings.seenHeartsSwapHint) {
-      setActiveHint('hearts-swap');
-      return;
-    }
-    if (phase === 'awaiting-target-slide-source' && !settings.seenSpadesSlideHint) {
-      setActiveHint('spades-slide');
-      return;
-    }
-    if (phase === 'awaiting-target-destroy' && !settings.seenDiamondsDestroyHint) {
-      setActiveHint('diamonds-destroy');
-      return;
-    }
-    if (phase === 'bonus-card-resolving' && !settings.seenClubsBonusHint) {
-      setActiveHint('clubs-bonus');
-      return;
-    }
-
-    // State-based hints only fire when the player is between actions.
-    if (phase !== 'awaiting-action') return;
-
-    if (!settings.seenJokerHint && state.grid.some(c => c !== null && isJoker(c))) {
-      setActiveHint('joker');
-      return;
-    }
-    if (!settings.seenBonusHeldHint && state.bonusCards.length >= 1) {
-      setActiveHint('bonus-held');
-      return;
-    }
-    if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
-      setActiveHint('bonus-cap');
-      return;
-    }
-    if (
-      !settings.seenFirstScoringLineHint &&
-      liveReport.lines.some(l => l.hand !== null)
-    ) {
-      setActiveHint('first-scoring-line');
-      return;
-    }
-    if (
-      !settings.seenGridEffectHint &&
-      (liveReport.gridMultiplier !== 1 || liveReport.gridFlat !== 0)
-    ) {
-      setActiveHint('grid-effect');
-      return;
-    }
-    if (
-      !settings.seenLowDeckHint &&
-      state.deck.length > 0 &&
-      state.deck.length <= 5
-    ) {
-      setActiveHint('low-deck');
-      return;
-    }
+    const desired = selectPendingHint();
+    if (!desired) return;
+    let canceled = false;
+    const id = setTimeout(async () => {
+      // resolveHintAnchor is async (it awaits measureInWindow). If the
+      // effect cleaned up between schedule and the async resolve, we
+      // must NOT set state — otherwise a hint can fire for a state
+      // the player has already left.
+      const rect = await resolveHintAnchor(desired);
+      if (canceled) return;
+      setHintAnchor(rect);
+      setActiveHint(desired);
+    }, HINT_REVEAL_DELAY_MS);
+    hintTimerRef.current = id;
+    return () => {
+      canceled = true;
+      clearTimeout(id);
+      if (hintTimerRef.current === id) hintTimerRef.current = null;
+    };
   }, [
     activeHint,
     anim,
     state.phase.kind,
     state.grid,
+    state.drawn,
     state.bonusCards.length,
+    state.bonusDeck.length,
     state.deck.length,
+    state.noSwap,
     liveReport.gridMultiplier,
     liveReport.gridFlat,
     liveReport.lines,
@@ -487,39 +622,14 @@ export const GameScreen = ({
     settings.seenLowDeckHint,
   ]);
 
-  // When a hint becomes active, measure its target region so the arrow
-  // can point at it. measureInWindow is async (fires after the next
-  // layout pass), so the anchor briefly stays null and the modal
-  // renders centered with no arrow until the rect arrives.
-  useEffect(() => {
-    if (!activeHint) {
-      setHintAnchor(null);
-      return;
-    }
-    const region = HINT_ANCHOR[activeHint];
-    const ref =
-      region === 'grid' ? gridWrapRef
-      : region === 'bonus-strip' ? bonusStripRef
-      : region === 'drawn-area' ? bottomRef
-      : region === 'score-bar' ? scoreBarRef
-      : null;
-    if (!ref?.current) {
-      setHintAnchor(null);
-      return;
-    }
-    // Defer one frame to make sure the modal mounts before we measure;
-    // some animations push the popup around briefly on first render.
-    const id = setTimeout(() => {
-      ref.current?.measureInWindow((x, y, w, h) => {
-        setHintAnchor({ x, y, w, h });
-      });
-    }, 60);
-    return () => clearTimeout(id);
-  }, [activeHint]);
-
   const dismissHint = () => {
     if (activeHint) updateSettings({ [HINT_SETTING_KEY[activeHint]]: true });
     setActiveHint(null);
+    setHintAnchor(null);
+    if (hintTimerRef.current) {
+      clearTimeout(hintTimerRef.current);
+      hintTimerRef.current = null;
+    }
   };
 
   const nextSlot = useMemo(() => nextSpiralSlot(state.grid), [state.grid]);
@@ -975,6 +1085,7 @@ export const GameScreen = ({
           cards={state.bonusCards}
           values={bonusValues}
           onCardPress={i => setBonusDetailIdx(i)}
+          cardRefs={bonusCardRefs}
         />
       </View>
 
@@ -990,6 +1101,7 @@ export const GameScreen = ({
               ghostSlots={dragGhost ?? undefined}
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
+              cellRefs={gridCellRefs}
             />
             <AnimationLayer anim={anim} />
           </View>
@@ -1007,7 +1119,9 @@ export const GameScreen = ({
           drawnKey,
           !!anim,
           settings.colorBlindAssist,
-          deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined
+          deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined,
+          perkButtonRef,
+          deckCountRef
         )}
       </View>
 
@@ -1074,6 +1188,17 @@ const hintBodyFor = (hint: HintId, bonusDeclineAllowed: boolean): string => {
   return HINT_BODY[hint];
 };
 
+// Spotlight halo inflation — extra px around the anchor that stays
+// undimmed so the highlighted element has a little breathing room and
+// the glow ring looks intentional rather than touching the chrome.
+const SPOTLIGHT_PAD = 6;
+// Distance between the popup edge and the spotlighted anchor — leaves
+// room for the arrow to actually draw and keeps the chrome from
+// kissing the highlighted element.
+const POPUP_ANCHOR_GAP = 22;
+// Outer margin keeping the popup away from screen edges.
+const POPUP_SCREEN_MARGIN = 16;
+
 const HintModal = ({
   hint,
   anchor,
@@ -1085,26 +1210,72 @@ const HintModal = ({
   bonusDeclineAllowed: boolean;
   onDismiss: () => void;
 }) => {
-  // The popup is centered inside a fullscreen flex backdrop, but we
-  // also need its rect in screen coords to draw an arrow from its
-  // nearest edge. measureInWindow fires after layout, so the rect
-  // arrives one frame after the modal opens — the arrow simply
-  // doesn't render until both rects are known.
-  const sheetRef = useRef<View>(null);
-  const [popup, setPopup] = useState<HintAnchorRect | null>(null);
+  // The popup needs its own rect in screen coords so the arrow can
+  // start from its edge AND so we can position it next to the
+  // anchor rather than always centering. Captured via onLayout — on
+  // first render we draw at the screen center hidden, then re-render
+  // at the computed position once we know the popup's size.
+  const [popupSize, setPopupSize] = useState<{ w: number; h: number } | null>(null);
 
+  // Reset measurement when a new hint opens (or this one closes).
   useEffect(() => {
-    if (hint === null) {
-      setPopup(null);
-      return;
-    }
-    const id = setTimeout(() => {
-      sheetRef.current?.measureInWindow((x, y, w, h) => {
-        setPopup({ x, y, w, h });
-      });
-    }, 80);
-    return () => clearTimeout(id);
+    if (hint === null) setPopupSize(null);
   }, [hint]);
+
+  const win = Dimensions.get('window');
+  // The popup never exceeds 340 wide or the viewport (less margins),
+  // whichever is smaller. Set explicitly so onLayout reports a stable
+  // size on the first pass.
+  const popupWidth = Math.min(340, win.width - POPUP_SCREEN_MARGIN * 2);
+
+  // Compute popup position. If we have both an anchor and the popup's
+  // measured size, place it on whichever side of the anchor has more
+  // room (with a small gap for the arrow). Otherwise center. While
+  // popupSize is still null we render off-screen so the user doesn't
+  // see a flash at the center.
+  let popupLeft = -9999;
+  let popupTop = -9999;
+  let popupRect: HintAnchorRect | null = null;
+  if (popupSize) {
+    if (anchor) {
+      const aboveSpace = anchor.y - POPUP_SCREEN_MARGIN;
+      const belowSpace = win.height - (anchor.y + anchor.h) - POPUP_SCREEN_MARGIN;
+      const needsH = popupSize.h + POPUP_ANCHOR_GAP;
+      const placeAbove =
+        aboveSpace >= needsH ? true :
+        belowSpace >= needsH ? false :
+        aboveSpace > belowSpace; // neither fits cleanly — pick the bigger half
+      popupTop = placeAbove
+        ? Math.max(POPUP_SCREEN_MARGIN, anchor.y - POPUP_ANCHOR_GAP - popupSize.h)
+        : Math.min(
+            win.height - popupSize.h - POPUP_SCREEN_MARGIN,
+            anchor.y + anchor.h + POPUP_ANCHOR_GAP
+          );
+      // Horizontally align with anchor center, then clamp to viewport.
+      popupLeft = Math.max(
+        POPUP_SCREEN_MARGIN,
+        Math.min(
+          win.width - popupSize.w - POPUP_SCREEN_MARGIN,
+          anchor.x + anchor.w / 2 - popupSize.w / 2
+        )
+      );
+    } else {
+      popupLeft = (win.width - popupSize.w) / 2;
+      popupTop = (win.height - popupSize.h) / 2;
+    }
+    popupRect = { x: popupLeft, y: popupTop, w: popupSize.w, h: popupSize.h };
+  }
+
+  // Inflated anchor for the spotlight cutout — gives the highlighted
+  // element a breathing halo of undimmed pixels.
+  const spotlight = anchor
+    ? {
+        x: Math.max(0, anchor.x - SPOTLIGHT_PAD),
+        y: Math.max(0, anchor.y - SPOTLIGHT_PAD),
+        w: Math.min(win.width, anchor.w + SPOTLIGHT_PAD * 2),
+        h: Math.min(win.height, anchor.h + SPOTLIGHT_PAD * 2),
+      }
+    : null;
 
   return (
     <Modal
@@ -1113,12 +1284,94 @@ const HintModal = ({
       animationType="fade"
       onRequestClose={onDismiss}
     >
-      <Pressable style={hintModalStyles.backdrop} onPress={onDismiss}>
+      {/* Full-screen tap catcher — taps anywhere off the popup dismiss
+          the hint. The dim layers stack on top with pointerEvents none
+          so touches still reach this. */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+        {spotlight ? (
+          // Four dim rectangles forming a "hole" around the anchor so
+          // the spotlighted element stays at full brightness while
+          // everything else fades back. Each rect uses pointerEvents
+          // none so the underlying tap-catcher still dismisses.
+          <>
+            <View
+              pointerEvents="none"
+              style={[
+                hintModalStyles.dim,
+                { top: 0, left: 0, right: 0, height: spotlight.y },
+              ]}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                hintModalStyles.dim,
+                { top: spotlight.y + spotlight.h, left: 0, right: 0, bottom: 0 },
+              ]}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                hintModalStyles.dim,
+                { top: spotlight.y, left: 0, width: spotlight.x, height: spotlight.h },
+              ]}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                hintModalStyles.dim,
+                {
+                  top: spotlight.y,
+                  left: spotlight.x + spotlight.w,
+                  right: 0,
+                  height: spotlight.h,
+                },
+              ]}
+            />
+            {/* Soft glow ring around the anchor — adds an intentional
+                halo so the player reads the hole as "this thing" rather
+                than "the dim happened to miss a spot". */}
+            <View
+              pointerEvents="none"
+              style={[
+                hintModalStyles.halo,
+                {
+                  left: spotlight.x,
+                  top: spotlight.y,
+                  width: spotlight.w,
+                  height: spotlight.h,
+                },
+              ]}
+            />
+          </>
+        ) : (
+          // No anchor → uniform dim across the whole screen.
+          <View pointerEvents="none" style={[hintModalStyles.dim, StyleSheet.absoluteFillObject]} />
+        )}
+
+        {/* Popup — absolutely positioned. Wrapped in its own Pressable
+            so taps on the chrome don't bubble up to the dismiss
+            handler on the backdrop. */}
         <Pressable
-          ref={sheetRef}
           collapsable={false}
-          style={hintModalStyles.sheet}
           onPress={() => {}}
+          onLayout={e => {
+            const { width: w, height: h } = e.nativeEvent.layout;
+            // Only set when dimensions stabilise — avoids a re-render
+            // loop if the popup is wrapped by a slowly-laying-out
+            // ancestor.
+            if (!popupSize || popupSize.w !== w || popupSize.h !== h) {
+              setPopupSize({ w, h });
+            }
+          }}
+          style={[
+            hintModalStyles.sheet,
+            {
+              left: popupLeft,
+              top: popupTop,
+              width: popupWidth,
+              opacity: popupSize ? 1 : 0,
+            },
+          ]}
         >
           <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
           <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
@@ -1129,8 +1382,9 @@ const HintModal = ({
             <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
           </View>
         </Pressable>
-        {popup && anchor && (
-          <HintArrow popup={popup} anchor={anchor} color={colors.accent} />
+
+        {popupRect && anchor && (
+          <HintArrow popup={popupRect} anchor={anchor} color={colors.accent} />
         )}
       </Pressable>
     </Modal>
@@ -1138,16 +1392,25 @@ const HintModal = ({
 };
 
 const hintModalStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 4, 12, 0.72)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
+  // One of four spotlight strips that together form a "hole" around
+  // the anchor. backgroundColor stays consistent regardless of which
+  // strip; only position differs per strip.
+  dim: {
+    position: 'absolute',
+    backgroundColor: 'rgba(2, 4, 12, 0.78)',
+  },
+  // Soft glow ring around the spotlighted element — drawn as a thin
+  // border with a generous shadow so the highlighted region reads as
+  // "lit up" rather than just "not dimmed".
+  halo: {
+    position: 'absolute',
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    ...glow(colors.accent, 14, 0.5),
   },
   sheet: {
-    width: '100%',
-    maxWidth: 340,
+    position: 'absolute',
     backgroundColor: colors.bgPanel,
     borderColor: colors.accent,
     borderWidth: 1,
@@ -1277,7 +1540,12 @@ const renderBottom = (
   drawnKey: string,
   animating: boolean,
   colorBlindAssist: boolean,
-  onDeckPress?: () => void
+  onDeckPress?: () => void,
+  // First-game hint plumbing — refs the awaiting-action layout wires
+  // up so the suit-perk hint can anchor on the perk button and the
+  // low-deck hint can anchor on the "deck N" text.
+  perkButtonRef?: React.Ref<View>,
+  deckCountRef?: React.Ref<Text>
 ) => {
   const p = state.phase;
   const disabled = animating;
@@ -1293,6 +1561,7 @@ const renderBottom = (
           deckCount={state.deck.length}
           perkCount={state.perkSpent.length}
           onDeckPress={onDeckPress}
+          deckCountRef={deckCountRef}
         >
           <Text style={styles.drawnLabel}>Drawn</Text>
           {animating ? (
@@ -1310,17 +1579,19 @@ const renderBottom = (
             style={styles.stackedBtn}
           />
           {!isJk && suitOK && suit && (
-            <NeonButton
-              label={SUIT_PERK_LABEL[suit]}
-              variant={SUIT_PERK_VARIANT[suit]}
-              disabled={disabled}
-              onPress={() => {
-                haptic('light');
-                playSound('tap');
-                dispatch({ type: 'BEGIN_SUIT_ACTION' });
-              }}
-              style={styles.stackedBtn}
-            />
+            <View ref={perkButtonRef} collapsable={false}>
+              <NeonButton
+                label={SUIT_PERK_LABEL[suit]}
+                variant={SUIT_PERK_VARIANT[suit]}
+                disabled={disabled}
+                onPress={() => {
+                  haptic('light');
+                  playSound('tap');
+                  dispatch({ type: 'BEGIN_SUIT_ACTION' });
+                }}
+                style={styles.stackedBtn}
+              />
+            </View>
           )}
           {!isJk && !state.noDiscards && (
             <NeonButton

@@ -32,6 +32,10 @@ interface Props {
   // Render with smaller cells + sm cards. Used by ResultScreen to keep the
   // whole results page visible without scrolling.
   compact?: boolean;
+  // First-game hint plumbing: when supplied, the grid writes each cell's
+  // Pressable into this array by slot index so the parent can
+  // measureInWindow a specific cell (e.g. the joker's tile).
+  cellRefs?: React.MutableRefObject<(View | null)[]>;
 }
 
 const FULL_CELL = gridCellSize;
@@ -73,6 +77,7 @@ export const GridView = ({
   onSlotPress,
   onLinePress,
   compact,
+  cellRefs,
 }: Props) => {
   const CELL = compact ? COMPACT_CELL : FULL_CELL;
   const cardSizeKey = compact ? 'sm' : 'md';
@@ -115,6 +120,9 @@ export const GridView = ({
                 key={idx}
                 style={[styles.slot, { width: CELL, height: CELL }]}
                 onPress={onSlotPress ? () => onSlotPress(idx) : undefined}
+                ref={el => {
+                  if (cellRefs) cellRefs.current[idx] = el;
+                }}
               >
                 <View style={styles.slotInner}>
                   <CardTile card={cardHere} highlighted={isHighlighted} size={cardSizeKey} />

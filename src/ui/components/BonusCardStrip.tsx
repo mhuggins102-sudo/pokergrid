@@ -20,6 +20,10 @@ interface Props {
   selectedIdx?: number | null;
   // Optional press handler (used during replace flow).
   onCardPress?: (idx: number) => void;
+  // First-game hint plumbing: when supplied, the strip writes each
+  // slot's wrapper View into this array by index so the parent can
+  // measureInWindow the specific chip a hint is pointing at.
+  cardRefs?: React.MutableRefObject<(View | null)[]>;
 }
 
 const ValueBadge = ({ value }: { value: number | undefined }) => {
@@ -123,7 +127,7 @@ const EmptyChip = () => (
   </View>
 );
 
-export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Props) => (
+export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress, cardRefs }: Props) => (
   <View style={styles.wrap}>
     <View style={styles.strip}>
       {Array.from({ length: BONUS_HAND_LIMIT }, (_, i) => {
@@ -132,7 +136,14 @@ export const BonusCardStrip = ({ cards, values, selectedIdx, onCardPress }: Prop
         const isSelected = selectedIdx === i;
         const pressable = !!onCardPress && filled;
         return (
-          <View key={i} style={styles.slot}>
+          <View
+            key={i}
+            style={styles.slot}
+            collapsable={false}
+            ref={el => {
+              if (cardRefs) cardRefs.current[i] = el;
+            }}
+          >
             <ValueBadge value={filled ? values?.[i] : undefined} />
             {filled ? (
               // Keyed by card id so a replacement remounts the chip with a
