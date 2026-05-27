@@ -10,7 +10,7 @@ import {
   TARGET_BY_DIFFICULTY,
   UNDOS_BY_DIFFICULTY,
 } from '../../game/rules';
-import { colors, fonts, glow, radius, spacing } from '../theme';
+import { colors, difficultyColor, fonts, glow, radius, spacing } from '../theme';
 
 // All four free-play difficulty modes, in the order they appear on Home.
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
@@ -65,7 +65,12 @@ export const DifficultyInfoModal = ({ visible, onClose }: Props) => (
             {DIFFS.map(d => (
               <Text
                 key={d}
-                style={[styles.cell, styles.diffCell, styles.headerText]}
+                style={[
+                  styles.cell,
+                  styles.diffCell,
+                  styles.headerText,
+                  { color: difficultyColor(d), textShadowColor: difficultyColor(d) },
+                ]}
               >
                 {DIFF_LABEL[d]}
               </Text>

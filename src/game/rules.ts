@@ -63,10 +63,11 @@ export const NO_DISCARDS_BY_DIFFICULTY: Record<Difficulty, boolean> = {
   extreme: true,
 };
 
-// Easy can peek the remaining-deck composition mid-run (RemainingDeckModal).
+// Easy + Medium can peek the remaining-deck composition mid-run
+// (RemainingDeckModal). Hard and Extreme run blind.
 export const CAN_PREVIEW_DECK_BY_DIFFICULTY: Record<Difficulty, boolean> = {
   easy: true,
-  medium: false,
+  medium: true,
   hard: false,
   extreme: false,
 };
