@@ -19,17 +19,6 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
         <NeonButton label="Back" variant="ghost" size="sm" onPress={onBack} />
       </View>
 
-      <Text style={styles.intro}>
-        Challenges are playable variants that change how the deck or
-        the rules work. Clear the 500-point bar to mark each one
-        complete. (Passive end-of-run goals that don't change the
-        gameplay live on the Achievements page now.)
-      </Text>
-
-      <Text style={styles.rulesetNote}>
-        All challenges run on the Hard ruleset: 1 joker, no undos, no starting bonus card, and ♣ at the bonus-hand cap forces a swap.
-      </Text>
-
       <View style={styles.list}>
         {CHALLENGES.map(c => {
           const done = stats.challengesDone.includes(c.id);
@@ -75,29 +64,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 3,
     textTransform: 'uppercase',
-  },
-  intro: {
-    color: colors.textMid,
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: spacing.sm,
-  },
-  // Sits between the intro and the challenge list. Tinted with the
-  // accent color + a subtle border so it reads as a callout rather
-  // than body copy — important info but not a section header.
-  rulesetNote: {
-    color: colors.accent,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    lineHeight: 15,
-    letterSpacing: 0.5,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.accent,
-    backgroundColor: 'rgba(107, 214, 255, 0.06)',
   },
   list: { gap: spacing.sm },
   card: {
