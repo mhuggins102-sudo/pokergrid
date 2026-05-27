@@ -11,9 +11,15 @@ import type { GameState } from './state';
 //   - No Discards: the Discard button is unavailable
 //   - Short Circuit: the suit perk you get is randomized — you don't know
 //     which of the four perks will fire until you commit
+//   - Poker Purist: no bonus cards at all — no starter, no ♣ perk draws,
+//     no in-game or end-game multipliers
 // ============================================================================
 
-export type ChallengeId = 'short-deck' | 'no-discards' | 'short-circuit';
+export type ChallengeId =
+  | 'short-deck'
+  | 'no-discards'
+  | 'short-circuit'
+  | 'poker-purist';
 
 export interface Challenge {
   id: ChallengeId;
@@ -55,6 +61,16 @@ export const CHALLENGES: Challenge[] = [
     // is true and handleBeginSuitAction picks a uniformly-random perk
     // from those currently available). Hitting the score target is the
     // only end-state check.
+    conditionMet: () => true,
+  },
+  {
+    id: 'poker-purist',
+    name: 'Poker Purist',
+    goal: 'Score 350+ with no bonus cards at all — no starter, no ♣ draws, no multipliers. Pure rows and columns scoring as 5-card poker hands.',
+    scoreTarget: 350,
+    // Enforced at newGame: bonusCards and bonusDeck are both empty,
+    // which naturally disables ♣ (canDrawBonus returns false) and
+    // hides the bonus card strip in the UI.
     conditionMet: () => true,
   },
 ];

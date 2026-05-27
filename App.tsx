@@ -356,6 +356,12 @@ const contextNoDiscards = (ctx: PlayContext): boolean =>
 const contextRandomPerks = (ctx: PlayContext): boolean =>
   ctx.mode === 'challenge' && ctx.id === 'short-circuit';
 
+// Poker Purist: zero bonus cards anywhere. newGame uses this to
+// empty both the starter hand and the bonus deck; GameScreen hides
+// the bonus card strip when this flag is on.
+const contextNoBonusCards = (ctx: PlayContext): boolean =>
+  ctx.mode === 'challenge' && ctx.id === 'poker-purist';
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
   // No bonus cards carry between TU levels — the easy/medium free
@@ -376,7 +382,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     deckExtras,
     superchargedDeckCards,
     contextNoDiscards(context),
-    contextRandomPerks(context)
+    contextRandomPerks(context),
+    contextNoBonusCards(context)
   );
   if (state.phase.kind === 'game-over') {
     return (

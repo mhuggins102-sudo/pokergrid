@@ -116,6 +116,12 @@ export interface GameState {
   // those currently available (hop / slide / destroy / bonus). The
   // drawn card is still spent in perkSpent.
   randomPerks: boolean;
+  // True when the Poker Purist challenge is active. The bonus deck
+  // and hand both start empty and stay that way — no starter, no ♣
+  // draws (canDrawBonus returns false against an empty bonusDeck),
+  // and the UI hides the bonus card strip entirely. Scoring becomes
+  // pure row + column poker math with no multiplier meta-layer.
+  noBonusCards: boolean;
 }
 
 export type Action =
@@ -189,7 +195,12 @@ export const newGame = (
   // Optional: lock in Short Circuit rules — the drawn card's suit no
   // longer dictates which perk fires; instead BEGIN_SUIT_ACTION picks
   // a uniformly-random perk from those currently available.
-  randomPerks = false
+  randomPerks = false,
+  // Optional: lock in Poker Purist rules — no bonus cards anywhere.
+  // Both the starting hand and the bonus deck are emptied; ♣ becomes
+  // unavailable (canDrawBonus → false against an empty deck) and the
+  // UI hides the bonus card strip.
+  noBonusCards = false
 ): GameState => {
   // Joker count is determined by difficulty (Easy ships 2 jokers, Hard
   // ships 1, Extreme ships 0). Targets-Up infers difficulty from level
@@ -238,17 +249,24 @@ export const newGame = (
   }
   const drawable = BONUS_DECK_POOL.filter(c => !excludedBaseIds.has(c.id));
   const shuffledBonus = shuffle(drawable, rng);
-  const starterCount = STARTER_BONUS_BY_DIFFICULTY[difficulty];
+  // Poker Purist short-circuits the whole bonus setup — no starter
+  // draw, no shuffled deck, no carry-overs. Hand and deck both stay
+  // empty for the entire run.
+  const starterCount = noBonusCards ? 0 : STARTER_BONUS_BY_DIFFICULTY[difficulty];
   // Player's hand starts with the kept carry-overs first, then the
   // difficulty-based free starter on top (capped at BONUS_HAND_LIMIT just
   // in case future power-ups push the carry to 3 cards on hard).
-  const starterDraw = shuffledBonus.slice(0, starterCount);
-  const bonusCards = [...keptBonusCards, ...starterDraw].slice(0, BONUS_HAND_LIMIT);
+  const starterDraw = noBonusCards ? [] : shuffledBonus.slice(0, starterCount);
+  const bonusCards = noBonusCards
+    ? []
+    : [...keptBonusCards, ...starterDraw].slice(0, BONUS_HAND_LIMIT);
   // Bonus deck = standard pool minus the drawn starter + powered carry-overs
   // from earlier levels. Shuffled together so the powered cards can resurface
-  // at any time.
+  // at any time. Poker Purist leaves it empty so ♣ never has anything to draw.
   const remainingPool = shuffledBonus.slice(starterCount);
-  const bonusDeck = shuffle([...remainingPool, ...deckExtras], rng);
+  const bonusDeck = noBonusCards
+    ? []
+    : shuffle([...remainingPool, ...deckExtras], rng);
   const [first, ...rest] = deck;
   const grid = placeAtSpiralNext(emptyGrid(), first);
   const initial: GameState = {
@@ -273,6 +291,7 @@ export const newGame = (
     noDiscards: noDiscards || NO_DISCARDS_BY_DIFFICULTY[difficulty],
     bonusDeclineAllowed: BONUS_DECLINE_AT_CAP_BY_DIFFICULTY[difficulty],
     randomPerks,
+    noBonusCards,
   };
   return drawNext(initial);
 };
@@ -553,8 +572,22 @@ const handleCancelAction = (s: GameState): GameState => {
     case 'awaiting-target-hop':
     case 'awaiting-target-slide-source':
     case 'awaiting-target-destroy':
-    case 'bonus-card-resolving':
       return { ...s, phase: { kind: s.phase.returnTo } };
+    case 'bonus-card-resolving':
+      // True cancel: put the 2 drawn bonus cards back at the FRONT
+      // of the bonus deck (preserving order) and return to
+      // awaiting-action with the drawn playing card unchanged. This
+      // is the rollback path for Short Circuit, where the player
+      // didn't choose to draw bonus — the random perk roll forced
+      // it — so they shouldn't lose either resource on a back-out.
+      // In normal mode this isn't reached via UI; the player only
+      // sees "Decline both" (BONUS_DECLINE), which keeps its
+      // existing spend-the-drawn-card semantics.
+      return {
+        ...s,
+        bonusDeck: [...s.phase.drawn, ...s.bonusDeck],
+        phase: { kind: s.phase.returnTo },
+      };
   }
 };
 

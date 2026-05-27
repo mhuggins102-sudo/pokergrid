@@ -1096,14 +1096,16 @@ export const GameScreen = ({
           undoState={undoState}
         />
       </View>
-      <View ref={bonusStripRef} collapsable={false}>
-        <BonusCardStrip
-          cards={state.bonusCards}
-          values={bonusValues}
-          onCardPress={i => setBonusDetailIdx(i)}
-          cardRefs={bonusCardRefs}
-        />
-      </View>
+      {!state.noBonusCards && (
+        <View ref={bonusStripRef} collapsable={false}>
+          <BonusCardStrip
+            cards={state.bonusCards}
+            values={bonusValues}
+            onCardPress={i => setBonusDetailIdx(i)}
+            cardRefs={bonusCardRefs}
+          />
+        </View>
+      )}
 
       <View ref={gridWrapRef} style={styles.gridWrap} collapsable={false}>
         <GestureDetector gesture={panGesture}>
@@ -1786,13 +1788,27 @@ const renderBottom = (
             );
           })}
         </View>
-        {(!atMax || state.bonusDeclineAllowed) && (
+        {state.randomPerks ? (
+          // Short Circuit: the player didn't choose to draw bonus —
+          // the random perk roll forced it — so offer a true cancel
+          // that puts the drawn cards back in the bonus deck AND
+          // keeps the drawn playing card. Replaces "Decline both"
+          // (which spends the playing card) entirely in this mode.
           <NeonButton
-            label="Decline both"
+            label="Cancel"
             variant="secondary"
             size="sm"
-            onPress={() => dispatch({ type: 'BONUS_DECLINE' })}
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
           />
+        ) : (
+          (!atMax || state.bonusDeclineAllowed) && (
+            <NeonButton
+              label="Decline both"
+              variant="secondary"
+              size="sm"
+              onPress={() => dispatch({ type: 'BONUS_DECLINE' })}
+            />
+          )
         )}
       </View>
     );
