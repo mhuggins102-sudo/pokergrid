@@ -22,7 +22,8 @@ export const useGame = (
   deckExtras?: BonusCard[],
   superchargedDeckCards?: Card[],
   noDiscards?: boolean,
-  randomPerks?: boolean
+  randomPerks?: boolean,
+  noBonusCards?: boolean
 ): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
@@ -38,7 +39,8 @@ export const useGame = (
         keptBonusCards,
         deckExtras,
         superchargedDeckCards,
-        randomPerks ?? false
+        randomPerks ?? false,
+        noBonusCards ?? false
       )
   );
 

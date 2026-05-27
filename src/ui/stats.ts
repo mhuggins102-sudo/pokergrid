@@ -26,6 +26,7 @@ const KNOWN_CHALLENGE_IDS: ReadonlySet<string> = new Set([
   'short-deck',
   'no-discards',
   'short-circuit',
+  'poker-purist',
 ]);
 
 export interface BonusCardAttribution {

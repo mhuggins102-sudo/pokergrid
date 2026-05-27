@@ -26,6 +26,7 @@ const baseState = (overrides: Partial<GameState>): GameState => ({
   noDiscards: false,
   bonusDeclineAllowed: false,
   randomPerks: false,
+  noBonusCards: false,
   ...overrides,
 });
 
@@ -362,6 +363,86 @@ describe('GameState — Short Circuit challenge', () => {
       randomPerks: true,
     });
     const after = step(state, { type: 'BEGIN_SUIT_ACTION' }, rngAlwaysZero);
+    expect(after.phase.kind).toBe('awaiting-action');
+  });
+});
+
+describe('GameState — Short Circuit cancel restores the bonus deck', () => {
+  // When the random perk lands on ♣ Bonus and the player cancels,
+  // both the drawn playing card AND the 2 drawn bonus cards must
+  // be returned intact — otherwise the player loses resources for
+  // an outcome they didn't choose.
+  test('CANCEL_ACTION from bonus-card-resolving restores drawn bonus cards to deck front', () => {
+    const club = { kind: 'standard' as const, rank: '5' as const, suit: 'C' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+    const stub: import('../src/game/bonusCards').BonusCard = {
+      id: 'hand-pair-x4',
+      title: 'Pair',
+      mult: '×4',
+      description: 'Pair lines ×4.',
+      name: 'Pair',
+    } as any;
+    const otherStub: import('../src/game/bonusCards').BonusCard = {
+      ...stub,
+      id: 'hand-trips-x6',
+      title: 'Trips',
+    } as any;
+    const tail: import('../src/game/bonusCards').BonusCard = {
+      ...stub,
+      id: 'hand-flush-x4',
+      title: 'Flush',
+    } as any;
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      randomPerks: true,
+      bonusDeck: [stub, otherStub, tail],
+      bonusCards: [],
+    });
+    const begun = step(state, { type: 'BEGIN_SUIT_ACTION' }, () => 0.99);
+    // rng=0.99 → last candidate. With empty grid only ♣ qualifies,
+    // so the perk routes to bonus-card-resolving regardless.
+    expect(begun.phase.kind).toBe('bonus-card-resolving');
+    expect(begun.bonusDeck).toEqual([tail]); // top 2 popped
+    const canceled = step(begun, { type: 'CANCEL_ACTION' });
+    expect(canceled.phase.kind).toBe('awaiting-action');
+    // Drawn cards restored at the FRONT, original order preserved.
+    expect(canceled.bonusDeck).toEqual([stub, otherStub, tail]);
+    // Drawn playing card is untouched — player can still place it.
+    expect(canceled.drawn).toEqual(club);
+  });
+});
+
+describe('GameState — Poker Purist challenge', () => {
+  test('newGame with noBonusCards leaves the hand and deck empty', () => {
+    const state = newGame(
+      'easy', // easy normally ships a starter; noBonusCards must override
+      seededRng(1),
+      undefined, // target
+      undefined, // deckLimit
+      false,     // noSwap
+      false,     // noDiscards
+      [],        // keptBonusCards
+      [],        // deckExtras
+      [],        // superchargedDeckCards
+      false,     // randomPerks
+      true       // noBonusCards
+    );
+    expect(state.bonusCards).toEqual([]);
+    expect(state.bonusDeck).toEqual([]);
+    expect(state.noBonusCards).toBe(true);
+  });
+
+  test('♣ BEGIN_SUIT_ACTION is a no-op with no bonus deck', () => {
+    const club = { kind: 'standard' as const, rank: '5' as const, suit: 'C' as const };
+    const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      bonusDeck: [],
+      noBonusCards: true,
+    });
+    const after = step(state, { type: 'BEGIN_SUIT_ACTION' });
     expect(after.phase.kind).toBe('awaiting-action');
   });
 });
