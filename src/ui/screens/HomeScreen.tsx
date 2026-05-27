@@ -7,7 +7,6 @@ import Animated, {
   withTiming,
   cancelAnimation,
 } from 'react-native-reanimated';
-import { ACHIEVEMENTS } from '../../game/achievements';
 import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { DifficultyInfoModal } from '../components/DifficultyInfoModal';
 import { NeonButton } from '../components/NeonButton';
@@ -174,7 +173,7 @@ export const HomeScreen = ({
             <Text style={[styles.modeTitle, styles.modeTitleAccentJoker]}>Achievements</Text>
             {stats.achievementsDone.length > 0 && (
               <Text style={styles.modeBestJoker}>
-                {stats.achievementsDone.length} / {ACHIEVEMENTS.length}
+                {stats.achievementsDone.length} earned
               </Text>
             )}
           </View>

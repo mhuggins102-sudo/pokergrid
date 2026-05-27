@@ -5,10 +5,11 @@ import { colors } from './theme';
 // Each bonus card belongs to one of five categories based on its id prefix.
 // Two visual signals are derived from the category:
 //
-//   - A "tone" (yellow / blue / purple) that drives the chip's border,
-//     title-text, and glow color. This is the always-on signal that tells
-//     the player how the card pays out — multi-trigger in-game (yellow),
-//     single-trigger in-game (blue), or end-game multiplier (purple).
+//   - A "tone" (yellow or purple) that drives the chip's border,
+//     title-text, and glow color. Yellow = pays out DURING the run
+//     (hand-type, row/col, suit density, per-line conditional). Purple
+//     = pays out at GAME END (grid achievements). This is the always-on
+//     signal that tells the player when to expect the math to fire.
 //
 //   - A category glyph that's shown ONLY when the colorBlindAssist setting
 //     is on, so colorblind players have a non-color cue and everyone else
@@ -17,17 +18,27 @@ import { colors } from './theme';
 
 export type BonusCategory = 'hand' | 'line' | 'suit' | 'conditional' | 'grid';
 
-const CONDITIONAL_IDS = new Set([
+// Cards in the "Row / Column bonus" category that aren't row-N / col-N —
+// they target specific lines by LOCATION rather than by conditional on the
+// cards in them, so they group with the row/col boosts.
+const LINE_LOCATION_IDS = new Set([
+  'spiral-core-x1_5',
   'outer-edge-x1_25',
+]);
+
+const CONDITIONAL_IDS = new Set([
   'rainbow-line-x2',
   'joker-line-x1_5',
   'royal-touch-x1_5',
-  'spiral-core-x1_5',
+  'highball-x1_5',
+  'lowball-x1_5',
+  'blackjack-x2',
 ]);
 
 export const categoryOf = (card: BonusCard): BonusCategory => {
   if (card.id.startsWith('hand-')) return 'hand';
   if (card.id.startsWith('row-') || card.id.startsWith('col-')) return 'line';
+  if (LINE_LOCATION_IDS.has(card.id)) return 'line';
   if (card.id.startsWith('suit-density-')) return 'suit';
   if (CONDITIONAL_IDS.has(card.id)) return 'conditional';
   return 'grid';
@@ -56,13 +67,14 @@ const CATEGORY_ICON: Record<BonusCategory, string> = {
   grid: '▦',      // grid achievement — full-board pattern
 };
 
-// Color of the category icon itself (used only when colorBlindAssist is on).
-// Suit-density overrides this with the actual suit's color.
+// In-game icons all share the warn tint; only grid achievements use the
+// joker tint. Suit-density overrides this with the actual suit's color
+// so colorblind players can still tell the four density cards apart.
 const CATEGORY_ICON_COLOR: Record<BonusCategory, string> = {
   hand: colors.warn,
-  line: colors.accent,
-  suit: colors.textMid,
-  conditional: colors.suitD,
+  line: colors.warn,
+  suit: colors.warn,
+  conditional: colors.warn,
   grid: colors.joker,
 };
 
@@ -74,22 +86,22 @@ export const CATEGORY_LABEL: Record<BonusCategory, string> = {
   grid: 'Grid achievement',
 };
 
-// Three tones drive the always-on border / title / glow colors. Several
-// categories share a tone — the icon (when on) provides the finer-grained
-// signal.
-type CategoryTone = 'yellow' | 'blue' | 'purple';
+// Two tones: yellow = pays out during the run, purple = pays out at
+// game end. Every in-game category shares yellow; only grid-achievement
+// uses purple. Players read "what color is the chip?" → "when does it
+// fire?" without needing to memorize each card.
+type CategoryTone = 'yellow' | 'purple';
 
 const TONE_OF: Record<BonusCategory, CategoryTone> = {
   hand: 'yellow',
   suit: 'yellow',
   conditional: 'yellow',
-  line: 'blue',
+  line: 'yellow',
   grid: 'purple',
 };
 
 const TONE_COLOR: Record<CategoryTone, string> = {
   yellow: colors.warn,
-  blue: colors.accent,
   purple: colors.joker,
 };
 

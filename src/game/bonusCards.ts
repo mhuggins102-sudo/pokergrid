@@ -188,6 +188,47 @@ const suitDensity = (suit: Suit): BonusCard => ({
   },
 });
 
+// Blackjack-style pip value of a single card. 2–10 = face, J/Q/K = 10,
+// A is 1 or 11 depending on aceHigh. Used by Highball / Lowball /
+// Blackjack to score lines by total pip value rather than poker rank.
+const blackjackValue = (
+  c: Exclude<Card, { kind: 'joker' }>,
+  aceHigh: boolean
+): number => {
+  switch (c.rank) {
+    case 'A': return aceHigh ? 11 : 1;
+    case 'J':
+    case 'Q':
+    case 'K':
+    case '10':
+      return 10;
+    default:
+      return parseInt(c.rank, 10);
+  }
+};
+
+// Sum the line's standard cards as blackjack pip values. Jokers
+// contribute 0 (they're excluded). The same physical Ace on the board
+// can take value 1 on one line and 11 on another — every bonus card
+// calls this fresh per line with its own aceHigh setting.
+const lineBlackjackTotal = (line: LineContext, aceHigh: boolean): number =>
+  standardCards(line).reduce((sum, c) => sum + blackjackValue(c, aceHigh), 0);
+
+// Real blackjack: any ace can count as 1 OR 11 independently. We accept
+// the line if ANY assignment of the n aces in the line sums to exactly
+// 21. Iterate k = 0..n (number of aces taken as 11).
+const lineCanBlackjack = (line: LineContext): boolean => {
+  const std = standardCards(line);
+  const aces = std.filter(c => c.rank === 'A').length;
+  const nonAceSum = std
+    .filter(c => c.rank !== 'A')
+    .reduce((s, c) => s + blackjackValue(c, false), 0);
+  for (let k = 0; k <= aces; k++) {
+    if (nonAceSum + k * 11 + (aces - k) * 1 === 21) return true;
+  }
+  return false;
+};
+
 // ---------- Per-line novel ----------
 
 const rainbowLine: BonusCard = {
@@ -252,6 +293,52 @@ const royalTouch: BonusCard = {
   },
 };
 
+const highball: BonusCard = {
+  id: 'highball-x1_5',
+  name: 'Highball ×1.5 (each)',
+  title: 'Highball',
+  mult: '×1.5 (each)',
+  description: 'Lines totalling 40+ (A=11, face=10).',
+  multValue: 1.5,
+  baseMultValue: 1.5,
+  lineEffect: (line, card) => {
+    if (!line.hand) return {};
+    return lineBlackjackTotal(line, true) >= 40
+      ? { multiplier: card.multValue ?? 1.5 }
+      : {};
+  },
+};
+
+const lowball: BonusCard = {
+  id: 'lowball-x1_5',
+  name: 'Lowball ×1.5 (each)',
+  title: 'Lowball',
+  mult: '×1.5 (each)',
+  description: 'Lines totalling 15 or less (A=1, face=10).',
+  multValue: 1.5,
+  baseMultValue: 1.5,
+  lineEffect: (line, card) => {
+    if (!line.hand) return {};
+    return lineBlackjackTotal(line, false) <= 15
+      ? { multiplier: card.multValue ?? 1.5 }
+      : {};
+  },
+};
+
+const blackjack: BonusCard = {
+  id: 'blackjack-x2',
+  name: 'Blackjack ×2 (each)',
+  title: 'Blackjack',
+  mult: '×2 (each)',
+  description: 'Lines totalling exactly 21 (each A is 1 or 11).',
+  multValue: 2,
+  baseMultValue: 2,
+  lineEffect: (line, card) => {
+    if (!line.hand) return {};
+    return lineCanBlackjack(line) ? { multiplier: card.multValue ?? 2 } : {};
+  },
+};
+
 const spiralCore: BonusCard = {
   id: 'spiral-core-x1_5',
   name: 'Spiral Core ×1.5 (each)',
@@ -292,13 +379,13 @@ const cleanBorder: BonusCard = {
 };
 
 const monochromeBorder: BonusCard = {
-  id: 'monochrome-border-x2',
-  name: 'Monochrome Border ×2',
+  id: 'monochrome-border-x1_75',
+  name: 'Monochrome Border ×1.75',
   title: 'Monochrome Border',
-  mult: '×2',
+  mult: '×1.75',
   description: 'All border cards are the same color (red or black).',
-  multValue: 2,
-  baseMultValue: 2,
+  multValue: 1.75,
+  baseMultValue: 1.75,
   gridEffect: ({ grid }, card) => {
     // Wild cards are suit-flexible so they don't count against the color
     // check (they can be either red or black for evaluation purposes).
@@ -350,20 +437,26 @@ const rainbowCorners: BonusCard = {
   },
 };
 
+// On Easy (2 jokers) Cozy Joker can multi-trigger — each joker in the
+// inner 3×3 raises the multiplier by its base value, exponentially.
+// In 1-joker decks the math collapses to a single trigger (×1.15).
 const cozyJoker: BonusCard = {
   id: 'cozy-joker-x1_15',
-  name: 'Cozy Joker ×1.15',
+  name: 'Cozy Joker ×1.15 (each)',
   title: 'Cozy Joker',
-  mult: '×1.15',
-  description: 'Joker placed in the inner 3×3.',
+  mult: '×1.15 (each)',
+  description: 'Each joker placed in the inner 3×3.',
   multValue: 1.15,
   baseMultValue: 1.15,
   gridEffect: ({ grid }, card) => {
-    const inInner = INNER_SLOTS.some(i => {
-      const c = grid[i];
-      return c !== null && isJoker(c);
-    });
-    return inInner ? { totalMultiplier: card.multValue ?? 1.15 } : {};
+    const innerJokers = INNER_SLOTS.reduce(
+      (n, i) => n + ((grid[i] !== null && isJoker(grid[i]!)) ? 1 : 0),
+      0
+    );
+    const base = card.multValue ?? 1.15;
+    return innerJokers > 0
+      ? { totalMultiplier: Math.pow(base, innerJokers) }
+      : {};
   },
 };
 
@@ -417,17 +510,23 @@ const noStraights: BonusCard = {
   },
 };
 
+// On Easy (2 jokers) Trash Joker multi-triggers — every joker that
+// ended up in the discard pile compounds the multiplier. Collapses to
+// a single trigger when there's only one joker in the deck.
 const trashJoker: BonusCard = {
   id: 'trash-joker-x1_25',
-  name: 'Trash Joker ×1.25',
+  name: 'Trash Joker ×1.25 (each)',
   title: 'Trash Joker',
-  mult: '×1.25',
-  description: 'The joker was destroyed during the run.',
+  mult: '×1.25 (each)',
+  description: 'Each joker destroyed during the run.',
   multValue: 1.25,
   baseMultValue: 1.25,
   gridEffect: ({ discards }, card) => {
-    const jokerOut = discards.some(c => isJoker(c));
-    return jokerOut ? { totalMultiplier: card.multValue ?? 1.25 } : {};
+    const jokersOut = discards.filter(c => isJoker(c)).length;
+    const base = card.multValue ?? 1.25;
+    return jokersOut > 0
+      ? { totalMultiplier: Math.pow(base, jokersOut) }
+      : {};
   },
 };
 
@@ -474,15 +573,15 @@ const diagonalRun: BonusCard = {
 // C1 and C5 share one → ×1.2. Both at once = ×1.44. High Card is excluded
 // since matching "nothing" shouldn't pay out.
 const symmetricFrame: BonusCard = {
-  id: 'symmetric-frame-x1_2',
-  name: 'Symmetric Frame ×1.2 (each)',
+  id: 'symmetric-frame-x1_25',
+  name: 'Symmetric Frame ×1.25 (each)',
   title: 'Symmetric Frame',
-  mult: '×1.2 (each)',
+  mult: '×1.25 (each)',
   description: 'R1/R5 or C1/C5 sharing a hand type (High Card doesn\'t count).',
-  multValue: 1.2,
-  baseMultValue: 1.2,
+  multValue: 1.25,
+  baseMultValue: 1.25,
   gridEffect: ({ lines }, card) => {
-    const m = card.multValue ?? 1.2;
+    const m = card.multValue ?? 1.25;
     const handAt = (kind: 'row' | 'col', idx: number): HandRank | null =>
       lines.find(l => l.kind === kind && l.index === idx)?.hand ?? null;
     const matches = (a: HandRank | null, b: HandRank | null): boolean =>
@@ -494,31 +593,48 @@ const symmetricFrame: BonusCard = {
   },
 };
 
-// Patience cancels the -25 incomplete-line penalty entirely. Doesn't add a
-// multiplier; its value is the penalties it prevents. scoreGrid reads the
-// `negatesIncompletePenalty` flag directly.
+// Patience cancels the -25 incomplete-line penalty (negatesIncompletePenalty
+// flag, read directly by scoreGrid). The multValue tracks the NET points
+// added per incomplete row/column on top of that cancellation — 0 at base
+// (just the cancel), +5 at power 1, +10 at power 2, etc. The gridEffect
+// turns that into a totalFlatAdd at scoring time. powerUpBonusCard
+// special-cases this card so each Targets-Up upgrade bumps multValue by
+// 5 additively rather than multiplying by 1.2 — the +5 / +10 steps
+// don't compose cleanly with the usual ×1.2 factor.
 const patience: BonusCard = {
   id: 'patience-no-penalty',
   name: 'Patience',
   title: 'Patience',
-  mult: '(no negative points)',
+  mult: '(no penalty)',
   description: 'Removes the -25 penalty for incomplete rows or columns at game end.',
+  multValue: 0,
+  baseMultValue: 0,
   negatesIncompletePenalty: true,
+  gridEffect: ({ lines }, card) => {
+    const bonus = card.multValue ?? 0;
+    if (bonus === 0) return {};
+    // A line with `hand: null` is incomplete (fewer than 5 cards) per
+    // evaluateLine — that's the same set scoreGrid would have penalized.
+    const incompleteCount = lines.filter(l => l.hand === null).length;
+    return incompleteCount > 0
+      ? { totalFlatAdd: bonus * incompleteCount }
+      : {};
+  },
 };
 
 // Perk-volume tells: how many suit perks did you spend across the run?
 // (Counts the ♥/♠/♦/♣ used to trigger a Hop / Slide / Destroy / Bonus.
 //  Plain Discards and destroyed targets DON'T count here — only perks.)
 const burnout: BonusCard = {
-  id: 'burnout-x1_3',
-  name: 'Burnout ×1.3',
+  id: 'burnout-x1_25',
+  name: 'Burnout ×1.25',
   title: 'Burnout',
-  mult: '×1.3',
-  description: '18+ suit perks spent across the run.',
-  multValue: 1.3,
-  baseMultValue: 1.3,
+  mult: '×1.25',
+  description: '20+ suit perks spent across the run.',
+  multValue: 1.25,
+  baseMultValue: 1.25,
   gridEffect: ({ perkSpent }, card) =>
-    perkSpent.length >= 18 ? { totalMultiplier: card.multValue ?? 1.3 } : {},
+    perkSpent.length >= 20 ? { totalMultiplier: card.multValue ?? 1.25 } : {},
 };
 
 const frugal: BonusCard = {
@@ -547,7 +663,9 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   handBoost('FOUR_OF_A_KIND', 1.5),
   handBoost('STRAIGHT_FLUSH', 1.5),
 
-  // Rows + Cols (10) — literal ×2
+  // Rows + Cols (12) — five row boosts, five col boosts, plus Spiral
+  // Core (center row + col) and Outer Edge (R1/R5/C1/C5) which target
+  // specific lines without conditional logic on the cards in them.
   rowBoost(0, 2),
   rowBoost(1, 2),
   rowBoost(2, 2),
@@ -558,6 +676,8 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   colBoost(2, 2),
   colBoost(3, 2),
   colBoost(4, 2),
+  spiralCore,
+  outerEdge,
 
   // Suit-density (4)
   suitDensity('H'),
@@ -565,12 +685,13 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   suitDensity('D'),
   suitDensity('C'),
 
-  // Per-line conditional (5)
+  // Per-line conditional (6) — fire on lines whose CARDS meet a rule
   rainbowLine,
   jokerLine,
   royalTouch,
-  spiralCore,
-  outerEdge,
+  highball,
+  lowball,
+  blackjack,
 
   // Grid-wide (12)
   cleanBorder,
@@ -670,12 +791,27 @@ export const powerUpBonusCard = (
   factor: number = 1.2
 ): BonusCard => {
   if (card.multValue === undefined) return card;
-  const newMultValue = roundTenth(card.multValue * factor);
+  // Patience tracks NET points added per blank line (0 base, +5 each
+  // upgrade). It can't ride the standard ×1.2 ramp because +5 / +10
+  // steps don't compose cleanly with multiplication — additive +5 per
+  // power-up keeps the math exact and matches the design intent.
+  const isPatience = card.id.startsWith('patience-');
+  const newMultValue = isPatience
+    ? card.multValue + 5
+    : roundTenth(card.multValue * factor);
   const newPowerLevel = (card.powerLevel ?? 0) + 1;
-  // The `mult` chip text always contains a single "×N" segment for cards
-  // that have a numeric multiplier; rewrite it to the scaled value.
-  const newMultText = card.mult.replace(/×[\d.]+/, `×${newMultValue}`);
-  const newName = card.name.replace(/×[\d.]+/, `×${newMultValue}`);
+  // Patience's chip text doesn't have a "×N" segment to rewrite —
+  // generate fresh copy that reflects the net bonus per blank line.
+  // Every other card has a "×N" pattern in both `mult` and `name`.
+  const newMultText = isPatience
+    ? `(+${newMultValue} each)`
+    : card.mult.replace(/×[\d.]+/, `×${newMultValue}`);
+  const newName = isPatience
+    ? `Patience +${newMultValue}`
+    : card.name.replace(/×[\d.]+/, `×${newMultValue}`);
+  const newDescription = isPatience
+    ? `Removes the -25 penalty AND adds +${newMultValue} for each incomplete row or column at game end.`
+    : card.description;
   // Strip any existing -pwrN suffix so repeated power-ups don't stack
   // "-pwr1-pwr2-pwr3" tails — replace with a single counter.
   const baseId = card.id.replace(/-pwr\d+$/, '');
@@ -684,6 +820,7 @@ export const powerUpBonusCard = (
     id: `${baseId}-pwr${newPowerLevel}`,
     name: newName,
     mult: newMultText,
+    description: newDescription,
     multValue: newMultValue,
     baseMultValue: card.baseMultValue ?? card.multValue,
     powerLevel: newPowerLevel,

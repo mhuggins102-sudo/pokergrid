@@ -69,10 +69,17 @@ describe('powerUpBonusCard', () => {
     expect(twice.id).toBe('hand-pair-x4-pwr2');
   });
 
-  it('leaves Patience untouched (no multiplier to scale)', () => {
+  it('ramps Patience additively by +5 per power-up', () => {
     const patience = findCard('patience-no-penalty');
-    const powered = powerUpBonusCard(patience);
-    expect(powered).toBe(patience);
+    expect(patience.multValue).toBe(0);
+    const p1 = powerUpBonusCard(patience);
+    expect(p1.multValue).toBe(5);
+    expect(p1.powerLevel).toBe(1);
+    expect(p1.baseMultValue).toBe(0);
+    const p2 = powerUpBonusCard(p1);
+    expect(p2.multValue).toBe(10);
+    expect(p2.powerLevel).toBe(2);
+    expect(p2.id).toBe('patience-no-penalty-pwr2');
   });
 
   it('preserves baseMultValue across multiple power-ups', () => {
