@@ -40,10 +40,22 @@
 
     <style>
       /*
-        Lock the page to the (dynamic) viewport so the app's flex: 1 root
-        actually fills the available height on mobile web. 100dvh accounts
-        for the iOS Safari URL bar collapsing; the 100vh line is the
-        fallback for older browsers that don't understand dvh.
+        Lock the page to the (dynamic) viewport so the app's flex: 1
+        root actually fills the available height on mobile web.
+
+        Cascade is intentional — each line overrides the previous on
+        browsers that support it:
+          - 100vh: fallback for older browsers
+          - 100dvh: modern dynamic viewport (URL bar collapse)
+          - -webkit-fill-available: iOS-only fix. When the site is
+            launched as a PWA from the iOS Home Screen, 100dvh reports
+            a stale height on first paint until the bottom home
+            indicator zone settles, leaving a dark strip below the
+            app that disappears once the user scrolls. -webkit-fill-
+            available always reflects the actual visible viewport on
+            iOS, so the body fills correctly from the first frame.
+            Chrome / Firefox ignore -webkit-fill-available for height
+            (treats it as `auto`), so they stay on 100dvh.
       */
       html,
       body,
@@ -52,12 +64,18 @@
         padding: 0;
         height: 100vh;
         height: 100dvh;
+        height: -webkit-fill-available;
         background-color: #06070d;
         color-scheme: dark;
       }
       body {
         overscroll-behavior: none;
         -webkit-tap-highlight-color: transparent;
+        /* Prevent body-level scroll / rubber-band. Internal RN-Web
+           ScrollViews render their own scroll containers, so this only
+           kills the global bounce that, on iOS PWA, briefly reveals a
+           dark band below the app when the user swipes. */
+        overflow: hidden;
       }
     </style>
   </head>
