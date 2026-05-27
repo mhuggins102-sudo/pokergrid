@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
   cancelAnimation,
 } from 'react-native-reanimated';
+import { ACHIEVEMENTS } from '../../game/achievements';
 import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { DifficultyInfoModal } from '../components/DifficultyInfoModal';
 import { NeonButton } from '../components/NeonButton';
@@ -21,6 +22,7 @@ interface Props {
   onContinueTargetsUp: () => void;
   onOpenChallenges: () => void;
   onOpenStats: () => void;
+  onOpenAchievements: () => void;
   onOpenSettings: () => void;
   onOpenRules: () => void;
 }
@@ -48,6 +50,7 @@ export const HomeScreen = ({
   onContinueTargetsUp,
   onOpenChallenges,
   onOpenStats,
+  onOpenAchievements,
   onOpenSettings,
   onOpenRules,
 }: Props) => {
@@ -64,8 +67,23 @@ export const HomeScreen = ({
         <NeonTitle />
       </View>
 
-      {/* FREE PLAY ----------------------------------------------------- */}
-      <Text style={styles.sectionLabel}>Free Play</Text>
+      {/* GAME MODES ---------------------------------------------------- */}
+      <Text style={styles.sectionLabel}>Game Modes</Text>
+
+      {/* Free Play — picker + Start button live inside the Game Modes
+          section now. The ⓘ that opens the difficulty comparison
+          popup sits next to the "Free Play" label so it reads as a
+          header-level tooltip rather than a per-Start affordance. */}
+      <View style={styles.subHeaderRow}>
+        <Text style={styles.subHeader}>Free Play</Text>
+        <Pressable
+          onPress={() => setDifficultyInfoOpen(true)}
+          hitSlop={10}
+          style={styles.headerInfoBtn}
+        >
+          <Text style={styles.headerInfoBtnText}>ⓘ</Text>
+        </Pressable>
+      </View>
       <View style={styles.diffRow}>
         {DIFFS.map(d => {
           const selected = d === diff;
@@ -89,25 +107,14 @@ export const HomeScreen = ({
         })}
       </View>
       <View style={styles.startWrap}>
-        <View style={styles.startRow}>
-          <NeonButton
-            label={`Start · ${diff[0].toUpperCase()}${diff.slice(1)} (${TARGET_BY_DIFFICULTY[diff]})`}
-            size="lg"
-            onPress={() => onStartFree(diff)}
-            style={styles.startBtn}
-          />
-          <Pressable
-            onPress={() => setDifficultyInfoOpen(true)}
-            hitSlop={6}
-            style={styles.infoBtn}
-          >
-            <Text style={styles.infoBtnText}>ⓘ</Text>
-          </Pressable>
-        </View>
+        <NeonButton
+          label={`Start · ${diff[0].toUpperCase()}${diff.slice(1)} (${TARGET_BY_DIFFICULTY[diff]})`}
+          size="lg"
+          onPress={() => onStartFree(diff)}
+        />
       </View>
 
-      {/* GAME MODES --------------------------------------------------- */}
-      <Text style={styles.sectionLabel}>Game Modes</Text>
+      <Text style={styles.subHeader}>Variants</Text>
       <View style={styles.modesCol}>
         <Pressable
           style={styles.modeCard}
@@ -151,25 +158,50 @@ export const HomeScreen = ({
             )}
           </View>
           <Text style={styles.modeBody}>
-            A handful of structural goals — score 500+ with constraints on which lines may pay
-            out, where the joker can be, and so on.
+            Playable variants that change how a run is structured — modified deck size, the
+            Discard button locked, and more to come.
           </Text>
           <Text style={styles.modeCta}>Pick a challenge →</Text>
         </Pressable>
       </View>
 
-      <View style={styles.streakRow}>
-        {stats.wins > 0 && (
-          <Text style={styles.streakText}>
-            {stats.wins} free-play win{stats.wins !== 1 ? 's' : ''}
-            {stats.streak > 1 ? ` · streak ${stats.streak}` : ''}
+      {/* PROGRESS ------------------------------------------------------ */}
+      <Text style={styles.sectionLabel}>Progress</Text>
+      <View style={styles.modesCol}>
+        <Pressable style={styles.modeCard} onPress={onOpenStats}>
+          <View style={styles.modeHeader}>
+            <Text style={[styles.modeTitle, styles.modeTitleAccent]}>Stats</Text>
+            {stats.wins > 0 && (
+              <Text style={styles.modeBest}>
+                {stats.wins} win{stats.wins === 1 ? '' : 's'}
+              </Text>
+            )}
+          </View>
+          <Text style={styles.modeBody}>
+            Per-difficulty W/L, best score, tier distribution, recent runs, and bonus-card frequency.
           </Text>
-        )}
+          <Text style={styles.modeCta}>View stats →</Text>
+        </Pressable>
+
+        <Pressable style={styles.modeCard} onPress={onOpenAchievements}>
+          <View style={styles.modeHeader}>
+            <Text style={[styles.modeTitle, styles.modeTitleAccentJoker]}>Achievements</Text>
+            {stats.achievementsDone.length > 0 && (
+              <Text style={styles.modeBestJoker}>
+                {stats.achievementsDone.length} / {ACHIEVEMENTS.length}
+              </Text>
+            )}
+          </View>
+          <Text style={styles.modeBody}>
+            Passive goals earned on Hard or Extreme. They tick off automatically when a qualifying
+            run ends.
+          </Text>
+          <Text style={styles.modeCta}>View achievements →</Text>
+        </Pressable>
       </View>
 
       <View style={styles.navRow}>
         <NeonButton label="How to Play" variant="primary" size="sm" onPress={onOpenRules} />
-        <NeonButton label="Stats" variant="secondary" size="sm" onPress={onOpenStats} />
         <NeonButton label="Settings" variant="secondary" size="sm" onPress={onOpenSettings} />
       </View>
 
@@ -339,31 +371,45 @@ const styles = StyleSheet.create({
   },
   diffBestSel: { color: colors.success, textShadowColor: colors.success, textShadowRadius: 3 },
   startWrap: { marginTop: spacing.md, alignItems: 'stretch' },
-  startRow: {
+  // Subsection header inside "Game Modes" — "Free Play", "Variants".
+  // Smaller than sectionLabel; sits flush left with a hint of accent.
+  subHeaderRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
-  startBtn: { flex: 1 },
-  // Round info button sized to match the NeonButton's lg height (~48px)
-  // so the row aligns cleanly. ⓘ glyph uses the accent tint so it reads
-  // as a tappable affordance, not just decoration.
-  infoBtn: {
-    width: 48,
+  subHeader: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  // The ⓘ next to the "Free Play" sub-header opens the difficulty
+  // comparison popup. Smaller than the old button-sized variant — it
+  // reads as a header glyph rather than a control bar.
+  headerInfoBtn: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.outline,
-    ...glow(colors.accent, 6, 0.3),
+    ...glow(colors.accent, 4, 0.3),
   },
-  infoBtnText: {
+  headerInfoBtnText: {
     color: colors.accent,
     fontFamily: fonts.mono,
-    fontSize: 22,
+    fontSize: 14,
     fontWeight: '800',
     textShadowColor: colors.accent,
-    textShadowRadius: 4,
+    textShadowRadius: 3,
   },
   modesCol: { gap: spacing.sm },
   modeCard: {
@@ -390,6 +436,19 @@ const styles = StyleSheet.create({
     textShadowColor: colors.warn,
     textShadowRadius: 6,
   },
+  // Stats card uses the accent (cyan) tint so it visually separates
+  // from the warn-amber Targets-Up and Challenges variants.
+  modeTitleAccent: {
+    color: colors.accent,
+    textShadowColor: colors.accent,
+  },
+  // Achievements card uses the joker (violet) tint — matches the
+  // achievement-earned callout on the result screen + the SS tier
+  // badge, tying the visual language together.
+  modeTitleAccentJoker: {
+    color: colors.joker,
+    textShadowColor: colors.joker,
+  },
   modeBest: {
     color: colors.success,
     fontFamily: fonts.mono,
@@ -397,6 +456,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     fontWeight: '800',
     textShadowColor: colors.success,
+    textShadowRadius: 3,
+  },
+  modeBestJoker: {
+    color: colors.joker,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: '800',
+    textShadowColor: colors.joker,
     textShadowRadius: 3,
   },
   modeBody: {
@@ -422,13 +490,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1,
     marginTop: 4,
-  },
-  streakRow: { alignItems: 'center', marginTop: spacing.md, height: 18 },
-  streakText: {
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    color: colors.warn,
-    letterSpacing: 1.5,
   },
   navRow: {
     flexDirection: 'row',
