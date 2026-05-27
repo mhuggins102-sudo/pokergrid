@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Card, Rank, StandardCard, Suit } from '../../game/cards';
 import { BONUS_DECK_POOL } from '../../game/bonusCards';
@@ -17,6 +17,7 @@ import { GridView } from '../components/GridView';
 import { NeonButton } from '../components/NeonButton';
 import { SoundKey, useSound } from '../sound';
 import { colors, fonts, glow, radius, spacing } from '../theme';
+import { BonusCardsScreen } from './BonusCardsScreen';
 
 const TUTORIAL_SEEN_KEY = 'pokergrid:tutorial-seen:v1';
 
@@ -306,48 +307,66 @@ const DestroyVisual = () => {
   );
 };
 
-const BonusVisual = () => (
+// Tutorial slide 6's "see them all" button — opens the full Bonus Cards
+// catalog as a modal so the player stays in the tutorial when they
+// close it. Hoisted out of BonusVisual so it can be a stable component.
+const BonusVisual: React.FC<TutorialVisualProps> = ({
+  onSeeAllBonusCards: onSeeAll,
+}) => (
   <View style={demoStyles.wrap}>
-    <Text style={demoStyles.subsection}>Three categories</Text>
+    <Text style={demoStyles.subsection}>Two tones</Text>
     <View style={demoStyles.bonusRow}>
       <View style={[demoStyles.bonusChip, glow(colors.warn, 8, 0.45)]}>
         <Text style={demoStyles.bonusName}>Pair ×4</Text>
-        <Text style={demoStyles.bonusDesc}>Multiplies every line scoring a Pair.</Text>
+        <Text style={demoStyles.bonusDesc}>Multiplies every line scoring a Pair (in-game).</Text>
       </View>
-      <View style={[demoStyles.bonusChip, glow(colors.warn, 8, 0.45)]}>
-        <Text style={demoStyles.bonusName}>Row 3 ×2</Text>
-        <Text style={demoStyles.bonusDesc}>Multiplies row 3's total by 2.</Text>
-      </View>
-      <View style={[demoStyles.bonusChip, glow(colors.warn, 8, 0.45)]}>
-        <Text style={demoStyles.bonusName}>Speedrun</Text>
-        <Text style={demoStyles.bonusDesc}>×1.05 per playing card left in the deck at game end.</Text>
+      <View
+        style={[
+          demoStyles.bonusChip,
+          { borderColor: colors.joker },
+          glow(colors.joker, 8, 0.45),
+        ]}
+      >
+        <Text style={[demoStyles.bonusName, { color: colors.joker }]}>Clean Border</Text>
+        <Text style={demoStyles.bonusDesc}>×1.5 on the FINAL total (grid achievement).</Text>
       </View>
     </View>
     <Caption>
-      The bonus deck has {BONUS_DECK_POOL.length} unique cards. ♣ Bonus draws 2 and lets you keep 1. You can hold up
-      to 3; at the cap, ♣ forces a swap.
+      Yellow chips pay out per line as you fill the board. Purple chips multiply the
+      whole final score at game end. ♣ Bonus draws 2 from the bonus deck and lets you keep 1.
+      You can hold up to 3; at the cap, ♣ forces a swap (Easy lets you decline instead).
     </Caption>
-    <Text style={demoStyles.subsection}>What kinds?</Text>
+    <Text style={demoStyles.subsection}>Five families</Text>
     <View style={demoStyles.kindList}>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Hand-type</Text> — multiplies lines scoring a
         specific hand (Pair, Straight, Flush, …).
       </Text>
       <Text style={demoStyles.kindLine}>
-        · <Text style={{ color: colors.warn }}>Row / Column</Text> — multiplies a specific line.
+        · <Text style={{ color: colors.warn }}>Row / Column</Text> — multiplies a specific line
+        (Row N, Col N, Spiral Core, Outer Edge).
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Per-line conditional</Text> — Rainbow (4+ suits),
-        Joker line, Royal touch (Ace in line), Spiral core (R3 + C3).
+        Joker line, Royal Touch (Ace in line), Highball, Lowball, Blackjack.
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Per-suit density</Text> — ×1.1 per card of a
         suit in the line.
       </Text>
       <Text style={demoStyles.kindLine}>
-        · <Text style={{ color: colors.warn }}>Grid achievements</Text> — multiply the final
-        total: clean border, monochrome border, rainbow corners, cozy joker.
+        · <Text style={{ color: colors.joker }}>Grid achievement</Text> — multiplies the FINAL
+        total: Clean Border, Monochrome Border, Rainbow Corners, Diagonal, Symmetric Frame,
+        Cozy Joker, Trash Joker, Speedrun, Burnout, Frugal, No Flushes, No Straights, Patience.
       </Text>
+    </View>
+    <View style={demoStyles.seeAllRow}>
+      <NeonButton
+        label={`See all ${BONUS_DECK_POOL.length} cards →`}
+        variant="secondary"
+        size="sm"
+        onPress={onSeeAll}
+      />
     </View>
   </View>
 );
@@ -533,8 +552,48 @@ const MultiplierMathVisual = () => {
   );
 };
 
+// Compact list of grid achievements, grouped by what they reward so the
+// caption isn't a wall of commas. Reads top-to-bottom: shape (board
+// composition), restraint (what you DIDN'T do), volume (using your
+// perks one way or the other), and Patience as the lone safety net.
+const ACHIEVEMENT_GROUPS: { label: string; entries: string[] }[] = [
+  {
+    label: 'Shape',
+    entries: [
+      'Clean Border ×1.5',
+      'Monochrome Border ×1.75',
+      'Rainbow Corners ×1.25',
+      'Cozy Joker ×1.15 each',
+      'Diagonal ×1.25 each',
+      'Symmetric Frame ×1.25 each',
+    ],
+  },
+  {
+    label: 'Restraint',
+    entries: [
+      'No Flushes ×1.25',
+      'No Straights ×1.25',
+      'Trash Joker ×1.25 each',
+      'Frugal ×1.5',
+    ],
+  },
+  {
+    label: 'Volume',
+    entries: [
+      'Burnout ×1.25',
+      'Speedrun ×1.05 / deck card',
+    ],
+  },
+  {
+    label: 'Safety net',
+    entries: [
+      'Patience — cancels the −25 blank-line penalty',
+    ],
+  },
+];
+
 const AchievementsVisual = () => {
-  // Grid with NO face cards on the border — clean border ×1.2 satisfied.
+  // Grid with NO face cards on the border — Clean Border satisfied.
   const grid = gridWith([
     [0, C('2', 'H')], [1, C('5', 'C')], [2, C('7', 'D')], [3, C('8', 'S')], [4, C('10', 'H')],
     [5, C('A', 'H')], [9, C('3', 'C')],
@@ -550,22 +609,21 @@ const AchievementsVisual = () => {
     <View style={demoStyles.wrap}>
       <GridView grid={grid} />
       <Caption>
-        Twelve grid-wide cards multiply the final total. Some reward grid shape —{' '}
-        <Text style={{ color: colors.success }}>Clean border ×1.5</Text>,{' '}
-        <Text style={{ color: colors.success }}>Monochrome border ×1.5</Text>,{' '}
-        <Text style={{ color: colors.success }}>Rainbow corners ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Cozy joker ×1.15</Text>,{' '}
-        <Text style={{ color: colors.success }}>Diagonal ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Symmetric Frame ×1.2</Text>. Others reward
-        restraint —{' '}
-        <Text style={{ color: colors.success }}>No Flushes ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>No Straights ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Trash Joker ×1.25</Text>,{' '}
-        <Text style={{ color: colors.success }}>Frugal ×1.5</Text>. And{' '}
-        <Text style={{ color: colors.warn }}>Burnout ×1.3</Text> +{' '}
-        <Text style={{ color: colors.warn }}>×1.05 / deck card</Text> reward the other end of
-        the curve.
+        Grid-wide bonus cards multiply the final total — they reward end-of-run shape,
+        restraint, or volume rather than a specific line.
       </Caption>
+      <View style={demoStyles.achGroupBlock}>
+        {ACHIEVEMENT_GROUPS.map(g => (
+          <View key={g.label} style={demoStyles.achGroup}>
+            <Text style={demoStyles.achGroupLabel}>{g.label}</Text>
+            {g.entries.map(e => (
+              <Text key={e} style={demoStyles.achEntry}>
+                · <Text style={{ color: colors.joker }}>{e}</Text>
+              </Text>
+            ))}
+          </View>
+        ))}
+      </View>
     </View>
   );
 };
@@ -583,9 +641,11 @@ const PenaltyVisual = () => {
     <View style={demoStyles.wrap}>
       <GridView grid={grid} highlight={new Set([11])} />
       <Caption>
-        Slot 11 is empty at game end. Row 2 has 4 cards — <Text style={{ color: colors.danger }}>
-        −25</Text>. Column 2 has 4 cards — another <Text style={{ color: colors.danger }}>−25</Text>.
-        Total cost: 50. Discard freely, but think twice about destroys you can't refill.
+        One empty slot at game end costs{' '}
+        <Text style={{ color: colors.danger }}>−50</Text> — the slot sits in both an incomplete
+        row AND an incomplete column, and each scores <Text style={{ color: colors.danger }}>−25</Text>.
+        Here that's R3 (4 cards) and C2 (4 cards). Discard freely, but think twice about destroys
+        you can't refill.
       </Caption>
     </View>
   );
@@ -611,12 +671,19 @@ const TipsVisual = () => (
 
 // ---- Slides ---------------------------------------------------------------
 
+// Visuals receive a small prop bag so slides can trigger tutorial-level
+// actions (currently just the "See all bonus cards" modal on slide 6).
+// All slide visuals accept this shape; most ignore it.
+export interface TutorialVisualProps {
+  onSeeAllBonusCards: () => void;
+}
+
 interface Slide {
   kicker: string;
   title: string;
   copy: string;
   accent: string;
-  Visual: React.ComponentType;
+  Visual: React.ComponentType<TutorialVisualProps>;
 }
 
 const STEPS: Slide[] = [
@@ -630,7 +697,7 @@ const STEPS: Slide[] = [
   {
     kicker: '02 · PLACE',
     title: 'A spiral from the center',
-    copy: 'Each turn you can place the drawn card, discard it, or spend it on its suit perk. Placing puts it in the next spiral slot — center first, then clockwise outward. The cyan-pulsing slot marks where the next card lands.',
+    copy: 'Each turn you can place the drawn card, discard it (Easy, Medium, Hard), or spend it on its suit perk. Placing puts it in the next spiral slot — center first, then clockwise outward. The cyan-pulsing slot marks where the next card lands.',
     accent: colors.accent,
     Visual: SpiralVisual,
   },
@@ -665,7 +732,7 @@ const STEPS: Slide[] = [
   {
     kicker: '07 · THE JOKER',
     title: 'The joker is wild',
-    copy: "There's exactly one joker in the deck. It can't be discarded and auto-places into the next spiral slot. On the grid it takes whatever rank and suit make the best hand — independently for its row and its column.",
+    copy: "Joker count tracks the difficulty: Easy ships two, Medium / Hard one, Extreme zero. Jokers auto-place into the next spiral slot and can't be discarded normally — only a ♦ Destroy removes one. On the grid a joker takes whatever rank and suit make the best hand, independently for its row and its column.",
     accent: colors.joker,
     Visual: JokerVisual,
   },
@@ -719,6 +786,7 @@ interface Props {
 
 export const TutorialScreen = ({ onDone }: Props) => {
   const [i, setI] = useState(0);
+  const [bonusCardsOpen, setBonusCardsOpen] = useState(false);
   const step = STEPS[i];
   const isLast = i === STEPS.length - 1;
   const Visual = step.Visual;
@@ -726,6 +794,10 @@ export const TutorialScreen = ({ onDone }: Props) => {
   const finish = () => {
     markTutorialSeen();
     onDone();
+  };
+
+  const visualProps: TutorialVisualProps = {
+    onSeeAllBonusCards: () => setBonusCardsOpen(true),
   };
 
   return (
@@ -769,9 +841,17 @@ export const TutorialScreen = ({ onDone }: Props) => {
           entering={FadeIn.duration(260).delay(60)}
           exiting={FadeOut.duration(100)}
         >
-          <Visual />
+          <Visual {...visualProps} />
         </Animated.View>
       </ScrollView>
+
+      <Modal
+        visible={bonusCardsOpen}
+        animationType="slide"
+        onRequestClose={() => setBonusCardsOpen(false)}
+      >
+        <BonusCardsScreen onBack={() => setBonusCardsOpen(false)} />
+      </Modal>
 
       <View style={styles.actions}>
         <NeonButton
@@ -927,6 +1007,10 @@ const demoStyles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     gap: spacing.xs,
     width: '100%',
+  },
+  seeAllRow: {
+    alignItems: 'center',
+    marginTop: spacing.md,
   },
   kindLine: {
     color: colors.textMid,
@@ -1117,5 +1201,30 @@ const demoStyles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 12,
     lineHeight: 18,
+  },
+  // Slide 11 achievement groups — Shape / Restraint / Volume / Safety
+  // net columns of small entries, easier to scan than the old run-on
+  // comma list.
+  achGroupBlock: {
+    width: '100%',
+    paddingHorizontal: spacing.sm,
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  achGroup: { gap: 2 },
+  achGroupLabel: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 2,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  achEntry: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    lineHeight: 16,
   },
 });

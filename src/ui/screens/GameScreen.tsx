@@ -32,6 +32,7 @@ import { BonusCardStrip } from '../components/BonusCardStrip';
 import { RemainingDeckModal } from '../components/RemainingDeckModal';
 import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
+import { HintArrow, Rect as HintAnchorRect } from '../components/HintArrow';
 import { LineDetailModal } from '../components/LineDetailModal';
 import { NeonButton } from '../components/NeonButton';
 import { ScoreBar, UndoState as UndoStateKind } from '../components/ScoreBar';
@@ -114,11 +115,29 @@ const HINT_BODY: Record<HintId, string> = {
   'clubs-bonus':
     '♣ draws 2 bonus cards from a separate deck — pick one to keep. Multipliers stack MULTIPLICATIVELY: two ×2 cards on the same line is ×4, not ×3.',
   'bonus-held':
-    'Bonus cards modify your score. Border tone tells you when they pay out: yellow = multi-trigger in-game, blue = single in-game trigger, purple = end-game multiplier. Tap any held card for full details.',
+    'Bonus cards modify your score. Border tone tells you when they pay out: yellow = pays out per line during the run, purple = multiplies the final total at game end. Tap any held card for full details.',
   'first-scoring-line':
     'Nice — your first scoring line. Each completed row and column scores as a 5-card poker hand. Pair and above pay out; High Card scores 0. Bonus cards modify these per-line totals.',
   'low-deck':
     'The deck is almost empty. The run ends when the deck runs out or the grid fills up. Lines you haven\'t completed by then cost -25 each, so plan your last few placements carefully.',
+};
+
+// Which UI region each hint points at. Used by the popup to draw an
+// arrow from the centered modal to the relevant element. 'none' = the
+// hint stays a free-floating modal (no obvious single target).
+type HintAnchorRegion = 'grid' | 'bonus-strip' | 'drawn-area' | 'score-bar' | 'none';
+
+const HINT_ANCHOR: Record<HintId, HintAnchorRegion> = {
+  joker: 'grid',
+  'bonus-cap': 'bonus-strip',
+  'grid-effect': 'grid',
+  'hearts-swap': 'drawn-area',
+  'spades-slide': 'drawn-area',
+  'diamonds-destroy': 'drawn-area',
+  'clubs-bonus': 'drawn-area',
+  'bonus-held': 'bonus-strip',
+  'first-scoring-line': 'grid',
+  'low-deck': 'score-bar',
 };
 
 const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
@@ -212,8 +231,20 @@ export const GameScreen = ({
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<Set<number> | null>(null);
   const [activeHint, setActiveHint] = useState<HintId | null>(null);
+  // Anchor rect (in screen coords) for the currently active hint. Null
+  // while measurement is in flight or when the hint has no anchor —
+  // HintModal falls back to a centered modal with no arrow in that case.
+  const [hintAnchor, setHintAnchor] = useState<HintAnchorRect | null>(null);
   const dragGhostKeyRef = useRef<string>('');
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Refs on the four anchor regions a hint can point at. Each region
+  // wraps an already-rendered subtree, so adding the ref doesn't
+  // change layout — only enables measureInWindow.
+  const scoreBarRef = useRef<View>(null);
+  const bonusStripRef = useRef<View>(null);
+  const gridWrapRef = useRef<View>(null);
+  const bottomRef = useRef<View>(null);
 
   const haptic = useHaptic();
   const playSound = useSound();
@@ -455,6 +486,36 @@ export const GameScreen = ({
     settings.seenFirstScoringLineHint,
     settings.seenLowDeckHint,
   ]);
+
+  // When a hint becomes active, measure its target region so the arrow
+  // can point at it. measureInWindow is async (fires after the next
+  // layout pass), so the anchor briefly stays null and the modal
+  // renders centered with no arrow until the rect arrives.
+  useEffect(() => {
+    if (!activeHint) {
+      setHintAnchor(null);
+      return;
+    }
+    const region = HINT_ANCHOR[activeHint];
+    const ref =
+      region === 'grid' ? gridWrapRef
+      : region === 'bonus-strip' ? bonusStripRef
+      : region === 'drawn-area' ? bottomRef
+      : region === 'score-bar' ? scoreBarRef
+      : null;
+    if (!ref?.current) {
+      setHintAnchor(null);
+      return;
+    }
+    // Defer one frame to make sure the modal mounts before we measure;
+    // some animations push the popup around briefly on first render.
+    const id = setTimeout(() => {
+      ref.current?.measureInWindow((x, y, w, h) => {
+        setHintAnchor({ x, y, w, h });
+      });
+    }, 60);
+    return () => clearTimeout(id);
+  }, [activeHint]);
 
   const dismissHint = () => {
     if (activeHint) updateSettings({ [HINT_SETTING_KEY[activeHint]]: true });
@@ -897,23 +958,27 @@ export const GameScreen = ({
 
   return (
     <View style={styles.root}>
-      <ScoreBar
-        target={state.target}
-        liveScore={liveScore}
-        onInfoPress={() => setScoringOpen(true)}
-        onHomePress={onHome}
-        onScorePress={() => setTierBreakdownOpen(true)}
-        kicker={kicker}
-        onUndoPress={handleUndoPress}
-        undoState={undoState}
-      />
-      <BonusCardStrip
-        cards={state.bonusCards}
-        values={bonusValues}
-        onCardPress={i => setBonusDetailIdx(i)}
-      />
+      <View ref={scoreBarRef} collapsable={false}>
+        <ScoreBar
+          target={state.target}
+          liveScore={liveScore}
+          onInfoPress={() => setScoringOpen(true)}
+          onHomePress={onHome}
+          onScorePress={() => setTierBreakdownOpen(true)}
+          kicker={kicker}
+          onUndoPress={handleUndoPress}
+          undoState={undoState}
+        />
+      </View>
+      <View ref={bonusStripRef} collapsable={false}>
+        <BonusCardStrip
+          cards={state.bonusCards}
+          values={bonusValues}
+          onCardPress={i => setBonusDetailIdx(i)}
+        />
+      </View>
 
-      <View style={styles.gridWrap}>
+      <View ref={gridWrapRef} style={styles.gridWrap} collapsable={false}>
         <GestureDetector gesture={panGesture}>
           <View style={styles.gridStack}>
             <GridView
@@ -931,7 +996,7 @@ export const GameScreen = ({
         </GestureDetector>
       </View>
 
-      <View style={styles.bottom}>
+      <View ref={bottomRef} style={styles.bottom} collapsable={false}>
         {renderBottom(
           state,
           handlePlace,
@@ -988,6 +1053,7 @@ export const GameScreen = ({
       />
       <HintModal
         hint={activeHint}
+        anchor={hintAnchor}
         bonusDeclineAllowed={state.bonusDeclineAllowed}
         onDismiss={dismissHint}
       />
@@ -1010,33 +1076,66 @@ const hintBodyFor = (hint: HintId, bonusDeclineAllowed: boolean): string => {
 
 const HintModal = ({
   hint,
+  anchor,
   bonusDeclineAllowed,
   onDismiss,
 }: {
   hint: HintId | null;
+  anchor: HintAnchorRect | null;
   bonusDeclineAllowed: boolean;
   onDismiss: () => void;
-}) => (
-  <Modal
-    visible={hint !== null}
-    transparent
-    animationType="fade"
-    onRequestClose={onDismiss}
-  >
-    <Pressable style={hintModalStyles.backdrop} onPress={onDismiss}>
-      <Pressable style={hintModalStyles.sheet} onPress={() => {}}>
-        <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
-        <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
-        <Text style={hintModalStyles.body}>
-          {hint ? hintBodyFor(hint, bonusDeclineAllowed) : ''}
-        </Text>
-        <View style={hintModalStyles.btnRow}>
-          <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
-        </View>
+}) => {
+  // The popup is centered inside a fullscreen flex backdrop, but we
+  // also need its rect in screen coords to draw an arrow from its
+  // nearest edge. measureInWindow fires after layout, so the rect
+  // arrives one frame after the modal opens — the arrow simply
+  // doesn't render until both rects are known.
+  const sheetRef = useRef<View>(null);
+  const [popup, setPopup] = useState<HintAnchorRect | null>(null);
+
+  useEffect(() => {
+    if (hint === null) {
+      setPopup(null);
+      return;
+    }
+    const id = setTimeout(() => {
+      sheetRef.current?.measureInWindow((x, y, w, h) => {
+        setPopup({ x, y, w, h });
+      });
+    }, 80);
+    return () => clearTimeout(id);
+  }, [hint]);
+
+  return (
+    <Modal
+      visible={hint !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={onDismiss}
+    >
+      <Pressable style={hintModalStyles.backdrop} onPress={onDismiss}>
+        <Pressable
+          ref={sheetRef}
+          collapsable={false}
+          style={hintModalStyles.sheet}
+          onPress={() => {}}
+        >
+          <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
+          <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
+          <Text style={hintModalStyles.body}>
+            {hint ? hintBodyFor(hint, bonusDeclineAllowed) : ''}
+          </Text>
+          <View style={hintModalStyles.btnRow}>
+            <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
+          </View>
+        </Pressable>
+        {popup && anchor && (
+          <HintArrow popup={popup} anchor={anchor} color={colors.accent} />
+        )}
       </Pressable>
-    </Pressable>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const hintModalStyles = StyleSheet.create({
   backdrop: {
