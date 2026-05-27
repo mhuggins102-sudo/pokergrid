@@ -202,7 +202,14 @@ const WebScaler = ({ children }: { children: React.ReactNode }) => {
     if (Platform.OS !== 'web') return;
     const fit = () => {
       const w = window.innerWidth;
-      const h = window.innerHeight;
+      // visualViewport.height is the truly visible vertical area after
+      // browser chrome (iOS Safari URL bar + bottom tab bar). Plain
+      // window.innerHeight on iOS often reports the URL-bar-collapsed
+      // viewport even when the URL bar is showing, which is why the
+      // GameScreen used to slide under the bar in Mobile Safari. We
+      // fall back to innerHeight on the rare browser without
+      // VisualViewport support.
+      const h = window.visualViewport?.height ?? window.innerHeight;
       // Shrink only when the viewport is narrower than our design width;
       // never upscale past 1.0 on wide / desktop browsers.
       const widthScale = Math.min(1, w / WEB_NATURAL_WIDTH);
@@ -220,7 +227,14 @@ const WebScaler = ({ children }: { children: React.ReactNode }) => {
     };
     fit();
     window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
+    // visualViewport.resize fires when iOS Safari's URL bar shows or
+    // hides — innerHeight doesn't always update for that, so this is
+    // the authoritative event on mobile.
+    window.visualViewport?.addEventListener('resize', fit);
+    return () => {
+      window.removeEventListener('resize', fit);
+      window.visualViewport?.removeEventListener('resize', fit);
+    };
   }, []);
 
   if (Platform.OS !== 'web') return <>{children}</>;
