@@ -1190,10 +1190,10 @@ const hintBodyFor = (hint: HintId, bonusDeclineAllowed: boolean): string => {
 
 // Spotlight inflation — extra px around the measured anchor rect that
 // stays undimmed. The anchor refs are on wrapper Views (grid cell
-// Pressable, bonus card slot, perk button wrap) which already include
-// the visible element plus any minor margin/padding, so we don't add
-// inflation here — keeping the spotlight tight prevents the dim hole
-// from spilling into the edge of an adjacent card / button.
+// Pressable, bonus card slot, perk button wrap) which already match
+// the visible element, so we don't add inflation here — keeping the
+// spotlight tight prevents the dim hole from spilling into the edge
+// of an adjacent card / button.
 const SPOTLIGHT_PAD = 0;
 // Distance between the popup edge and the spotlighted anchor — leaves
 // room for the arrow to actually draw and keeps the chrome from
@@ -1205,13 +1205,6 @@ const POPUP_SCREEN_MARGIN = 16;
 // Guards against accidental dismisses where the player taps just as
 // the popup appears and hasn't had time to read it.
 const HINT_DISMISS_LOCKOUT_MS = 2000;
-
-// Hints whose anchor benefits from the neon ring around the spotlight
-// hole. Small text targets like the deck-remaining number need the
-// ring to read clearly as "this is the thing"; for chunky targets
-// (cards, grid tiles, buttons) the spotlight alone is enough and the
-// extra ring just adds visual noise.
-const HINTS_WITH_HALO: ReadonlySet<HintId> = new Set(['low-deck']);
 
 const HintModal = ({
   hint,
@@ -1360,24 +1353,6 @@ const HintModal = ({
                 },
               ]}
             />
-            {/* Soft glow ring around the anchor — only drawn for hints
-                whose target is small enough to need the extra "this is
-                the thing" cue (deck-remaining text). For chunky
-                anchors the spotlight hole alone reads cleanly. */}
-            {hint && HINTS_WITH_HALO.has(hint) && (
-              <View
-                pointerEvents="none"
-                style={[
-                  hintModalStyles.halo,
-                  {
-                    left: spotlight.x,
-                    top: spotlight.y,
-                    width: spotlight.w,
-                    height: spotlight.h,
-                  },
-                ]}
-              />
-            )}
           </>
         ) : (
           // No anchor → uniform dim across the whole screen.
@@ -1440,16 +1415,6 @@ const hintModalStyles = StyleSheet.create({
   dim: {
     position: 'absolute',
     backgroundColor: 'rgba(2, 4, 12, 0.78)',
-  },
-  // Soft glow ring around the spotlighted element — drawn as a thin
-  // border with a generous shadow so the highlighted region reads as
-  // "lit up" rather than just "not dimmed".
-  halo: {
-    position: 'absolute',
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    ...glow(colors.accent, 14, 0.5),
   },
   sheet: {
     position: 'absolute',

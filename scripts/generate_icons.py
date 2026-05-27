@@ -52,28 +52,72 @@ JOKER = (209, 139, 255, 255)    # #d18bff violet
 # axis.
 JOKER_CELLS = {(1, 3), (3, 1)}
 
-# Build the 5x5 layout: jokers at JOKER_CELLS, the remaining 23 cells
-# filled from a balanced bag (6 + 6 + 6 + 5 of the four suit colors)
-# shuffled with a fixed seed so re-running the script always yields
-# the same icon. To re-roll the look, change SUIT_SEED.
-SUIT_SEED = 11
+# Random fill seed. The layout is constraint-satisfied (no two
+# orthogonally-adjacent cells share a suit color) and tries to keep
+# the four suits roughly balanced; re-roll by changing this number.
+SUIT_SEED = 4
+
+SUITS = (SUIT_H, SUIT_S, SUIT_D, SUIT_C)
+
+
+def _ortho_neighbors(r: int, c: int):
+    for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < 5 and 0 <= nc < 5:
+            yield nr, nc
 
 
 def build_layout() -> list[list[tuple[int, int, int, int]]]:
-    bag = [SUIT_H] * 6 + [SUIT_S] * 6 + [SUIT_D] * 6 + [SUIT_C] * 5
+    """Fill the 5x5 grid so no two orthogonally-adjacent cells share
+    a suit color, biased toward an even count of each suit. Jokers
+    sit at JOKER_CELLS and don't constrain neighbors (violet isn't
+    one of the four suit choices). The output still looks random —
+    the constraint just prevents the eye from latching onto
+    same-color blobs that the previous unconstrained shuffle would
+    occasionally produce."""
     rng = random.Random(SUIT_SEED)
-    rng.shuffle(bag)
-    layout: list[list[tuple[int, int, int, int]]] = []
-    bag_iter = iter(bag)
-    for r in range(5):
-        row: list[tuple[int, int, int, int]] = []
-        for c in range(5):
-            if (r, c) in JOKER_CELLS:
-                row.append(JOKER)
-            else:
-                row.append(next(bag_iter))
-        layout.append(row)
-    return layout
+    grid: list[list[tuple[int, int, int, int] | None]] = [[None] * 5 for _ in range(5)]
+    for (r, c) in JOKER_CELLS:
+        grid[r][c] = JOKER
+
+    # Counts of each suit used so far. We prefer the least-used valid
+    # suit at each step so the four suits stay near balanced (5–6 each
+    # of 23 cells); ties broken by RNG so the layout doesn't repeat.
+    counts: dict[tuple[int, int, int, int], int] = {s: 0 for s in SUITS}
+    cells = [(r, c) for r in range(5) for c in range(5) if grid[r][c] is None]
+    rng.shuffle(cells)
+
+    def fill(idx: int) -> bool:
+        if idx == len(cells):
+            return True
+        r, c = cells[idx]
+        used = {
+            grid[nr][nc]
+            for nr, nc in _ortho_neighbors(r, c)
+            if grid[nr][nc] is not None
+        }
+        candidates = [s for s in SUITS if s not in used]
+        # Prefer lower-count suits first, with RNG-broken ties.
+        rng.shuffle(candidates)
+        candidates.sort(key=lambda s: counts[s])
+        for color in candidates:
+            grid[r][c] = color
+            counts[color] += 1
+            if fill(idx + 1):
+                return True
+            grid[r][c] = None
+            counts[color] -= 1
+        return False
+
+    if not fill(0):
+        raise RuntimeError(f'no valid coloring for seed={SUIT_SEED}')
+
+    return [[cast_color(grid[r][c]) for c in range(5)] for r in range(5)]
+
+
+def cast_color(v):
+    assert v is not None
+    return v
 
 
 LAYOUT = build_layout()
@@ -129,7 +173,11 @@ def render_grid(canvas_size: int, content_size: int) -> Image.Image:
     glow = glow.filter(ImageFilter.GaussianBlur(blur_r))
     img.alpha_composite(glow)
 
-    # Sharp tiles on top of the glow halo.
+    # Sharp tiles on top of the glow halo. We render tiles flat (no
+    # inner highlight) — the inset rectangle the earlier version drew
+    # was readable at 1024px but at 32-180px it didn't blend with the
+    # base color and showed up as a visible "gray rectangle inside
+    # each cell" in some browser favicon renderings.
     draw = ImageDraw.Draw(img)
     for r in range(5):
         for c in range(5):
@@ -139,20 +187,6 @@ def render_grid(canvas_size: int, content_size: int) -> Image.Image:
             x1 = x0 + tile - 1
             y1 = y0 + tile - 1
             draw.rounded_rectangle((x0, y0, x1, y1), radius=radius, fill=color)
-            # Inner highlight — slightly lighter rounded rect inset at
-            # the top to mimic the chip lighting in the game.
-            inset = max(2, tile // 12)
-            highlight = (
-                min(255, color[0] + 40),
-                min(255, color[1] + 40),
-                min(255, color[2] + 40),
-                90,
-            )
-            draw.rounded_rectangle(
-                (x0 + inset, y0 + inset, x1 - inset, y0 + tile // 2),
-                radius=max(1, radius - inset),
-                fill=highlight,
-            )
 
     return img
 
