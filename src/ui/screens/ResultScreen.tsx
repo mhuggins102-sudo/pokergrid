@@ -656,18 +656,20 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   })();
 
   // Achievements earned during this run that the player didn't already
-  // have on file. Empty for tainted runs, Easy / Medium runs, or runs
-  // that didn't clear the score bar — achievementEarned handles those
-  // gates. Memoized so the surrounding render + the record useEffect
-  // see the same list.
+  // have on file. Empty for tainted runs, non-Free-Play runs (challenges
+  // and Targets Up don't count toward achievements — they have their
+  // own progress tracks), Easy / Medium runs, or runs that didn't clear
+  // the score bar. Memoized so the surrounding render + the record
+  // useEffect see the same list.
   const newlyEarnedAchievements: Achievement[] = useMemo(() => {
     if (tainted) return [];
+    if (context.mode !== 'free') return [];
     return ACHIEVEMENTS.filter(
       a =>
         achievementEarned(a, state, report) &&
         !prevStats.achievementsDone.includes(a.id)
     );
-  }, [tainted, state, report, prevStats.achievementsDone]);
+  }, [tainted, context.mode, state, report, prevStats.achievementsDone]);
 
   // Record the run exactly once on mount — applying the correct stats
   // method based on the play context. Tainted runs are skipped.

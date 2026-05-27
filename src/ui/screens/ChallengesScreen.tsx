@@ -12,12 +12,22 @@ interface Props {
 
 export const ChallengesScreen = ({ onBack, onStart }: Props) => {
   const { stats } = useStats();
+  // Only count IDs that still exist in CHALLENGES — stats.challengesDone
+  // may carry migrated IDs from the pre-Achievements split, and we
+  // don't want those inflating the tally.
+  const doneCount = CHALLENGES.filter(c =>
+    stats.challengesDone.includes(c.id)
+  ).length;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Challenges</Text>
         <NeonButton label="Back" variant="ghost" size="sm" onPress={onBack} />
       </View>
+
+      <Text style={styles.tally}>
+        {doneCount} / {CHALLENGES.length} cleared
+      </Text>
 
       <View style={styles.list}>
         {CHALLENGES.map(c => {
@@ -64,6 +74,18 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 3,
     textTransform: 'uppercase',
+  },
+  // Mirrors the Achievements tally — tinted with the "done" success
+  // green so it reads as a progress marker, not a header.
+  tally: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textShadowColor: colors.success,
+    textShadowRadius: 3,
+    marginBottom: spacing.md,
   },
   list: { gap: spacing.sm },
   card: {
