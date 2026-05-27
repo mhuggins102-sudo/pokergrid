@@ -1189,8 +1189,7 @@ const hintBodyFor = (hint: HintId, bonusDeclineAllowed: boolean): string => {
 };
 
 // Spotlight halo inflation — extra px around the anchor that stays
-// undimmed so the highlighted element has a little breathing room and
-// the glow ring looks intentional rather than touching the chrome.
+// undimmed so the highlighted element has a little breathing room.
 const SPOTLIGHT_PAD = 6;
 // Distance between the popup edge and the spotlighted anchor — leaves
 // room for the arrow to actually draw and keeps the chrome from
@@ -1198,6 +1197,17 @@ const SPOTLIGHT_PAD = 6;
 const POPUP_ANCHOR_GAP = 22;
 // Outer margin keeping the popup away from screen edges.
 const POPUP_SCREEN_MARGIN = 16;
+// Minimum time the hint stays interactive before taps can dismiss it.
+// Guards against accidental dismisses where the player taps just as
+// the popup appears and hasn't had time to read it.
+const HINT_DISMISS_LOCKOUT_MS = 2000;
+
+// Hints whose anchor benefits from the neon ring around the spotlight
+// hole. Small text targets like the deck-remaining number need the
+// ring to read clearly as "this is the thing"; for chunky targets
+// (cards, grid tiles, buttons) the spotlight alone is enough and the
+// extra ring just adds visual noise.
+const HINTS_WITH_HALO: ReadonlySet<HintId> = new Set(['low-deck']);
 
 const HintModal = ({
   hint,
@@ -1216,11 +1226,28 @@ const HintModal = ({
   // first render we draw at the screen center hidden, then re-render
   // at the computed position once we know the popup's size.
   const [popupSize, setPopupSize] = useState<{ w: number; h: number } | null>(null);
+  // Brief lockout right after the popup appears — prevents the player
+  // from accidentally tap-dismissing before they've registered that
+  // the popup even opened.
+  const [dismissArmed, setDismissArmed] = useState(false);
 
-  // Reset measurement when a new hint opens (or this one closes).
+  // Reset measurement + arm the dismiss lockout when a new hint opens
+  // (or this one closes).
   useEffect(() => {
-    if (hint === null) setPopupSize(null);
+    if (hint === null) {
+      setPopupSize(null);
+      setDismissArmed(false);
+      return;
+    }
+    setDismissArmed(false);
+    const id = setTimeout(() => setDismissArmed(true), HINT_DISMISS_LOCKOUT_MS);
+    return () => clearTimeout(id);
   }, [hint]);
+
+  const guardedDismiss = () => {
+    if (!dismissArmed) return;
+    onDismiss();
+  };
 
   const win = Dimensions.get('window');
   // The popup never exceeds 340 wide or the viewport (less margins),
@@ -1282,12 +1309,14 @@ const HintModal = ({
       visible={hint !== null}
       transparent
       animationType="fade"
-      onRequestClose={onDismiss}
+      onRequestClose={guardedDismiss}
     >
       {/* Full-screen tap catcher — taps anywhere off the popup dismiss
-          the hint. The dim layers stack on top with pointerEvents none
+          the hint, but only after the dismiss lockout elapses so an
+          accidental tap as the popup appears doesn't immediately
+          close it. The dim layers stack on top with pointerEvents none
           so touches still reach this. */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={guardedDismiss}>
         {spotlight ? (
           // Four dim rectangles forming a "hole" around the anchor so
           // the spotlighted element stays at full brightness while
@@ -1327,21 +1356,24 @@ const HintModal = ({
                 },
               ]}
             />
-            {/* Soft glow ring around the anchor — adds an intentional
-                halo so the player reads the hole as "this thing" rather
-                than "the dim happened to miss a spot". */}
-            <View
-              pointerEvents="none"
-              style={[
-                hintModalStyles.halo,
-                {
-                  left: spotlight.x,
-                  top: spotlight.y,
-                  width: spotlight.w,
-                  height: spotlight.h,
-                },
-              ]}
-            />
+            {/* Soft glow ring around the anchor — only drawn for hints
+                whose target is small enough to need the extra "this is
+                the thing" cue (deck-remaining text). For chunky
+                anchors the spotlight hole alone reads cleanly. */}
+            {hint && HINTS_WITH_HALO.has(hint) && (
+              <View
+                pointerEvents="none"
+                style={[
+                  hintModalStyles.halo,
+                  {
+                    left: spotlight.x,
+                    top: spotlight.y,
+                    width: spotlight.w,
+                    height: spotlight.h,
+                  },
+                ]}
+              />
+            )}
           </>
         ) : (
           // No anchor → uniform dim across the whole screen.
@@ -1379,7 +1411,13 @@ const HintModal = ({
             {hint ? hintBodyFor(hint, bonusDeclineAllowed) : ''}
           </Text>
           <View style={hintModalStyles.btnRow}>
-            <NeonButton label="Got it" variant="primary" size="sm" onPress={onDismiss} />
+            <NeonButton
+              label="Got it"
+              variant="primary"
+              size="sm"
+              disabled={!dismissArmed}
+              onPress={guardedDismiss}
+            />
           </View>
         </Pressable>
 
