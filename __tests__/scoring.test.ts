@@ -362,7 +362,7 @@ describe('new grid-wide bonuses', () => {
   });
 
   test('Symmetric Frame multiplies on matching row pairs / column pairs', () => {
-    const card = findCard('symmetric-frame-x1_2');
+    const card = findCard('symmetric-frame-x1_25');
 
     // Grid where R1 and R5 are both Pair (matching), C1 and C5 are not.
     const g = emptyGrid();
@@ -377,24 +377,24 @@ describe('new grid-wide bonuses', () => {
 
     const base = scoreGrid(g, []).total;
     const with1 = scoreGrid(g, [card]).total;
-    // Only one axis matches (R1 / R5 both Pair); expect ×1.2.
-    expect(with1).toBe(Math.ceil(base * 1.2));
+    // Only one axis matches (R1 / R5 both Pair); expect ×1.25.
+    expect(with1).toBe(Math.ceil(base * 1.25));
   });
 
-  test('Burnout triggers at 18+ perks spent', () => {
-    const card = findCard('burnout-x1_3');
+  test('Burnout triggers at 20+ perks spent', () => {
+    const card = findCard('burnout-x1_25');
     const g = filledNonPair();
     const base = scoreGrid(g, [card]).total;
     expect(base).toBe(scoreGrid(g, []).total); // 0 perks → inactive
     // Plain discards never count toward Burnout, no matter how many.
     const lotsOfDiscards = Array(30).fill(C('2','H'));
     expect(scoreGrid(g, [card], { discards: lotsOfDiscards }).total).toBe(base);
-    // 17 perks → still inactive.
-    const seventeenPerks = Array(17).fill(C('2','H'));
-    expect(scoreGrid(g, [card], { perkSpent: seventeenPerks }).total).toBe(base);
-    // 18 perks → ×1.3.
-    const eighteenPerks = Array(18).fill(C('2','H'));
-    expect(scoreGrid(g, [card], { perkSpent: eighteenPerks }).total).toBe(Math.ceil(base * 1.3));
+    // 19 perks → still inactive.
+    const nineteenPerks = Array(19).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { perkSpent: nineteenPerks }).total).toBe(base);
+    // 20 perks → ×1.25.
+    const twentyPerks = Array(20).fill(C('2','H'));
+    expect(scoreGrid(g, [card], { perkSpent: twentyPerks }).total).toBe(Math.ceil(base * 1.25));
   });
 
   test('Frugal triggers at ≤12 perks spent', () => {

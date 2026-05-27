@@ -218,6 +218,14 @@ export const newGame = (
     deckExtras.map(c => c.id.replace(/-pwr\d+$/, ''))
   );
   const excludedBaseIds = new Set<string>([...heldBaseIds, ...poweredBaseIds]);
+  // Joker-dependent bonus cards (Trash Joker, Cozy Joker) can never
+  // trigger when the deck has no jokers — Extreme runs and any future
+  // no-joker challenges. Strip them from the draw pool so the player
+  // doesn't waste a ♣ pulling a dud.
+  if (jokerCount === 0) {
+    excludedBaseIds.add('trash-joker-x1_25');
+    excludedBaseIds.add('cozy-joker-x1_15');
+  }
   const drawable = BONUS_DECK_POOL.filter(c => !excludedBaseIds.has(c.id));
   const shuffledBonus = shuffle(drawable, rng);
   const starterCount = STARTER_BONUS_BY_DIFFICULTY[difficulty];
