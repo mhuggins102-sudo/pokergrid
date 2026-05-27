@@ -1188,9 +1188,13 @@ const hintBodyFor = (hint: HintId, bonusDeclineAllowed: boolean): string => {
   return HINT_BODY[hint];
 };
 
-// Spotlight halo inflation — extra px around the anchor that stays
-// undimmed so the highlighted element has a little breathing room.
-const SPOTLIGHT_PAD = 6;
+// Spotlight inflation — extra px around the measured anchor rect that
+// stays undimmed. The anchor refs are on wrapper Views (grid cell
+// Pressable, bonus card slot, perk button wrap) which already include
+// the visible element plus any minor margin/padding, so we don't add
+// inflation here — keeping the spotlight tight prevents the dim hole
+// from spilling into the edge of an adjacent card / button.
+const SPOTLIGHT_PAD = 0;
 // Distance between the popup edge and the spotlighted anchor — leaves
 // room for the arrow to actually draw and keeps the chrome from
 // kissing the highlighted element.
