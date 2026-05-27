@@ -732,7 +732,7 @@ const STEPS: Slide[] = [
   {
     kicker: '07 · THE JOKER',
     title: 'The joker is wild',
-    copy: "Joker count tracks the difficulty: Easy ships two, Medium / Hard one, Extreme zero. Jokers auto-place into the next spiral slot and can't be discarded normally — only a ♦ Destroy removes one. On the grid a joker takes whatever rank and suit make the best hand, independently for its row and its column.",
+    copy: "Jokers auto-place into the next spiral slot and can't be discarded normally — only a ♦ Destroy removes one. On the grid a joker takes whatever rank and suit make the best hand, independently for its row and its column.",
     accent: colors.joker,
     Visual: JokerVisual,
   },
@@ -758,9 +758,9 @@ const STEPS: Slide[] = [
     Visual: MultiplierMathVisual,
   },
   {
-    kicker: '11 · ACHIEVEMENTS',
+    kicker: '11 · ENDGAME BONUSES',
     title: 'Grid-wide multipliers',
-    copy: 'Some bonus cards multiply your whole final score, not individual lines. They reward arranging the grid in specific shapes.',
+    copy: 'Some bonus cards multiply your whole final score, not individual lines. They reward arranging the grid in specific shapes — or playing in specific styles.',
     accent: colors.success,
     Visual: AchievementsVisual,
   },
@@ -959,7 +959,8 @@ const demoStyles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 12,
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: 'left',
+    alignSelf: 'stretch',
     marginTop: spacing.md,
     paddingHorizontal: spacing.sm,
   },
@@ -977,8 +978,10 @@ const demoStyles = StyleSheet.create({
   bonusRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    alignSelf: 'stretch',
     paddingTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
   },
   bonusChip: {
     flex: 1,
