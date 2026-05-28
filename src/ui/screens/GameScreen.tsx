@@ -499,7 +499,11 @@ export const GameScreen = ({
     let fallback = -1;
     for (let i = 0; i < state.bonusCards.length; i++) {
       const card = state.bonusCards[i];
-      if (categoryOf(card) !== 'grid') continue;
+      // Both end-game multiplier categories (grid achievements + deck
+      // management) trigger the same "grid-effect" hint, so widen the
+      // filter to include either.
+      const cat = categoryOf(card);
+      if (cat !== 'grid' && cat !== 'deck-management') continue;
       if (fallback < 0) fallback = i;
       if ((bonusValues[i] ?? 0) !== 0) return i;
     }

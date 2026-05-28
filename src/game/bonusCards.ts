@@ -378,28 +378,48 @@ const cleanBorder: BonusCard = {
   },
 };
 
+// Each of the four grid edges as a 5-slot index list, used by the
+// per-edge Monochrome Border check. Corner slots intentionally appear
+// in two edges — a red corner contributes to BOTH the row edge and
+// the column edge it sits on, so the corner cards do double duty in
+// the multiplier roll-up.
+const BORDER_EDGES: readonly (readonly number[])[] = [
+  [0, 1, 2, 3, 4],        // top row (R1)
+  [20, 21, 22, 23, 24],   // bottom row (R5)
+  [0, 5, 10, 15, 20],     // left column (C1)
+  [4, 9, 14, 19, 24],     // right column (C5)
+];
+
 const monochromeBorder: BonusCard = {
   id: 'monochrome-border-x1_75',
-  name: 'Monochrome Border ×1.75',
+  name: 'Monochrome Border ×1.15 (each)',
   title: 'Monochrome Border',
-  mult: '×1.75',
-  description: 'All border cards are the same color (red or black).',
-  multValue: 1.75,
-  baseMultValue: 1.75,
+  mult: '×1.15 (each)',
+  description:
+    'Each grid edge (top / bottom / left / right) whose filled cards are all the same color (red or black). Stacks up to ×1.15⁴.',
+  multValue: 1.15,
+  baseMultValue: 1.15,
   gridEffect: ({ grid }, card) => {
-    // Wild cards are suit-flexible so they don't count against the color
-    // check (they can be either red or black for evaluation purposes).
-    // Jokers and empty slots are also excluded — only the filled,
-    // non-wild standard cards on the border have to share a color.
-    const cards = BORDER_SLOTS.map(i => grid[i]).filter(
-      (c): c is Card =>
-        c !== null && !isJoker(c) && c.supercharge !== 'wild'
-    );
-    if (cards.length === 0) return {};
-    const isRed = (c: Card) => !isJoker(c) && (c.suit === 'H' || c.suit === 'D');
-    const allRed = cards.every(isRed);
-    const allBlack = cards.every(c => !isRed(c));
-    return allRed || allBlack ? { totalMultiplier: card.multValue ?? 2 } : {};
+    const m = card.multValue ?? 1.15;
+    // For each of the 4 edges, count it as a hit if every FILLED,
+    // non-joker, non-wild card on that edge shares a color. Wilds and
+    // jokers are excluded because they're suit-flexible; empty slots
+    // are skipped so a partially-filled edge can still qualify
+    // (matching the original card's lenient "no color conflict" rule).
+    let mult = 1;
+    for (const edge of BORDER_EDGES) {
+      const cards = edge
+        .map(i => grid[i])
+        .filter(
+          (c): c is Exclude<Card, { kind: 'joker' }> =>
+            c !== null && !isJoker(c) && c.supercharge !== 'wild'
+        );
+      if (cards.length === 0) continue;
+      const allRed = cards.every(c => c.suit === 'H' || c.suit === 'D');
+      const allBlack = cards.every(c => c.suit === 'S' || c.suit === 'C');
+      if (allRed || allBlack) mult *= m;
+    }
+    return mult > 1 ? { totalMultiplier: mult } : {};
   },
 };
 
@@ -577,15 +597,19 @@ const symmetricFrame: BonusCard = {
   name: 'Symmetric Frame ×1.25 (each)',
   title: 'Symmetric Frame',
   mult: '×1.25 (each)',
-  description: 'R1/R5 or C1/C5 sharing a hand type (High Card doesn\'t count).',
+  description: 'R1/R5 or C1/C5 sharing a hand type. The line must be full to count.',
   multValue: 1.25,
   baseMultValue: 1.25,
   gridEffect: ({ lines }, card) => {
     const m = card.multValue ?? 1.25;
     const handAt = (kind: 'row' | 'col', idx: number): HandRank | null =>
       lines.find(l => l.kind === kind && l.index === idx)?.hand ?? null;
+    // Both lines must be fully scored (hand !== null means the row/column
+    // had all 5 slots filled at game end) and share the same hand rank.
+    // High Card now qualifies — the line must be FULL, but the rank can
+    // be anything from High Card up.
     const matches = (a: HandRank | null, b: HandRank | null): boolean =>
-      a !== null && a !== 'HIGH_CARD' && a === b;
+      a !== null && a === b;
     let mult = 1;
     if (matches(handAt('row', 0), handAt('row', 4))) mult *= m;
     if (matches(handAt('col', 0), handAt('col', 4))) mult *= m;
@@ -626,15 +650,18 @@ const patience: BonusCard = {
 // (Counts the ♥/♠/♦/♣ used to trigger a Hop / Slide / Destroy / Bonus.
 //  Plain Discards and destroyed targets DON'T count here — only perks.)
 const burnout: BonusCard = {
+  // ID kept on the old "x1_25" tag so saves with the card in hand still
+  // resolve to this definition — the multiplier in the title is just
+  // display text.
   id: 'burnout-x1_25',
-  name: 'Burnout ×1.25',
+  name: 'Burnout ×1.5',
   title: 'Burnout',
-  mult: '×1.25',
+  mult: '×1.5',
   description: '20+ suit perks spent across the run.',
-  multValue: 1.25,
-  baseMultValue: 1.25,
+  multValue: 1.5,
+  baseMultValue: 1.5,
   gridEffect: ({ perkSpent }, card) =>
-    perkSpent.length >= 20 ? { totalMultiplier: card.multValue ?? 1.25 } : {},
+    perkSpent.length >= 20 ? { totalMultiplier: card.multValue ?? 1.5 } : {},
 };
 
 const frugal: BonusCard = {
@@ -642,11 +669,11 @@ const frugal: BonusCard = {
   name: 'Frugal ×1.5',
   title: 'Frugal',
   mult: '×1.5',
-  description: '12 or fewer suit perks spent across the run.',
+  description: '14 or fewer suit perks spent across the run.',
   multValue: 1.5,
   baseMultValue: 1.5,
   gridEffect: ({ perkSpent }, card) =>
-    perkSpent.length <= 12 ? { totalMultiplier: card.multValue ?? 1.5 } : {},
+    perkSpent.length <= 14 ? { totalMultiplier: card.multValue ?? 1.5 } : {},
 };
 
 // ---------- The pool ----------

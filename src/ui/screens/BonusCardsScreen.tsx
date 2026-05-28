@@ -13,7 +13,14 @@ interface Props {
 // Iteration order matches the visual hierarchy of bonus impact: hand-type
 // boosts first (most personal), then line-targeted, then suit density,
 // then conditional, then grid-wide.
-const ORDER: BonusCategory[] = ['hand', 'line', 'suit', 'conditional', 'grid'];
+const ORDER: BonusCategory[] = [
+  'hand',
+  'line',
+  'suit',
+  'conditional',
+  'grid',
+  'deck-management',
+];
 
 export const BonusCardsScreen = ({ onBack }: Props) => {
   const { settings } = useSettings();

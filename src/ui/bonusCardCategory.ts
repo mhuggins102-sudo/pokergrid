@@ -16,7 +16,13 @@ import { colors } from './theme';
 //     gets a cleaner chip. Suit-density cards override the generic icon
 //     with the actual suit glyph (♥/♠/♦/♣) in its native suit color.
 
-export type BonusCategory = 'hand' | 'line' | 'suit' | 'conditional' | 'grid';
+export type BonusCategory =
+  | 'hand'
+  | 'line'
+  | 'suit'
+  | 'conditional'
+  | 'grid'
+  | 'deck-management';
 
 // Cards in the "Row / Column bonus" category that aren't row-N / col-N —
 // they target specific lines by LOCATION rather than by conditional on the
@@ -35,12 +41,24 @@ const CONDITIONAL_IDS = new Set([
   'blackjack-x2',
 ]);
 
+// End-game multipliers that key off "how did the run unfold" rather than
+// "what does the final board look like" — Speedrun (deck cards left),
+// Burnout (lots of perks), Frugal (few perks). Same purple tone as grid
+// achievements (both fire at game end), but grouped separately so the
+// catalog can present them under their own "Deck management" header.
+const DECK_MANAGEMENT_IDS = new Set([
+  'deck-bank-x1_05', // Speedrun
+  'burnout-x1_25',   // Burnout
+  'frugal-x1_5',     // Frugal
+]);
+
 export const categoryOf = (card: BonusCard): BonusCategory => {
   if (card.id.startsWith('hand-')) return 'hand';
   if (card.id.startsWith('row-') || card.id.startsWith('col-')) return 'line';
   if (LINE_LOCATION_IDS.has(card.id)) return 'line';
   if (card.id.startsWith('suit-density-')) return 'suit';
   if (CONDITIONAL_IDS.has(card.id)) return 'conditional';
+  if (DECK_MANAGEMENT_IDS.has(card.id)) return 'deck-management';
   return 'grid';
 };
 
@@ -60,22 +78,26 @@ const suitOf = (card: BonusCard): Suit | null => {
 };
 
 const CATEGORY_ICON: Record<BonusCategory, string> = {
-  hand: '≡',      // hand type — stack of three lines = a poker hand
-  line: '⊞',      // row / column — grid axis
-  suit: '◆',      // suit density — overridden below per actual suit
-  conditional: '✦', // per-line conditional — spark
-  grid: '▦',      // grid achievement — full-board pattern
+  hand: '≡',              // hand type — stack of three lines = a poker hand
+  line: '⊞',              // row / column — grid axis
+  suit: '◆',              // suit density — overridden below per actual suit
+  conditional: '✦',       // per-line conditional — spark
+  grid: '▦',              // grid achievement — full-board pattern
+  'deck-management': '▤', // deck management — horizontal stack (cards in a deck)
 };
 
-// In-game icons all share the warn tint; only grid achievements use the
-// joker tint. Suit-density overrides this with the actual suit's color
-// so colorblind players can still tell the four density cards apart.
+// In-game icons all share the warn tint; end-game multiplier categories
+// (grid + deck-management) use the joker tint so the player reads tone
+// → trigger time without memorizing each card. Suit-density overrides
+// this with the actual suit's color so colorblind players can still
+// tell the four density cards apart.
 const CATEGORY_ICON_COLOR: Record<BonusCategory, string> = {
   hand: colors.warn,
   line: colors.warn,
   suit: colors.warn,
   conditional: colors.warn,
   grid: colors.joker,
+  'deck-management': colors.joker,
 };
 
 export const CATEGORY_LABEL: Record<BonusCategory, string> = {
@@ -84,6 +106,7 @@ export const CATEGORY_LABEL: Record<BonusCategory, string> = {
   suit: 'Per-suit density',
   conditional: 'Per-line conditional',
   grid: 'Grid achievement',
+  'deck-management': 'Deck management',
 };
 
 // Two tones: yellow = pays out during the run, purple = pays out at
@@ -98,6 +121,7 @@ const TONE_OF: Record<BonusCategory, CategoryTone> = {
   conditional: 'yellow',
   line: 'yellow',
   grid: 'purple',
+  'deck-management': 'purple',
 };
 
 const TONE_COLOR: Record<CategoryTone, string> = {
