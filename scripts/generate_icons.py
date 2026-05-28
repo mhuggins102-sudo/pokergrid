@@ -37,14 +37,32 @@ ROOT = os.path.normpath(os.path.join(HERE, '..'))
 ASSETS = os.path.join(ROOT, 'assets')
 PUBLIC = os.path.join(ROOT, 'public')
 
-# Palette pulled verbatim from src/ui/theme.ts so the logo glows in
-# the same colors the in-game cards use.
-BG = (6, 7, 13, 255)            # #06070d — app background
-SUIT_H = (255, 77, 139, 255)    # #ff4d8b magenta-pink
-SUIT_S = (107, 214, 255, 255)   # #6bd6ff cyan
-SUIT_D = (255, 210, 74, 255)    # #ffd24a gold-amber
-SUIT_C = (92, 255, 154, 255)    # #5cff9a lime-green
-JOKER = (209, 139, 255, 255)    # #d18bff violet
+# Palette derived from src/ui/theme.ts. The in-game colors are very
+# vivid neon — perfect on the dark game canvas but reading as
+# pastel/cartoonish in the small app icon context. For the icon we
+# blend each color toward the dark background by ICON_DEEPEN so the
+# tiles feel like deeper jewel tones instead of candy. Adjusting one
+# constant re-rolls the whole palette uniformly.
+ICON_DEEPEN = 0.22  # fraction of bg color mixed into each suit
+
+
+def _mix(c, bg, t):
+    return tuple(int(c[i] * (1 - t) + bg[i] * t) for i in range(3)) + (c[3],)
+
+
+BG = (6, 7, 13, 255)  # #06070d — app background
+
+_SUIT_H_BASE = (255, 77, 139, 255)   # in-game ♥ magenta-pink
+_SUIT_S_BASE = (107, 214, 255, 255)  # in-game ♠ cyan
+_SUIT_D_BASE = (255, 210, 74, 255)   # in-game ♦ gold-amber
+_SUIT_C_BASE = (92, 255, 154, 255)   # in-game ♣ lime-green
+_JOKER_BASE = (209, 139, 255, 255)   # in-game joker violet
+
+SUIT_H = _mix(_SUIT_H_BASE, BG, ICON_DEEPEN)
+SUIT_S = _mix(_SUIT_S_BASE, BG, ICON_DEEPEN)
+SUIT_D = _mix(_SUIT_D_BASE, BG, ICON_DEEPEN)
+SUIT_C = _mix(_SUIT_C_BASE, BG, ICON_DEEPEN)
+JOKER = _mix(_JOKER_BASE, BG, ICON_DEEPEN)
 
 # Joker cells. Easy ships at most two jokers in the deck, so the logo
 # has exactly two violet squares — placed on an anti-diagonal so they
@@ -126,7 +144,15 @@ LAYOUT = build_layout()
 def render_grid(canvas_size: int, content_size: int) -> Image.Image:
     """Render the 5x5 logo on a `canvas_size` square with the grid
     occupying `content_size` px in the center. Content < canvas leaves
-    a safe-zone padding (used for the Android adaptive icon)."""
+    a safe-zone padding (used for the Android adaptive icon).
+
+    The canvas background is the only "behind the tiles" layer — we
+    used to draw an inner rounded dark panel as a frame, but iOS rounds
+    the entire icon into a squircle and the panel left a visible
+    pocket of dark space between the tiles and the rounded edge that
+    read as a bug. Tiles + glow now extend cleanly to whatever margin
+    `content_size` allows, so the iOS mask just trims the dark canvas
+    background uniformly."""
     img = Image.new('RGBA', (canvas_size, canvas_size), BG)
 
     # Grid geometry. Tile gap scales with content size so the grid
@@ -137,23 +163,10 @@ def render_grid(canvas_size: int, content_size: int) -> Image.Image:
     origin_x = (canvas_size - (tile * 5 + gap * 4)) // 2
     origin_y = (canvas_size - (tile * 5 + gap * 4)) // 2
 
-    # Faint dark panel under the grid so the tiles' glow has something
-    # to sit on — like the in-game bgPanel.
-    border_pad = max(4, content_size // 40)
-    border_box = (
-        origin_x - border_pad,
-        origin_y - border_pad,
-        origin_x + tile * 5 + gap * 4 + border_pad - 1,
-        origin_y + tile * 5 + gap * 4 + border_pad - 1,
-    )
-    border_radius = radius + border_pad
-    panel = Image.new('RGBA', (canvas_size, canvas_size), (0, 0, 0, 0))
-    pd = ImageDraw.Draw(panel)
-    pd.rounded_rectangle(border_box, radius=border_radius, fill=(13, 17, 28, 255))
-    img.alpha_composite(panel)
-
     # Glow layer: draw all tile silhouettes at low alpha onto a
     # separate canvas, blur it, and composite under the sharp tiles.
+    # Alpha lowered from 110 → 80 with the more muted palette so the
+    # halo reads as soft ambience instead of cartoon bloom.
     glow = Image.new('RGBA', (canvas_size, canvas_size), (0, 0, 0, 0))
     gdraw = ImageDraw.Draw(glow)
     for r in range(5):
@@ -167,7 +180,7 @@ def render_grid(canvas_size: int, content_size: int) -> Image.Image:
             gdraw.rounded_rectangle(
                 (x0 - grow, y0 - grow, x1 + grow, y1 + grow),
                 radius=radius + grow,
-                fill=(color[0], color[1], color[2], 110),
+                fill=(color[0], color[1], color[2], 80),
             )
     blur_r = max(3, content_size // 80)
     glow = glow.filter(ImageFilter.GaussianBlur(blur_r))
@@ -191,20 +204,34 @@ def render_grid(canvas_size: int, content_size: int) -> Image.Image:
     return img
 
 
+# Content-area fractions. The grid renders at this fraction of the
+# canvas, centered. Larger = tiles closer to the edge = less dark
+# margin between the design and the iOS rounded-square mask.
+# Keeping ≤ 0.92 on iOS targets leaves enough breathing room for the
+# squircle corners not to clip a tile.
+FILL = 0.92        # apple-touch + master — close to the edge so iOS
+                   # doesn't show a dark ring inside its rounded mask.
+FILL_FAVICON = 0.92 # browser favicon — same treatment; no mask but
+                   # tighter fill reads better at tab size.
+FILL_FAVICON_32 = 0.94  # 32px is tiny; squeeze as much as possible.
+FILL_ADAPTIVE = 0.62    # Android adaptive icon needs the inner ~66%
+                   # safe zone so circle / squircle / teardrop masks
+                   # never clip a tile.
+
+
 def write_native_icons() -> None:
-    # Master icon: full-bleed grid. iOS rounds the whole 1024px square
-    # itself, so the design fills the canvas with a small dark margin
-    # for breathing room rather than safe-zoning further.
-    master = render_grid(1024, int(1024 * 0.82))
+    # Master icon: tile grid fills the canvas with only a thin
+    # background margin. iOS rounds the whole 1024px square itself
+    # so we don't pre-round the design — the canvas bg shows through
+    # the trimmed corners cleanly.
+    master = render_grid(1024, int(1024 * FILL))
     master.save(os.path.join(ASSETS, 'icon.png'))
     master.save(os.path.join(ASSETS, 'splash-icon.png'))
 
-    fav = render_grid(192, int(192 * 0.82))
+    fav = render_grid(192, int(192 * FILL_FAVICON))
     fav.save(os.path.join(ASSETS, 'favicon.png'))
 
-    # Android adaptive icon — content must fit the inner ~62% so the
-    # system mask (circle / squircle / teardrop) never clips a tile.
-    adaptive = render_grid(1024, int(1024 * 0.62))
+    adaptive = render_grid(1024, int(1024 * FILL_ADAPTIVE))
     adaptive.save(os.path.join(ASSETS, 'adaptive-icon.png'))
 
 
@@ -215,20 +242,26 @@ def write_web_icons() -> None:
 
     # Browser tab favicon. 192px renders cleanly at 16/32/48 tab sizes
     # and at retina bookmark sizes too.
-    render_grid(192, int(192 * 0.82)).save(os.path.join(PUBLIC, 'favicon.png'))
+    render_grid(192, int(192 * FILL_FAVICON)).save(
+        os.path.join(PUBLIC, 'favicon.png')
+    )
     # 32px is what most desktop browsers actually rasterize the tab
     # to; rendering at 32 directly (instead of downscaling from 192)
     # keeps the tile edges crisp at the size users actually see.
-    render_grid(32, int(32 * 0.94)).save(os.path.join(PUBLIC, 'favicon-32.png'))
+    render_grid(32, int(32 * FILL_FAVICON_32)).save(
+        os.path.join(PUBLIC, 'favicon-32.png')
+    )
 
     # apple-touch-icon — iOS uses this for Home Screen tiles. 180 is
     # the canonical size; iOS will downscale for other targets.
-    render_grid(180, int(180 * 0.92)).save(os.path.join(PUBLIC, 'apple-touch-icon.png'))
+    render_grid(180, int(180 * FILL)).save(
+        os.path.join(PUBLIC, 'apple-touch-icon.png')
+    )
 
     # Large icon (manifest + apple-touch fallback). Same artwork as
     # the iOS app icon so the PWA Home Screen tile matches the native
     # build's tile if the user has both installed.
-    render_grid(1024, int(1024 * 0.82)).save(os.path.join(PUBLIC, 'icon.png'))
+    render_grid(1024, int(1024 * FILL)).save(os.path.join(PUBLIC, 'icon.png'))
 
 
 def main() -> None:

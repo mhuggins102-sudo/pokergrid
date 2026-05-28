@@ -24,18 +24,22 @@ export const VariantsInfoModal = ({ visible, onClose }: Props) => (
             A ladder. Level 1 starts at target 300; each win pushes the bar +50. Lose once and the
             run ends. Final score is the highest level you cleared.
           </Text>
+          <Text style={styles.body}>
+            Between levels, pick one of three bonus cards to keep AND choose a tier reward: A
+            advances you, S supercharges a card (a "wild" or "double" that carries into the next
+            grid), and SS supercharges two. The bonus cards you didn't keep return powered-up
+            into the bonus deck on later levels, so the further you climb the more the deck
+            reshapes itself.
+          </Text>
 
           <Text style={styles.variantHeader}>Challenges</Text>
           <Text style={styles.body}>
-            Playable variants that change how the deck or the rules work. Clear the 500-point bar
-            to mark each one complete.
+            Playable variants that change how the deck or the rules work. Each one has its own
+            score target shown on the Challenges page — clear it to mark the challenge complete.
           </Text>
-          <Text style={styles.note}>
-            All challenges run on the Hard ruleset: 1 joker, no undos, no starting bonus card, and
-            ♣ at the bonus-hand cap forces a swap.
-          </Text>
-          <Text style={styles.note}>
-            Passive end-of-run goals that don't change the gameplay live on the Achievements page.
+          <Text style={styles.body}>
+            All challenges run on the Hard ruleset: 1 joker, no undos, no starting bonus card,
+            and ♣ at the bonus-hand cap forces a swap.
           </Text>
         </ScrollView>
       </Pressable>
