@@ -572,22 +572,8 @@ const handleCancelAction = (s: GameState): GameState => {
     case 'awaiting-target-hop':
     case 'awaiting-target-slide-source':
     case 'awaiting-target-destroy':
-      return { ...s, phase: { kind: s.phase.returnTo } };
     case 'bonus-card-resolving':
-      // True cancel: put the 2 drawn bonus cards back at the FRONT
-      // of the bonus deck (preserving order) and return to
-      // awaiting-action with the drawn playing card unchanged. This
-      // is the rollback path for Short Circuit, where the player
-      // didn't choose to draw bonus — the random perk roll forced
-      // it — so they shouldn't lose either resource on a back-out.
-      // In normal mode this isn't reached via UI; the player only
-      // sees "Decline both" (BONUS_DECLINE), which keeps its
-      // existing spend-the-drawn-card semantics.
-      return {
-        ...s,
-        bonusDeck: [...s.phase.drawn, ...s.bonusDeck],
-        phase: { kind: s.phase.returnTo },
-      };
+      return { ...s, phase: { kind: s.phase.returnTo } };
   }
 };
 
