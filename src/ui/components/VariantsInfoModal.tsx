@@ -21,15 +21,42 @@ export const VariantsInfoModal = ({ visible, onClose }: Props) => (
         <ScrollView style={styles.scroll}>
           <Text style={styles.variantHeader}>Targets Up</Text>
           <Text style={styles.body}>
-            A ladder. Level 1 starts at target 300; each win pushes the bar +50. Lose once and the
-            run ends. Final score is the highest level you cleared.
+            Meet the target and advance to the next level. Level 1 starts at target 300; each
+            win pushes the bar +50. Lose once and the run ends. Final score is the highest level
+            you cleared.
           </Text>
           <Text style={styles.body}>
-            Between levels, pick one of three bonus cards to keep AND choose a tier reward: A
-            advances you, S supercharges a card (a "wild" or "double" that carries into the next
-            grid), and SS supercharges two. The bonus cards you didn't keep return powered-up
-            into the bonus deck on later levels, so the further you climb the more the deck
-            reshapes itself.
+            Between levels, if your score greatly exceeds the target you'll have the
+            opportunity to supercharge a deck card and/or bonus card. Supercharged bonus cards
+            increase their multiplier by 1.2×; supercharged deck cards transform into either a
+            wild or "double" (counts as two of the same card).
+          </Text>
+
+          <View style={styles.table}>
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.tableHead]}>Rating</Text>
+              <Text style={[styles.tableCell, styles.tableHead]}>Score</Text>
+              <Text style={[styles.tableCell, styles.tableHead]}>Benefit</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={styles.tableCell}>A</Text>
+              <Text style={styles.tableCell}>≥ target</Text>
+              <Text style={styles.tableCell}>None</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={styles.tableCell}>S</Text>
+              <Text style={styles.tableCell}>≥ 1.3× target</Text>
+              <Text style={styles.tableCell}>Choose one</Text>
+            </View>
+            <View style={[styles.tableRow, styles.tableRowLast]}>
+              <Text style={styles.tableCell}>SS</Text>
+              <Text style={styles.tableCell}>≥ 1.5× target</Text>
+              <Text style={styles.tableCell}>Both</Text>
+            </View>
+          </View>
+
+          <Text style={styles.body}>
+            Powered-up cards stay that way for the remainder of the Targets Up game.
           </Text>
 
           <Text style={styles.variantHeader}>Challenges</Text>
@@ -105,6 +132,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginBottom: spacing.sm,
+  },
+  // Three-column ratings table for the Targets Up tier system. The
+  // wrapper handles the outer border + the bottom-divider on each row
+  // (skipped on the last row via tableRowLast) so we don't double up
+  // a heavy bottom border. Cells flex 1:1:1 so any cell text length
+  // stays evenly distributed.
+  table: {
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+  },
+  tableRowLast: { borderBottomWidth: 0 },
+  tableCell: {
+    flex: 1,
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  tableHead: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   note: {
     color: colors.accent,
