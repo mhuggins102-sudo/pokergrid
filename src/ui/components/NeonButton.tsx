@@ -20,12 +20,19 @@ interface Props {
   style?: ViewStyle;
 }
 
-const TINT: Record<Variant, { border: string; text: string; bg: string }> = {
-  primary: { border: colors.accent, text: colors.accent, bg: 'rgba(107, 214, 255, 0.08)' },
-  secondary: { border: colors.outlineStrong, text: colors.textMid, bg: 'rgba(255,255,255,0.02)' },
-  danger: { border: colors.danger, text: colors.danger, bg: 'rgba(255, 100, 100, 0.06)' },
-  warn: { border: colors.warn, text: colors.warn, bg: 'rgba(255, 183, 74, 0.06)' },
-  ghost: { border: 'transparent', text: colors.textMid, bg: 'transparent' },
+const TINT: Record<
+  Variant,
+  { border: string; text: string; bg: string; borderW: number }
+> = {
+  primary: { border: colors.accent, text: colors.accent, bg: 'rgba(107, 214, 255, 0.08)', borderW: 1.5 },
+  // Secondary's border was outlineStrong @ 35% alpha — bright enough
+  // for a quiet "cancel" but visibly thinner than the colored variants
+  // when placed next to them as a peer action (e.g. Discard alongside
+  // Place / Perk). Bump width to 2 so the perceived weight matches.
+  secondary: { border: colors.outlineStrong, text: colors.textMid, bg: 'rgba(255,255,255,0.02)', borderW: 2 },
+  danger: { border: colors.danger, text: colors.danger, bg: 'rgba(255, 100, 100, 0.06)', borderW: 1.5 },
+  warn: { border: colors.warn, text: colors.warn, bg: 'rgba(255, 183, 74, 0.06)', borderW: 1.5 },
+  ghost: { border: 'transparent', text: colors.textMid, bg: 'transparent', borderW: 1.5 },
 };
 
 const PADDING: Record<Size, { v: number; h: number; font: number }> = {
@@ -74,6 +81,7 @@ export const NeonButton = ({
             paddingVertical: pad.v,
             paddingHorizontal: pad.h,
             borderColor: tint.border,
+            borderWidth: tint.borderW,
             backgroundColor: tint.bg,
           },
           variant !== 'ghost' && !disabled && glow(tint.border, 8, 0.4),
@@ -106,9 +114,11 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     flex: 1,
     borderRadius: radius.md,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    // borderWidth is set per-variant via tint.borderW so callers like
+    // the in-game Discard button can read at the same visual weight as
+    // the primary / warn / danger variants beside it.
   },
   label: {
     fontFamily: fonts.mono,

@@ -1896,10 +1896,18 @@ const styles = StyleSheet.create({
   // tap target. btnArea wraps the row + the optional "Joker must
   // be placed" caption beneath it so both stay in the right-hand
   // column of the action area.
+  //
+  // marginBottom offsets the "deck N" + "perks N" text that hangs
+  // beneath the card inside DrawnArea — without it, actionRow's
+  // alignItems: 'center' centers the buttons against the WHOLE
+  // drawn block (card + meta text), which visually lands a few px
+  // below the card's centerline. Inflating btnArea's outer box
+  // downward shifts the visible content up to match the card.
   btnArea: {
     flex: 1,
     gap: spacing.xs,
     justifyContent: 'center',
+    marginBottom: 20,
   },
   btnRow: {
     flexDirection: 'row',

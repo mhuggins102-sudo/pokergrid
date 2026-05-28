@@ -1,36 +1,43 @@
 /**
- * Bot simulation — runs N games per difficulty with a simple bot and
- * reports the score distribution + A/S/SS tier rates.
+ * Bot simulation — runs N games per difficulty with a 1-step
+ * lookahead bot and reports the score distribution + tier rates.
  *
- * OPT-IN: this test is skipped unless SIMULATE=1 is set in the
- * environment. Default `npm test` ignores it because 800 games would
- * inflate the suite runtime for no day-to-day benefit.
+ * OPT-IN: skipped unless SIMULATE=1 is set. Default `npm test`
+ * ignores it because the runs add seconds to the suite for no
+ * day-to-day benefit.
  *
- * Run it:
+ *   SIMULATE=1 npm test -- --testPathPattern botSimulation
+ *   SIM_N=500 SIMULATE=1 npm test -- --testPathPattern botSimulation
  *
- *     SIMULATE=1 npm test -- --testPathPattern botSimulation
+ * Bot strategy — 1-step greedy lookahead:
+ *   On every awaiting-action turn the bot enumerates every legal
+ *   alternative (place / discard / suit-perk if available) and
+ *   simulates the resulting grid. scoreGrid (with
+ *   ignoreIncompletePenalty so partial lines don't dominate the
+ *   ranking) is the evaluator. The action whose simulated grid
+ *   scores highest wins.
  *
- * Tweak run size or which difficulties to sample:
+ *     ♥ Swap   — iterate validHopSwaps, simulate every swap,
+ *                pick the highest-scoring rearrangement.
+ *     ♠ Slide  — iterate validSlideSources × slideDestinationsFrom,
+ *                simulate each via executeSlide, pick the best.
+ *     ♦ Destroy — iterate destroyableSlots, simulate removing each,
+ *                 pick the destroy whose post-grid scores highest.
+ *                 Gated by deck headroom — destroying late-game
+ *                 leaves an empty slot we can't refill.
+ *     ♣ Bonus  — always taken when below cap and the bonus deck
+ *                has cards. The +1 bonus card is more or less a
+ *                free multiplier; we don't try to estimate its
+ *                future EV.
  *
- *     SIM_N=500 SIMULATE=1 npm test -- --testPathPattern botSimulation
+ *   On the perk-resolution phases (awaiting-target-*), the bot
+ *   re-runs the same per-action search to choose the actual target.
+ *   Bonus pick phases keep the simple "take the first card / replace
+ *   the first held card" rule — picking the BEST bonus card requires
+ *   Shapley analysis against the whole deck, well outside the scope
+ *   of a baseline bot.
  *
- * Bot strategy (intentionally simple, not optimal):
- *   - Use ♣ Bonus when below the cap and the bonus deck has cards;
- *     keep the first offered card. At cap, swap into hand slot 0.
- *   - For every other drawn card, look at where it would land (next
- *     spiral slot) and score it against the row + column it joins:
- *       +rank-match for each line card sharing rank (pair / trips)
- *       +suit-match for each line card sharing suit (flush)
- *     If the placement contributes nothing AND discards are legal,
- *     discard. Otherwise place.
- *   - Never spend ♥ / ♠ / ♦ — those perks are situational and using
- *     them without a smarter heuristic usually hurts more than helps.
- *
- * This bot's scores set a competence FLOOR. Skilled human play
- * should beat these numbers because humans pick perk timing and
- * bonus cards intentionally. The bot's main value is comparing
- * difficulty modes against a fixed strategy — Easy vs Hard
- * differences here reflect the rules alone, not skill.
+ *   Discards are still gated by deck headroom (don't strand the grid).
  */
 import {
   Action,
@@ -40,7 +47,14 @@ import {
 } from '../src/game/state';
 import { Card, isJoker } from '../src/game/cards';
 import { BONUS_HAND_LIMIT } from '../src/game/bonusCards';
-import { GRID_SIZE, nextSpiralSlot } from '../src/game/grid';
+import {
+  destroyableSlots,
+  executeSlide,
+  slideDestinationsFrom,
+  validHopSwaps,
+  validSlideSources,
+} from '../src/game/actions';
+import { Direction, Grid, placeAtSpiralNext } from '../src/game/grid';
 import { scoreGrid } from '../src/game/scoring';
 import {
   Difficulty,
@@ -51,95 +65,224 @@ const SHOULD_RUN = process.env.SIMULATE === '1';
 const N_GAMES = parseInt(process.env.SIM_N ?? '200', 10);
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
-// Cheap "is this placement worth it?" heuristic. Looks at the next
-// spiral slot's row + column and counts rank / suit matches with the
-// drawn card across both lines. Returns 0 when the card contributes
-// to neither line — a strong "discard if allowed" signal.
-const placementValue = (drawn: Card, grid: (Card | null)[]): number => {
-  if (isJoker(drawn)) return Infinity; // jokers auto-place; placeholder.
-  const next = nextSpiralSlot(grid);
-  if (next === null) return 0; // grid full
-  const row = Math.floor(next / GRID_SIZE);
-  const col = next % GRID_SIZE;
-  const others: Card[] = [];
-  for (let c = 0; c < GRID_SIZE; c++) {
-    const card = grid[row * GRID_SIZE + c];
-    if (card !== null) others.push(card);
+// Compute the score of a hypothetical grid given the rest of the
+// run's context (bonus cards, deck remaining, etc.) — the evaluator
+// the lookahead bot ranks candidate actions with. ignoreIncomplete
+// is set so partial lines score 0 instead of −25; otherwise every
+// non-place action would look terrible mid-game just for leaving the
+// grid less full, even when the perk produces a real hand.
+const evalGrid = (g: Grid, s: GameState): number =>
+  scoreGrid(g, s.bonusCards, {
+    deckRemaining: s.deck.length,
+    ignoreIncompletePenalty: true,
+    discards: s.discards,
+    perkSpent: s.perkSpent,
+  }).total;
+
+// For each candidate perk, return the best (score, target) the perk
+// can produce. Used both to RANK perks against place/discard AND to
+// later resolve the target once the awaiting-target-* phase begins.
+
+const bestHop = (s: GameState): { score: number; i: number; j: number } | null => {
+  const pairs = validHopSwaps(s.grid);
+  if (pairs.length === 0) return null;
+  let best = { score: -Infinity, i: -1, j: -1 };
+  for (const [i, j] of pairs) {
+    const g = s.grid.slice();
+    [g[i], g[j]] = [g[j], g[i]];
+    const sc = evalGrid(g, s);
+    if (sc > best.score) best = { score: sc, i, j };
   }
-  for (let r = 0; r < GRID_SIZE; r++) {
-    if (r === row) continue; // already counted via the row sweep
-    const card = grid[r * GRID_SIZE + col];
-    if (card !== null) others.push(card);
-  }
-  let score = 0;
-  for (const c of others) {
-    if (isJoker(c)) continue; // joker can match anything; ignore for ranking
-    if (c.rank === drawn.rank) score += 5; // pair / trips / quads progression
-    if (c.suit === drawn.suit) score += 2; // flush progression
-  }
-  return score;
+  return best.i < 0 ? null : best;
 };
 
-// Pick the bot's next Action for the current state.
+const bestSlide = (
+  s: GameState
+): { score: number; from: number; direction: Direction; distance: number } | null => {
+  const sources = validSlideSources(s.grid);
+  if (sources.length === 0) return null;
+  let best = { score: -Infinity, from: -1, direction: 'up' as Direction, distance: 0 };
+  for (const from of sources) {
+    for (const move of slideDestinationsFrom(s.grid, from)) {
+      const g = executeSlide(s.grid, move.from, move.direction, move.distance);
+      const sc = evalGrid(g, s);
+      if (sc > best.score) {
+        best = { score: sc, from: move.from, direction: move.direction, distance: move.distance };
+      }
+    }
+  }
+  return best.from < 0 ? null : best;
+};
+
+const bestDestroy = (s: GameState): { score: number; slot: number } | null => {
+  const slots = destroyableSlots(s.grid);
+  if (slots.length === 0) return null;
+  let best = { score: -Infinity, slot: -1 };
+  for (const slot of slots) {
+    const g = s.grid.slice();
+    g[slot] = null;
+    const sc = evalGrid(g, s);
+    if (sc > best.score) best = { score: sc, slot };
+  }
+  return best.slot < 0 ? null : best;
+};
+
+// How many cards are still in the deck minus how many empty slots we
+// have to fill. ≥ 0 means we can refill the grid even after this
+// turn. Used as a safety floor for actions that leave slots empty
+// (discard, destroy) so we don't strand ourselves into a -50/line
+// penalty hellscape.
+const deckHeadroom = (s: GameState): number => {
+  const empty = s.grid.filter(c => c === null).length;
+  return s.deck.length - empty;
+};
+
+// Pick the action whose 1-step-ahead score is highest. The action
+// returned is always something the reducer will accept from the
+// current phase — we re-enter pickAction on the next state to
+// resolve any follow-up phases (target selection, bonus picks).
 const pickAction = (s: GameState): Action => {
   switch (s.phase.kind) {
     case 'awaiting-action': {
-      // drawNext auto-places jokers, so s.drawn is always a standard
-      // card here (or null if game ended — handled by the caller).
       const drawn = s.drawn;
-      if (drawn && !isJoker(drawn) && drawn.suit === 'C') {
-        // Use ♣ Bonus when below cap and the deck has cards. Skipping
-        // these on Hard / Extreme would needlessly forfeit the bonus
-        // card meta-game.
-        const canDraw = s.bonusDeck.length > 0;
-        const belowCap = s.bonusCards.length < BONUS_HAND_LIMIT;
-        if (canDraw && belowCap) return { type: 'BEGIN_SUIT_ACTION' };
+      if (!drawn || isJoker(drawn)) return { type: 'PLACE' };
+
+      // ♣ → take the bonus draw if we can. Free upgrade in expectation;
+      // not worth simulating against place because the bonus card's
+      // future value comes from compounding into later scoring.
+      if (
+        drawn.suit === 'C' &&
+        s.bonusDeck.length > 0 &&
+        s.bonusCards.length < BONUS_HAND_LIMIT
+      ) {
+        return { type: 'BEGIN_SUIT_ACTION' };
       }
-      if (drawn && !isJoker(drawn) && !s.noDiscards) {
-        // Skip cards that don't contribute to the line they'd land in,
-        // BUT only if we can still afford to refill the grid. Each
-        // unfilled slot at game end costs -50 net (–25 to its row and
-        // –25 to its column), which crushes the score if we discard
-        // ourselves into a half-empty grid.
-        const emptySlots = s.grid.filter(c => c === null).length;
-        const headroom = s.deck.length - emptySlots;
-        // Need at least 2 extra cards in the deck on top of refilling
-        // the grid, so a discard now still leaves room for one more
-        // bad draw down the line.
-        const canAffordDiscard = headroom >= 2;
-        if (canAffordDiscard && placementValue(drawn, s.grid) === 0) {
-          return { type: 'DISCARD_NONE' };
+
+      // Candidate scores. PLACE is always legal.
+      const placedGrid = placeAtSpiralNext(s.grid, drawn);
+      const placeScore = evalGrid(placedGrid, s);
+
+      let bestAction: Action = { type: 'PLACE' };
+      let bestScore = placeScore;
+
+      // DISCARD — only when discards are legal AND we won't strand
+      // the grid. Threshold of headroom ≥ 2 leaves room for one more
+      // "bad draw" without flipping a slot into the empty-line
+      // penalty zone.
+      if (!s.noDiscards && deckHeadroom(s) >= 2) {
+        const discardScore = evalGrid(s.grid, s);
+        if (discardScore > bestScore) {
+          bestAction = { type: 'DISCARD_NONE' };
+          bestScore = discardScore;
         }
       }
-      return { type: 'PLACE' };
+
+      // Suit perks — evaluate the BEST outcome of the matching perk.
+      // We only need to evaluate the perk for the drawn suit, since
+      // the player can only spend the drawn card's perk this turn.
+      if (drawn.suit === 'H') {
+        const hop = bestHop(s);
+        if (hop && hop.score > bestScore) {
+          bestAction = { type: 'BEGIN_SUIT_ACTION' };
+          bestScore = hop.score;
+        }
+      } else if (drawn.suit === 'S') {
+        const slide = bestSlide(s);
+        if (slide && slide.score > bestScore) {
+          bestAction = { type: 'BEGIN_SUIT_ACTION' };
+          bestScore = slide.score;
+        }
+      } else if (drawn.suit === 'D') {
+        // Destroying leaves a slot empty — only consider when we can
+        // refill (headroom ≥ 1) so a winning destroy doesn't get
+        // wiped out by an end-of-game incomplete-line penalty.
+        if (deckHeadroom(s) >= 1) {
+          const destroy = bestDestroy(s);
+          if (destroy && destroy.score > bestScore) {
+            bestAction = { type: 'BEGIN_SUIT_ACTION' };
+            bestScore = destroy.score;
+          }
+        }
+      }
+
+      return bestAction;
+    }
+    case 'awaiting-target-hop': {
+      // Re-evaluate from the post-BEGIN state. State is the same
+      // grid as when we picked BEGIN, so the chosen pair is stable.
+      const hop = bestHop(s);
+      if (!hop) return { type: 'CANCEL_ACTION' };
+      return { type: 'RESOLVE_HOP', i: hop.i, j: hop.j };
+    }
+    case 'awaiting-target-slide-source': {
+      const slide = bestSlide(s);
+      if (!slide) return { type: 'CANCEL_ACTION' };
+      return { type: 'SLIDE_SELECT_SOURCE', slot: slide.from };
+    }
+    case 'awaiting-target-slide-dest': {
+      // The selected source is in phase.source; re-search the best
+      // destination from there. We don't store the planned direction
+      // in state, so re-deriving is the easiest path.
+      const from = s.phase.source;
+      const moves = slideDestinationsFrom(s.grid, from);
+      if (moves.length === 0) return { type: 'CANCEL_ACTION' };
+      let best = moves[0];
+      let bestScore = -Infinity;
+      for (const m of moves) {
+        const g = executeSlide(s.grid, m.from, m.direction, m.distance);
+        const sc = evalGrid(g, s);
+        if (sc > bestScore) { best = m; bestScore = sc; }
+      }
+      return {
+        type: 'RESOLVE_SLIDE',
+        from: best.from,
+        direction: best.direction,
+        distance: best.distance,
+      };
+    }
+    case 'awaiting-target-destroy': {
+      const destroy = bestDestroy(s);
+      if (!destroy) return { type: 'CANCEL_ACTION' };
+      return { type: 'RESOLVE_DESTROY', slot: destroy.slot };
     }
     case 'bonus-card-resolving': {
-      // Always keep the FIRST drawn bonus card. A smarter bot would
-      // rank by category fit but the goal here is a competence floor.
-      if (s.bonusCards.length < BONUS_HAND_LIMIT) {
-        return { type: 'BONUS_KEEP', idx: 0 };
+      // Pick whichever drawn card lifts the live score most if added
+      // to the hand. Below cap → BONUS_KEEP; at cap → SELECT_NEW so
+      // the bonus-card-replacing phase runs next.
+      const drawn = s.phase.drawn;
+      let bestIdx = 0;
+      let bestSc = -Infinity;
+      for (let i = 0; i < drawn.length; i++) {
+        const hypothetical = [...s.bonusCards, drawn[i]];
+        const sc = evalGrid(s.grid, { ...s, bonusCards: hypothetical });
+        if (sc > bestSc) { bestSc = sc; bestIdx = i; }
       }
-      return { type: 'BONUS_SELECT_NEW', idx: 0 };
+      if (s.bonusCards.length < BONUS_HAND_LIMIT) {
+        return { type: 'BONUS_KEEP', idx: bestIdx };
+      }
+      return { type: 'BONUS_SELECT_NEW', idx: bestIdx };
     }
-    case 'bonus-card-replacing':
-      return { type: 'BONUS_REPLACE', oldIdx: 0 };
-    case 'awaiting-target-hop':
-    case 'awaiting-target-slide-source':
-    case 'awaiting-target-slide-dest':
-    case 'awaiting-target-destroy':
-      // We never start these phases (bot avoids ♥ / ♠ / ♦), but if
-      // a future Short Circuit run lands here we cancel out gracefully.
-      return { type: 'CANCEL_ACTION' };
+    case 'bonus-card-replacing': {
+      // Replace the held card that contributes LEAST. Try each
+      // index, score the hand with the new card swapped in.
+      const newCard = s.phase.drawn[s.phase.pickedNew];
+      let bestIdx = 0;
+      let bestSc = -Infinity;
+      for (let i = 0; i < s.bonusCards.length; i++) {
+        const hand = s.bonusCards.slice();
+        hand[i] = newCard;
+        const sc = evalGrid(s.grid, { ...s, bonusCards: hand });
+        if (sc > bestSc) { bestSc = sc; bestIdx = i; }
+      }
+      return { type: 'BONUS_REPLACE', oldIdx: bestIdx };
+    }
     case 'game-over':
       throw new Error('pickAction called on game-over state');
   }
 };
 
-// Run one game to completion, returning the final scored total.
 const runOneGame = (difficulty: Difficulty): number => {
   let s = newGame(difficulty);
-  // Guard against infinite loops in case a future change makes the
-  // bot unable to make progress.
   const MAX_STEPS = 500;
   for (let i = 0; i < MAX_STEPS; i++) {
     if (s.phase.kind === 'game-over') break;
@@ -167,12 +310,10 @@ interface Stats {
   p25: number;
   p75: number;
   p95: number;
-  // Tier mix — fraction of runs hitting each band, per the rules in
-  // TierBreakdownModal (SS ≥ 1.6×, S ≥ 1.3×, A ≥ 1.0×).
   pctSS: number;
   pctS: number;
   pctA: number;
-  pctWin: number; // A or better
+  pctWin: number;
 }
 
 const summarize = (difficulty: Difficulty, scores: number[]): Stats => {
@@ -230,13 +371,10 @@ const reportStats = (s: Stats): string => {
         allStats.push(stats);
         console.log(reportStats(stats));
       }
-      // Sanity: every difficulty produced N_GAMES scores.
       for (const s of allStats) {
         expect(s.n).toBe(N_GAMES);
       }
     },
-    // Generous timeout — 800 games at ~5ms each is ~4s, but jest
-    // adds overhead and Hard / Extreme runs are longer.
-    120_000
+    300_000
   );
 });
