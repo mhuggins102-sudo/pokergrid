@@ -356,9 +356,8 @@ const styles = StyleSheet.create({
   },
   diffBest: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMid,
-    fontWeight: '600',
     marginTop: 2,
   },
   headerInfoBtn: {
