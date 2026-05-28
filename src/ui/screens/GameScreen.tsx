@@ -1655,12 +1655,14 @@ const renderBottom = (
         </DrawnArea>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>Tap two cards that share a row or column.</Text>
-          <NeonButton
-            label="Cancel"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
+          {!state.randomPerks && (
+            <NeonButton
+              label="Cancel"
+              variant="secondary"
+              size="sm"
+              onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+            />
+          )}
         </View>
       </View>
     );
@@ -1682,12 +1684,14 @@ const renderBottom = (
           <Text style={styles.hint}>
             Tap a card and tap the destination, OR drag from a card in the direction you want.
           </Text>
-          <NeonButton
-            label="Cancel"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
+          {!state.randomPerks && (
+            <NeonButton
+              label="Cancel"
+              variant="secondary"
+              size="sm"
+              onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+            />
+          )}
         </View>
       </View>
     );
@@ -1732,12 +1736,14 @@ const renderBottom = (
         </DrawnArea>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>Tap any card on the grid to destroy it.</Text>
-          <NeonButton
-            label="Cancel"
-            variant="secondary"
-            size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
-          />
+          {!state.randomPerks && (
+            <NeonButton
+              label="Cancel"
+              variant="secondary"
+              size="sm"
+              onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+            />
+          )}
         </View>
       </View>
     );
@@ -1788,27 +1794,16 @@ const renderBottom = (
             );
           })}
         </View>
-        {state.randomPerks ? (
-          // Short Circuit: the player didn't choose to draw bonus —
-          // the random perk roll forced it — so offer a true cancel
-          // that puts the drawn cards back in the bonus deck AND
-          // keeps the drawn playing card. Replaces "Decline both"
-          // (which spends the playing card) entirely in this mode.
+        {!state.randomPerks && (!atMax || state.bonusDeclineAllowed) && (
+          // Short Circuit hides "Decline both" entirely — the random
+          // perk roll committed the player to taking a bonus card,
+          // so the only out is to keep one (or, at cap, swap one).
           <NeonButton
-            label="Cancel"
+            label="Decline both"
             variant="secondary"
             size="sm"
-            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+            onPress={() => dispatch({ type: 'BONUS_DECLINE' })}
           />
-        ) : (
-          (!atMax || state.bonusDeclineAllowed) && (
-            <NeonButton
-              label="Decline both"
-              variant="secondary"
-              size="sm"
-              onPress={() => dispatch({ type: 'BONUS_DECLINE' })}
-            />
-          )
         )}
       </View>
     );
