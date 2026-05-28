@@ -184,9 +184,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   tierRange: {
-    color: colors.textLow,
+    // The score threshold is the actual data point the player came
+    // here to find — bump it to the same color + size as the tier
+    // label so the eye lands on "300+" as easily as on "Win".
+    color: colors.textMid,
     fontFamily: fonts.mono,
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '700',
     marginTop: 1,
   },
   tierReward: {

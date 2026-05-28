@@ -1599,46 +1599,48 @@ const renderBottom = (
             <CardTile card={state.drawn} size="lg" />
           )}
         </DrawnArea>
-        <View style={styles.btnCol}>
-          <NeonButton
-            label="Place"
-            variant="primary"
-            disabled={disabled}
-            onPress={onPlace}
-            style={styles.stackedBtn}
-          />
-          {!isJk && suitOK && suit && (
-            <View ref={perkButtonRef} collapsable={false}>
+        <View style={styles.btnArea}>
+          <View style={styles.btnRow}>
+            <NeonButton
+              label="Place"
+              variant="primary"
+              disabled={disabled}
+              onPress={onPlace}
+              style={styles.squareBtn}
+            />
+            {!isJk && suitOK && suit && (
+              <View ref={perkButtonRef} collapsable={false} style={styles.squareBtnWrap}>
+                <NeonButton
+                  // Short Circuit hides which perk you'll get behind a
+                  // generic label + warn tint — the drawn card's suit
+                  // doesn't predict the outcome, so showing the suit's
+                  // perk name would be a lie.
+                  label={state.randomPerks ? 'Perk ?' : SUIT_PERK_LABEL[suit]}
+                  variant={state.randomPerks ? 'warn' : SUIT_PERK_VARIANT[suit]}
+                  disabled={disabled}
+                  onPress={() => {
+                    haptic('light');
+                    playSound('tap');
+                    dispatch({ type: 'BEGIN_SUIT_ACTION' });
+                  }}
+                  style={styles.squareBtn}
+                />
+              </View>
+            )}
+            {!isJk && !state.noDiscards && (
               <NeonButton
-                // Short Circuit hides which perk you'll get behind a
-                // generic label + warn tint — the drawn card's suit
-                // doesn't predict the outcome, so showing the suit's
-                // perk name would be a lie.
-                label={state.randomPerks ? 'Perk ?' : SUIT_PERK_LABEL[suit]}
-                variant={state.randomPerks ? 'warn' : SUIT_PERK_VARIANT[suit]}
+                label="Discard"
+                variant="secondary"
                 disabled={disabled}
                 onPress={() => {
                   haptic('light');
                   playSound('tap');
-                  dispatch({ type: 'BEGIN_SUIT_ACTION' });
+                  dispatch({ type: 'DISCARD_NONE' });
                 }}
-                style={styles.stackedBtn}
+                style={styles.squareBtn}
               />
-            </View>
-          )}
-          {!isJk && !state.noDiscards && (
-            <NeonButton
-              label="Discard"
-              variant="secondary"
-              disabled={disabled}
-              onPress={() => {
-                haptic('light');
-                playSound('tap');
-                dispatch({ type: 'DISCARD_NONE' });
-              }}
-              style={styles.stackedBtn}
-            />
-          )}
+            )}
+          </View>
           {isJk && <Text style={styles.lockedNote}>Joker must be placed.</Text>}
         </View>
       </View>
@@ -1876,9 +1878,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.sm,
   },
-  // Stacked column of action buttons on the right of the drawn card. The
-  // three buttons (Place, suit perk, Discard) all share this style so their
-  // heights match.
+  // Stacked column used by the suit-action phases (hop / slide /
+  // destroy / bonus). Those phases show one informational button at
+  // most, so stacking still makes sense.
   btnCol: {
     flex: 1,
     gap: spacing.xs,
@@ -1886,6 +1888,33 @@ const styles = StyleSheet.create({
   },
   stackedBtn: {
     height: 48,
+  },
+  // Awaiting-action layout: a horizontal row of chunky, near-square
+  // buttons sitting next to the drawn card. Vertical stacking made
+  // it easy to mash the wrong button (Place / Perk / Discard are
+  // close in size); a row spreads them apart so each one is its own
+  // tap target. btnArea wraps the row + the optional "Joker must
+  // be placed" caption beneath it so both stay in the right-hand
+  // column of the action area.
+  btnArea: {
+    flex: 1,
+    gap: spacing.xs,
+    justifyContent: 'center',
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    alignItems: 'stretch',
+  },
+  squareBtn: {
+    flex: 1,
+    height: 60,
+  },
+  // Wrapper around the perk button — the button itself takes the
+  // squareBtn style; this View carries the ref for the first-game
+  // hint to anchor against.
+  squareBtnWrap: {
+    flex: 1,
   },
   // Used by the bonus-card-resolving and bonus-card-replacing flows. Bonus
   // choice cards stack vertically beneath a title.
