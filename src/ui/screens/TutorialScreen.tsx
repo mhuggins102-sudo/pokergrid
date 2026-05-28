@@ -336,7 +336,7 @@ const BonusVisual: React.FC<TutorialVisualProps> = ({
       whole final score at game end. ♣ Bonus draws 2 from the bonus deck and lets you keep 1.
       You can hold up to 3; at the cap, ♣ forces a swap (Easy lets you decline instead).
     </Caption>
-    <Text style={demoStyles.subsection}>Five families</Text>
+    <Text style={demoStyles.subsection}>Six families</Text>
     <View style={demoStyles.kindList}>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Hand-type</Text> — multiplies lines scoring a
@@ -356,8 +356,13 @@ const BonusVisual: React.FC<TutorialVisualProps> = ({
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.joker }}>Grid achievement</Text> — multiplies the FINAL
-        total: Clean Border, Monochrome Border, Rainbow Corners, Diagonal, Symmetric Frame,
-        Cozy Joker, Trash Joker, Speedrun, Burnout, Frugal, No Flushes, No Straights, Patience.
+        total based on the board's shape: Clean Border, Monochrome Border, Rainbow Corners,
+        Diagonal, Symmetric Frame, Cozy Joker, Trash Joker, No Flushes, No Straights, Patience.
+      </Text>
+      <Text style={demoStyles.kindLine}>
+        · <Text style={{ color: colors.joker }}>Deck management</Text> — multiplies the FINAL
+        total based on HOW you played: Speedrun (deck cards saved), Burnout (lots of perks),
+        Frugal (few perks), Spotlight (single bonus card focus).
       </Text>
     </View>
     <View style={demoStyles.seeAllRow}>
@@ -552,16 +557,17 @@ const MultiplierMathVisual = () => {
   );
 };
 
-// Compact list of grid achievements, grouped by what they reward so the
-// caption isn't a wall of commas. Reads top-to-bottom: shape (board
-// composition), restraint (what you DIDN'T do), volume (using your
-// perks one way or the other), and Patience as the lone safety net.
+// Compact list of end-game bonuses, grouped by what they reward so
+// the caption isn't a wall of commas. Reads top-to-bottom: shape
+// (board composition), restraint (what you DIDN'T do on the board),
+// deck management (how you spent the deck + perks), and Patience as
+// the lone safety net.
 const ACHIEVEMENT_GROUPS: { label: string; entries: string[] }[] = [
   {
     label: 'Shape',
     entries: [
       'Clean Border ×1.5',
-      'Monochrome Border ×1.75',
+      'Monochrome Border ×1.15 each edge',
       'Rainbow Corners ×1.25',
       'Cozy Joker ×1.15 each',
       'Diagonal ×1.25 each',
@@ -574,14 +580,15 @@ const ACHIEVEMENT_GROUPS: { label: string; entries: string[] }[] = [
       'No Flushes ×1.25',
       'No Straights ×1.25',
       'Trash Joker ×1.25 each',
-      'Frugal ×1.5',
     ],
   },
   {
-    label: 'Volume',
+    label: 'Deck management',
     entries: [
-      'Burnout ×1.25',
-      'Speedrun ×1.05 / deck card',
+      'Speedrun ×1.05 / deck card saved',
+      'Burnout ×1.5 (20+ perks)',
+      'Frugal ×1.5 (≤14 perks)',
+      'Spotlight ×1.5 (held as only bonus card)',
     ],
   },
   {
@@ -609,8 +616,8 @@ const AchievementsVisual = () => {
     <View style={demoStyles.wrap}>
       <GridView grid={grid} />
       <Caption>
-        Grid-wide bonus cards multiply the final total — they reward end-of-run shape,
-        restraint, or volume rather than a specific line.
+        End-game bonus cards multiply the final total — they reward board shape, restraint,
+        or the way you spent the deck (and your perks) rather than a specific line.
       </Caption>
       <View style={demoStyles.achGroupBlock}>
         {ACHIEVEMENT_GROUPS.map(g => (

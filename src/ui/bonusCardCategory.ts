@@ -50,6 +50,7 @@ const DECK_MANAGEMENT_IDS = new Set([
   'deck-bank-x1_05', // Speedrun
   'burnout-x1_25',   // Burnout
   'frugal-x1_5',     // Frugal
+  'spotlight-x1_5',  // Spotlight (exclusivity rule + ×1.5 at game end)
 ]);
 
 export const categoryOf = (card: BonusCard): BonusCategory => {

@@ -6,6 +6,7 @@ import {
   BonusCard,
   BONUS_DECK_POOL,
   BONUS_HAND_LIMIT,
+  SPOTLIGHT_ID,
 } from './bonusCards';
 import {
   BONUS_DECLINE_AT_CAP_BY_DIFFICULTY,
@@ -257,9 +258,21 @@ export const newGame = (
   // difficulty-based free starter on top (capped at BONUS_HAND_LIMIT just
   // in case future power-ups push the carry to 3 cards on hard).
   const starterDraw = noBonusCards ? [] : shuffledBonus.slice(0, starterCount);
-  const bonusCards = noBonusCards
+  const assembledHand = noBonusCards
     ? []
     : [...keptBonusCards, ...starterDraw].slice(0, BONUS_HAND_LIMIT);
+  // Apply Spotlight's exclusivity rule if the starter draw or a
+  // carry-over brought Spotlight into the hand alongside anything
+  // else. The starter is the "last added" entry by construction,
+  // so it wins ties; if only carry-overs exist, the most recent
+  // carry-over wins (no current path produces multiple carry-overs,
+  // but we use the last entry as a safe fallback).
+  const lastAdded =
+    starterDraw[starterDraw.length - 1] ??
+    keptBonusCards[keptBonusCards.length - 1];
+  const bonusCards = lastAdded
+    ? enforceSpotlight(assembledHand, lastAdded)
+    : assembledHand;
   // Bonus deck = standard pool minus the drawn starter + powered carry-overs
   // from earlier levels. Shuffled together so the powered cards can resurface
   // at any time. Poker Purist leaves it empty so ♣ never has anything to draw.
@@ -485,6 +498,26 @@ const finishBonusFlow = (
   );
 };
 
+// Spotlight is exclusive — it cannot share the bonus hand with any
+// other card. The "last added wins" rule keeps the logic symmetric:
+// if Spotlight ends up co-resident with one or more other cards,
+// whichever was added in THIS transition stays and the rest get
+// dropped. Callers pass the card they just added so the rule knows
+// which side to evict.
+const enforceSpotlight = (
+  proposedHand: BonusCard[],
+  justAdded: BonusCard
+): BonusCard[] => {
+  const hasSpotlight = proposedHand.some(c => c.id === SPOTLIGHT_ID);
+  const hasOthers = proposedHand.some(c => c.id !== SPOTLIGHT_ID);
+  if (!hasSpotlight || !hasOthers) return proposedHand;
+  // Mixed hand → resolve to whoever was just added.
+  if (justAdded.id === SPOTLIGHT_ID) {
+    return proposedHand.filter(c => c.id === SPOTLIGHT_ID);
+  }
+  return proposedHand.filter(c => c.id !== SPOTLIGHT_ID);
+};
+
 const handleBonusKeep = (s: GameState, idx: number): GameState => {
   if (s.phase.kind !== 'bonus-card-resolving') return s;
   if (idx < 0 || idx >= s.phase.drawn.length) return s;
@@ -492,7 +525,8 @@ const handleBonusKeep = (s: GameState, idx: number): GameState => {
   if (s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
   const kept = s.phase.drawn[idx];
   const returning = s.phase.drawn.filter((_, i) => i !== idx);
-  return finishBonusFlow(s, returning, [...s.bonusCards, kept]);
+  const newHand = enforceSpotlight([...s.bonusCards, kept], kept);
+  return finishBonusFlow(s, returning, newHand);
 };
 
 const handleBonusSelectNew = (s: GameState, idx: number): GameState => {
@@ -516,8 +550,9 @@ const handleBonusReplace = (s: GameState, oldIdx: number): GameState => {
   if (oldIdx < 0 || oldIdx >= s.bonusCards.length) return s;
   const newCard = phase.drawn[phase.pickedNew];
   if (!newCard) return s;
-  const newHand = s.bonusCards.slice();
-  newHand[oldIdx] = newCard;
+  const replaced = s.bonusCards.slice();
+  replaced[oldIdx] = newCard;
+  const newHand = enforceSpotlight(replaced, newCard);
   // The OTHER drawn card returns to the bottom of the bonus deck. The replaced
   // bonus card is gone (we don't model a bonus-card trash explicitly).
   const returningDrawn = phase.drawn.filter((_, i) => i !== phase.pickedNew);

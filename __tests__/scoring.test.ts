@@ -498,10 +498,10 @@ describe('grid-level achievements', () => {
     // confirm each flip adds a single ×1.15 factor.
     const g: Grid = emptyGrid();
     const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const suitCycle: Suit[] = ['H', 'S', 'D', 'C'];
     for (let i = 0; i < 25; i++) {
       // Alternate suits across slots so borders are mixed by default.
-      const suit: Suit = ['H', 'S', 'D', 'C'][i % 4];
-      g[i] = C(ranks2to10[i % ranks2to10.length], suit);
+      g[i] = C(ranks2to10[i % ranks2to10.length], suitCycle[i % suitCycle.length]);
     }
 
     const baseline = scoreGrid(g, [mono]).total;
