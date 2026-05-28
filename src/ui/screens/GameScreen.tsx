@@ -1607,6 +1607,7 @@ const renderBottom = (
               disabled={disabled}
               onPress={onPlace}
               style={styles.squareBtn}
+              noGlow
             />
             {!isJk && suitOK && suit && (
               <View ref={perkButtonRef} collapsable={false} style={styles.squareBtnWrap}>
@@ -1624,6 +1625,7 @@ const renderBottom = (
                     dispatch({ type: 'BEGIN_SUIT_ACTION' });
                   }}
                   style={styles.squareBtn}
+                  noGlow
                 />
               </View>
             )}
@@ -1638,6 +1640,7 @@ const renderBottom = (
                   dispatch({ type: 'DISCARD_NONE' });
                 }}
                 style={styles.squareBtn}
+                noGlow
               />
             )}
           </View>
