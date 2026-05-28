@@ -18,6 +18,12 @@ interface Props {
   size?: Size;
   disabled?: boolean;
   style?: ViewStyle;
+  // Suppress the outer neon halo. Used by the in-game awaiting-action
+  // row (Place / Perk / Discard) where the colored glows around two
+  // buttons made the third (secondary-tinted Discard, whose dim
+  // outline barely produces a shadow) read as physically shorter.
+  // Dropping the halo for the whole row equalises perceived height.
+  noGlow?: boolean;
 }
 
 const TINT: Record<
@@ -25,11 +31,7 @@ const TINT: Record<
   { border: string; text: string; bg: string; borderW: number }
 > = {
   primary: { border: colors.accent, text: colors.accent, bg: 'rgba(107, 214, 255, 0.08)', borderW: 1.5 },
-  // Secondary's border was outlineStrong @ 35% alpha — bright enough
-  // for a quiet "cancel" but visibly thinner than the colored variants
-  // when placed next to them as a peer action (e.g. Discard alongside
-  // Place / Perk). Bump width to 2 so the perceived weight matches.
-  secondary: { border: colors.outlineStrong, text: colors.textMid, bg: 'rgba(255,255,255,0.02)', borderW: 2 },
+  secondary: { border: colors.outlineStrong, text: colors.textMid, bg: 'rgba(255,255,255,0.02)', borderW: 1.5 },
   danger: { border: colors.danger, text: colors.danger, bg: 'rgba(255, 100, 100, 0.06)', borderW: 1.5 },
   warn: { border: colors.warn, text: colors.warn, bg: 'rgba(255, 183, 74, 0.06)', borderW: 1.5 },
   ghost: { border: 'transparent', text: colors.textMid, bg: 'transparent', borderW: 1.5 },
@@ -48,6 +50,7 @@ export const NeonButton = ({
   size = 'md',
   disabled,
   style,
+  noGlow,
 }: Props) => {
   const tint = TINT[variant];
   const pad = PADDING[size];
@@ -84,7 +87,7 @@ export const NeonButton = ({
             borderWidth: tint.borderW,
             backgroundColor: tint.bg,
           },
-          variant !== 'ghost' && !disabled && glow(tint.border, 8, 0.4),
+          variant !== 'ghost' && !disabled && !noGlow && glow(tint.border, 8, 0.4),
           disabled && styles.disabled,
           animStyle,
         ]}
