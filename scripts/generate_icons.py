@@ -205,18 +205,23 @@ def render_grid(canvas_size: int, content_size: int) -> Image.Image:
 
 
 # Content-area fractions. The grid renders at this fraction of the
-# canvas, centered. Larger = tiles closer to the edge = less dark
-# margin between the design and the iOS rounded-square mask.
-# Keeping ≤ 0.92 on iOS targets leaves enough breathing room for the
-# squircle corners not to clip a tile.
-FILL = 0.92        # apple-touch + master — close to the edge so iOS
-                   # doesn't show a dark ring inside its rounded mask.
-FILL_FAVICON = 0.92 # browser favicon — same treatment; no mask but
-                   # tighter fill reads better at tab size.
-FILL_FAVICON_32 = 0.94  # 32px is tiny; squeeze as much as possible.
-FILL_ADAPTIVE = 0.62    # Android adaptive icon needs the inner ~66%
-                   # safe zone so circle / squircle / teardrop masks
-                   # never clip a tile.
+# canvas, centered. 1.0 = tiles touch the canvas edge; lower = dark
+# margin around the design.
+#
+# iOS applies a rounded-square (squircle) mask to its app icon, and
+# anything inside our canvas that isn't covered by tiles shows as
+# dark canvas background. With a margin > 0 the iOS user sees a
+# visible dark ring inside the rounded mask — even after the panel
+# was removed. Going full-bleed lets the squircle clip the canvas
+# corners directly (taking a small bite out of the four CORNER tiles
+# but leaving the mid-edge regions flush with the squircle).
+FILL = 1.0          # iOS app icon, apple-touch, splash, web icon.
+FILL_FAVICON = 1.0  # browser favicon — tabs don't mask, so this is
+                    # purely about getting the most pixel density.
+FILL_FAVICON_32 = 1.0  # 32px is tiny — every pixel of tile counts.
+FILL_ADAPTIVE = 0.62   # Android adaptive icon needs the inner ~66%
+                       # safe zone so circle / squircle / teardrop
+                       # masks never clip a tile.
 
 
 def write_native_icons() -> None:
