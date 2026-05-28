@@ -401,6 +401,54 @@ describe('GameState — Poker Purist challenge', () => {
   });
 });
 
+describe('GameState — Spotlight exclusivity rule', () => {
+  // Locate Spotlight and a stable non-Spotlight card from the real pool
+  // so tests pin to actual card definitions.
+  const spotlight = BONUS_DECK_POOL.find(c => c.id === 'spotlight-x1_5')!;
+  const other = BONUS_DECK_POOL.find(c => c.id === 'hand-pair-x4')!;
+  const filler = { kind: 'standard' as const, rank: '3' as const, suit: 'C' as const };
+  const club = { kind: 'standard' as const, rank: '5' as const, suit: 'C' as const };
+
+  test('keeping Spotlight while holding another card evicts the other card', () => {
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      bonusCards: [other],
+      phase: {
+        kind: 'bonus-card-resolving',
+        drawn: [spotlight, other],
+        returnTo: 'awaiting-action',
+      },
+    });
+    const after = step(state, { type: 'BONUS_KEEP', idx: 0 }); // pick Spotlight
+    expect(after.bonusCards.map(c => c.id)).toEqual(['spotlight-x1_5']);
+  });
+
+  test('keeping a non-Spotlight card while holding Spotlight evicts Spotlight', () => {
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      bonusCards: [spotlight],
+      phase: {
+        kind: 'bonus-card-resolving',
+        drawn: [other, spotlight],
+        returnTo: 'awaiting-action',
+      },
+    });
+    const after = step(state, { type: 'BONUS_KEEP', idx: 0 }); // pick the other
+    expect(after.bonusCards.map(c => c.id)).toEqual(['hand-pair-x4']);
+  });
+
+  test('Spotlight is grouped under the deck-management category', () => {
+    // Sanity check: if the category lookup ever drifts, the catalog
+    // grouping silently breaks. Verify here.
+    // (Import locally so the test stays self-contained.)
+    const { categoryOf } = require('../src/ui/bonusCardCategory') as
+      typeof import('../src/ui/bonusCardCategory');
+    expect(categoryOf(spotlight)).toBe('deck-management');
+  });
+});
+
 describe('GameState — short deck (challenge mode)', () => {
   test('newGame respects deckLimit by truncating the shuffled deck', () => {
     const full = newGame('hard', seededRng(1));

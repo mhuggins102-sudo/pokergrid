@@ -676,6 +676,27 @@ const frugal: BonusCard = {
     perkSpent.length <= 14 ? { totalMultiplier: card.multValue ?? 1.5 } : {},
 };
 
+// Spotlight enforces an exclusivity rule on the bonus hand: it can't
+// share the hand with any other bonus card. The hand-mutation
+// helpers in state.ts call enforceSpotlight() whenever a bonus card
+// is added (keep / replace / starter), so this card never actually
+// reaches scoring time alongside other bonus cards. The grid effect
+// is therefore an unconditional multiplier — if it's still in hand
+// at game end, it earned it.
+export const SPOTLIGHT_ID = 'spotlight-x1_5';
+
+const spotlight: BonusCard = {
+  id: SPOTLIGHT_ID,
+  name: 'Spotlight ×1.5',
+  title: 'Spotlight',
+  mult: '×1.5',
+  description:
+    '×1.5 at game end. Discards your other bonus cards when picked up; discards itself if you later take another bonus card.',
+  multValue: 1.5,
+  baseMultValue: 1.5,
+  gridEffect: (_snap, card) => ({ totalMultiplier: card.multValue ?? 1.5 }),
+};
+
 // ---------- The pool ----------
 
 export const BONUS_DECK_POOL: BonusCard[] = [
@@ -733,6 +754,7 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   symmetricFrame,
   burnout,
   frugal,
+  spotlight,
   patience,
 ];
 
