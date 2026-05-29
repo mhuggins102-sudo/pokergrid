@@ -134,7 +134,8 @@ const TierHistogram = ({ counts }: { counts: Record<Tier, number> }) => {
 };
 
 export const StatsScreen = ({ onBack }: Props) => {
-  const { stats } = useStats();
+  const { stats, reset } = useStats();
+  const [confirmReset, setConfirmReset] = useState(false);
   // Default to "All" so the page opens with the most complete summary.
   const [filter, setFilter] = useState<Filter>('all');
 
@@ -361,6 +362,42 @@ export const StatsScreen = ({ onBack }: Props) => {
           })}
         </View>
       )}
+
+      <View style={styles.dataBlock}>
+        <Text style={styles.sectionLabel}>Data</Text>
+        <Text style={styles.dataCopy}>
+          Stats and preferences are stored locally on this device. Clearing the browser data or
+          deleting the app removes them.
+        </Text>
+        {!confirmReset ? (
+          <NeonButton
+            label="Reset stats"
+            variant="danger"
+            onPress={() => setConfirmReset(true)}
+          />
+        ) : (
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmText}>Erase all stats and history?</Text>
+            <View style={styles.confirmBtns}>
+              <NeonButton
+                label="Cancel"
+                variant="secondary"
+                size="sm"
+                onPress={() => setConfirmReset(false)}
+              />
+              <NeonButton
+                label="Yes, reset"
+                variant="danger"
+                size="sm"
+                onPress={() => {
+                  reset();
+                  setConfirmReset(false);
+                }}
+              />
+            </View>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 };
@@ -674,4 +711,32 @@ const styles = StyleSheet.create({
   bonusNumberLoss: {
     color: colors.danger,
   },
+  // Data section at the bottom of the page — visually separated from
+  // the stats blocks above by a top margin. The destructive Reset
+  // stats button lives here (moved out of Settings) so the same
+  // page that surfaces your run history also offers the way to
+  // clear it.
+  dataBlock: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.outlineSoft,
+  },
+  dataCopy: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: spacing.md,
+  },
+  confirmRow: { gap: spacing.sm },
+  confirmText: {
+    color: colors.danger,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  confirmBtns: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' },
 });

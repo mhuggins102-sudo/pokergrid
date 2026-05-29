@@ -7,11 +7,20 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { anyPerkAvailable, slideDestinationsFrom, suitActionAvailable } from '../../game/actions';
-import { Card, isJoker } from '../../game/cards';
+import {
+  anyPerkAvailable,
+  canDestroy,
+  canDrawBonus,
+  canHop,
+  canSlide,
+  slideDestinationsFrom,
+  suitActionAvailable,
+} from '../../game/actions';
+import { Card, isJoker, Suit } from '../../game/cards';
 import { BONUS_HAND_LIMIT, SPOTLIGHT_ID } from '../../game/bonusCards';
 import {
   Direction,
+  Grid,
   GRID_SIZE,
   LineKind,
   nextSpiralSlot,
@@ -84,6 +93,7 @@ type HintId =
   | 'clubs-bonus'
   | 'bonus-held'
   | 'first-scoring-line'
+  | 'scoring-info'
   | 'low-deck';
 
 const HINT_TITLE: Record<HintId, string> = {
@@ -96,6 +106,7 @@ const HINT_TITLE: Record<HintId, string> = {
   'clubs-bonus': '♣ Bonus',
   'bonus-held': 'Your first bonus card',
   'first-scoring-line': 'First scoring line',
+  'scoring-info': 'Hand value reference',
   'low-deck': 'Deck running low',
 };
 
@@ -118,6 +129,8 @@ const HINT_BODY: Record<HintId, string> = {
     'Bonus cards modify your score. Border tone tells you when they pay out: yellow = pays out per line during the run, purple = multiplies the final total at game end. Tap any held card for full details.',
   'first-scoring-line':
     'Nice — your first scoring line. Each completed row and column scores as a 5-card poker hand. Pair and above pay out; High Card scores 0. Bonus cards modify these per-line totals.',
+  'scoring-info':
+    "Tap the ⓘ here any time to open the hand-value reference — base points for each poker hand and how bonus card multipliers stack on top. Keep it handy whenever you're not sure what a line is worth.",
   'low-deck':
     'The deck is almost empty. The run ends when the deck runs out or the grid fills up. Lines you haven\'t completed by then cost -25 each, so plan your last few placements carefully.',
 };
@@ -148,6 +161,7 @@ const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
   'clubs-bonus': 'seenClubsBonusHint',
   'bonus-held': 'seenBonusHeldHint',
   'first-scoring-line': 'seenFirstScoringLineHint',
+  'scoring-info': 'seenScoringInfoHint',
   'low-deck': 'seenLowDeckHint',
 };
 
@@ -229,6 +243,10 @@ export const GameScreen = ({
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   const [deckPreviewOpen, setDeckPreviewOpen] = useState(false);
   const deckPeekAllowed = canPreviewDeck(state.difficulty);
+  // When the drawn card is wild-supercharged the perk button opens
+  // this modal instead of dispatching directly — the player picks
+  // which of H/S/D/C the perk resolves as.
+  const [wildPerkOpen, setWildPerkOpen] = useState(false);
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
@@ -267,6 +285,7 @@ export const GameScreen = ({
   const gridCellRefs = useRef<(View | null)[]>([]);
   const perkButtonRef = useRef<View>(null);
   const deckCountRef = useRef<Text>(null);
+  const scoreInfoBtnRef = useRef<View>(null);
 
   // Pending-hint timer — we delay the popup by HINT_REVEAL_DELAY_MS so
   // the triggering animation/sound has time to land. Stored in a ref
@@ -489,6 +508,15 @@ export const GameScreen = ({
         liveReport.lines.some(l => l.hand !== null)) {
       return 'first-scoring-line';
     }
+    // Right after the first-scoring-line hint is dismissed, point
+    // the player at the ⓘ next to the score so they can open the
+    // hand-value reference any time. Gated on a scoring line
+    // existing so it doesn't fire on a grid that hasn't scored yet.
+    if (!settings.seenScoringInfoHint &&
+        settings.seenFirstScoringLineHint &&
+        liveReport.lines.some(l => l.hand !== null)) {
+      return 'scoring-info';
+    }
     if (!settings.seenGridEffectHint &&
         (liveReport.gridMultiplier !== 1 || liveReport.gridFlat !== 0)) {
       // Skip grid-effect on the early turns when a free starter bonus
@@ -589,6 +617,8 @@ export const GameScreen = ({
         return measure(perkButtonRef.current);
       case 'low-deck':
         return measure(deckCountRef.current);
+      case 'scoring-info':
+        return measure(scoreInfoBtnRef.current);
     }
   };
 
@@ -643,6 +673,7 @@ export const GameScreen = ({
     settings.seenBonusHeldHint,
     settings.seenFirstScoringLineHint,
     settings.seenLowDeckHint,
+    settings.seenScoringInfoHint,
   ]);
 
   const dismissHint = () => {
@@ -662,11 +693,16 @@ export const GameScreen = ({
   // doesn't gate the perk (the reducer will pick a random suit
   // anyway), so we just need ANY perk to be currently runnable.
   // Outside Short Circuit the behavior is unchanged.
+  // A wild-supercharged drawn card's suit is flexible — the player
+  // can spend it on ANY suit perk, so we gate the button on
+  // "is any perk available?" rather than just the original suit's.
+  const drawnIsWild =
+    !!drawn && !isJoker(drawn) && drawn.supercharge === 'wild';
   const suitOK =
     state.phase.kind === 'awaiting-action' &&
     !!drawn &&
     !isJoker(drawn) &&
-    (state.randomPerks
+    (state.randomPerks || drawnIsWild
       ? anyPerkAvailable(
           state.grid,
           state.bonusDeck.length,
@@ -1116,6 +1152,7 @@ export const GameScreen = ({
           undoState={undoState}
           openLines={openLines}
           openPenalty={openPenalty}
+          infoBtnRef={scoreInfoBtnRef}
         />
       </View>
       {!state.noBonusCards && (
@@ -1161,7 +1198,8 @@ export const GameScreen = ({
           settings.colorBlindAssist,
           deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined,
           perkButtonRef,
-          deckCountRef
+          deckCountRef,
+          drawnIsWild ? () => setWildPerkOpen(true) : undefined
         )}
       </View>
 
@@ -1210,6 +1248,20 @@ export const GameScreen = ({
         anchor={hintAnchor}
         bonusDeclineAllowed={state.bonusDeclineAllowed}
         onDismiss={dismissHint}
+      />
+      <WildPerkChooser
+        visible={wildPerkOpen}
+        grid={state.grid}
+        bonusDeckLen={state.bonusDeck.length}
+        bonusHandLen={state.bonusCards.length}
+        noSwap={state.noSwap}
+        onPick={chosen => {
+          setWildPerkOpen(false);
+          haptic('light');
+          playSound('tap');
+          dispatch({ type: 'BEGIN_SUIT_ACTION', forSuit: chosen });
+        }}
+        onCancel={() => setWildPerkOpen(false)}
       />
     </View>
   );
@@ -1263,19 +1315,29 @@ const HintModal = ({
   // first render we draw at the screen center hidden, then re-render
   // at the computed position once we know the popup's size.
   const [popupSize, setPopupSize] = useState<{ w: number; h: number } | null>(null);
+  // Holds the last non-null anchor so the popup stays put during the
+  // close fade-out animation. Without this, dismissing wipes the
+  // anchor instantly and the popup snaps back to screen center for
+  // one render before the modal disappears — visible as a flicker.
+  const lastAnchorRef = useRef<HintAnchorRect | null>(null);
+  if (anchor !== null) lastAnchorRef.current = anchor;
+  const stableAnchor = anchor ?? lastAnchorRef.current;
   // Brief lockout right after the popup appears — prevents the player
   // from accidentally tap-dismissing before they've registered that
   // the popup even opened.
   const [dismissArmed, setDismissArmed] = useState(false);
 
-  // Reset measurement + arm the dismiss lockout when a new hint opens
-  // (or this one closes).
+  // Arm the dismiss lockout when a new hint opens; reset popup
+  // measurement so we re-measure for the new copy. We deliberately
+  // DON'T reset popupSize when hint goes to null — the modal is in
+  // the middle of fading out and reusing the last measurement keeps
+  // the popup anchored to the same spot until it's gone.
   useEffect(() => {
     if (hint === null) {
-      setPopupSize(null);
       setDismissArmed(false);
       return;
     }
+    setPopupSize(null);
     setDismissArmed(false);
     const id = setTimeout(() => setDismissArmed(true), HINT_DISMISS_LOCKOUT_MS);
     return () => clearTimeout(id);
@@ -1301,26 +1363,26 @@ const HintModal = ({
   let popupTop = -9999;
   let popupRect: HintAnchorRect | null = null;
   if (popupSize) {
-    if (anchor) {
-      const aboveSpace = anchor.y - POPUP_SCREEN_MARGIN;
-      const belowSpace = win.height - (anchor.y + anchor.h) - POPUP_SCREEN_MARGIN;
+    if (stableAnchor) {
+      const aboveSpace = stableAnchor.y - POPUP_SCREEN_MARGIN;
+      const belowSpace = win.height - (stableAnchor.y + stableAnchor.h) - POPUP_SCREEN_MARGIN;
       const needsH = popupSize.h + POPUP_ANCHOR_GAP;
       const placeAbove =
         aboveSpace >= needsH ? true :
         belowSpace >= needsH ? false :
         aboveSpace > belowSpace; // neither fits cleanly — pick the bigger half
       popupTop = placeAbove
-        ? Math.max(POPUP_SCREEN_MARGIN, anchor.y - POPUP_ANCHOR_GAP - popupSize.h)
+        ? Math.max(POPUP_SCREEN_MARGIN, stableAnchor.y - POPUP_ANCHOR_GAP - popupSize.h)
         : Math.min(
             win.height - popupSize.h - POPUP_SCREEN_MARGIN,
-            anchor.y + anchor.h + POPUP_ANCHOR_GAP
+            stableAnchor.y + stableAnchor.h + POPUP_ANCHOR_GAP
           );
       // Horizontally align with anchor center, then clamp to viewport.
       popupLeft = Math.max(
         POPUP_SCREEN_MARGIN,
         Math.min(
           win.width - popupSize.w - POPUP_SCREEN_MARGIN,
-          anchor.x + anchor.w / 2 - popupSize.w / 2
+          stableAnchor.x + stableAnchor.w / 2 - popupSize.w / 2
         )
       );
     } else {
@@ -1332,12 +1394,12 @@ const HintModal = ({
 
   // Inflated anchor for the spotlight cutout — gives the highlighted
   // element a breathing halo of undimmed pixels.
-  const spotlight = anchor
+  const spotlight = stableAnchor
     ? {
-        x: Math.max(0, anchor.x - SPOTLIGHT_PAD),
-        y: Math.max(0, anchor.y - SPOTLIGHT_PAD),
-        w: Math.min(win.width, anchor.w + SPOTLIGHT_PAD * 2),
-        h: Math.min(win.height, anchor.h + SPOTLIGHT_PAD * 2),
+        x: Math.max(0, stableAnchor.x - SPOTLIGHT_PAD),
+        y: Math.max(0, stableAnchor.y - SPOTLIGHT_PAD),
+        w: Math.min(win.width, stableAnchor.w + SPOTLIGHT_PAD * 2),
+        h: Math.min(win.height, stableAnchor.h + SPOTLIGHT_PAD * 2),
       }
     : null;
 
@@ -1440,8 +1502,8 @@ const HintModal = ({
           </View>
         </Pressable>
 
-        {popupRect && anchor && (
-          <HintArrow popup={popupRect} anchor={anchor} color={colors.accent} />
+        {popupRect && stableAnchor && (
+          <HintArrow popup={popupRect} anchor={stableAnchor} color={colors.accent} />
         )}
       </Pressable>
     </Modal>
@@ -1493,6 +1555,136 @@ const hintModalStyles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   btnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+});
+
+// Lets the player pick which suit perk to run when the drawn card
+// is wild-supercharged. Each option is enabled only if its perk is
+// currently legal (canHop / canSlide / canDestroy / canDrawBonus
+// against the live grid + bonus deck state). The player picks one
+// suit; the parent dispatches BEGIN_SUIT_ACTION with that suit as
+// forSuit, and the wild card gets spent on whichever perk they
+// chose — not the suit it originally rolled.
+const WildPerkChooser = ({
+  visible,
+  grid,
+  bonusDeckLen,
+  bonusHandLen,
+  noSwap,
+  onPick,
+  onCancel,
+}: {
+  visible: boolean;
+  grid: Grid;
+  bonusDeckLen: number;
+  bonusHandLen: number;
+  noSwap: boolean;
+  onPick: (suit: Suit) => void;
+  onCancel: () => void;
+}) => {
+  const options: Array<{ suit: Suit; legal: boolean }> = [
+    { suit: 'H', legal: canHop(grid) },
+    { suit: 'S', legal: canSlide(grid) },
+    { suit: 'D', legal: canDestroy(grid) },
+    {
+      suit: 'C',
+      legal:
+        canDrawBonus(bonusDeckLen) &&
+        !(noSwap && bonusHandLen >= BONUS_HAND_LIMIT),
+    },
+  ];
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={wildPerkStyles.backdrop} onPress={onCancel}>
+        <Pressable style={wildPerkStyles.sheet} onPress={() => {}}>
+          <Text style={wildPerkStyles.kicker}>· WILD CARD ·</Text>
+          <Text style={wildPerkStyles.title}>Pick a perk</Text>
+          <Text style={wildPerkStyles.body}>
+            This card is wild — its suit is flexible. Spend it on whichever perk
+            you want.
+          </Text>
+          <View style={wildPerkStyles.grid}>
+            {options.map(({ suit, legal }) => (
+              <NeonButton
+                key={suit}
+                label={SUIT_PERK_LABEL[suit]}
+                variant={SUIT_PERK_VARIANT[suit]}
+                disabled={!legal}
+                size="md"
+                onPress={() => onPick(suit)}
+                style={wildPerkStyles.optionBtn}
+              />
+            ))}
+          </View>
+          <View style={wildPerkStyles.cancelRow}>
+            <NeonButton label="Cancel" variant="secondary" size="sm" onPress={onCancel} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+const wildPerkStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 4, 12, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.joker,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.joker, 14, 0.35),
+  },
+  kicker: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 3,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  title: {
+    color: colors.joker,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowColor: colors.joker,
+    textShadowRadius: 6,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  body: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  optionBtn: {
+    flexBasis: '47%',
+    height: 56,
+  },
+  cancelRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
@@ -1592,7 +1784,12 @@ const renderBottom = (
   // up so the suit-perk hint can anchor on the perk button and the
   // low-deck hint can anchor on the "deck N" text.
   perkButtonRef?: React.Ref<View>,
-  deckCountRef?: React.Ref<Text>
+  deckCountRef?: React.Ref<Text>,
+  // Opens the wild-perk chooser modal instead of dispatching the
+  // perk directly. Used when the drawn card is wild-supercharged —
+  // the player picks which of H/S/D/C the perk should resolve as,
+  // rather than being locked to the card's original suit.
+  onOpenWildPerk?: () => void
 ) => {
   const p = state.phase;
   const disabled = animating;
@@ -1627,26 +1824,43 @@ const renderBottom = (
               style={styles.squareBtn}
               noGlow
             />
-            {!isJk && suitOK && suit && (
-              <View ref={perkButtonRef} collapsable={false} style={styles.squareBtnWrap}>
-                <NeonButton
-                  // Short Circuit hides which perk you'll get behind a
-                  // generic label + warn tint — the drawn card's suit
-                  // doesn't predict the outcome, so showing the suit's
-                  // perk name would be a lie.
-                  label={state.randomPerks ? 'Perk ?' : SUIT_PERK_LABEL[suit]}
-                  variant={state.randomPerks ? 'warn' : SUIT_PERK_VARIANT[suit]}
-                  disabled={disabled}
-                  onPress={() => {
-                    haptic('light');
-                    playSound('tap');
-                    dispatch({ type: 'BEGIN_SUIT_ACTION' });
-                  }}
-                  style={styles.squareBtn}
-                  noGlow
-                />
-              </View>
-            )}
+            {!isJk && suitOK && suit && (() => {
+              // Three perk-button modes share this slot:
+              //  - Short Circuit: a single random perk fires on tap.
+              //  - Wild draw: opens the wild-perk chooser modal so the
+              //    player can pick H/S/D/C explicitly.
+              //  - Normal: the drawn card's suit perk fires on tap.
+              const drawnIsWild = state.drawn?.kind === 'standard'
+                && state.drawn.supercharge === 'wild';
+              const label = state.randomPerks
+                ? 'Perk ?'
+                : drawnIsWild
+                  ? 'Perk'
+                  : SUIT_PERK_LABEL[suit];
+              const variant = state.randomPerks || drawnIsWild
+                ? 'warn'
+                : SUIT_PERK_VARIANT[suit];
+              return (
+                <View ref={perkButtonRef} collapsable={false} style={styles.squareBtnWrap}>
+                  <NeonButton
+                    label={label}
+                    variant={variant}
+                    disabled={disabled}
+                    onPress={() => {
+                      haptic('light');
+                      playSound('tap');
+                      if (drawnIsWild && onOpenWildPerk) {
+                        onOpenWildPerk();
+                      } else {
+                        dispatch({ type: 'BEGIN_SUIT_ACTION' });
+                      }
+                    }}
+                    style={styles.squareBtn}
+                    noGlow
+                  />
+                </View>
+              );
+            })()}
             {!isJk && !state.noDiscards && (
               <NeonButton
                 label="Discard"

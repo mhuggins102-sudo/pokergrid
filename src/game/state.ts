@@ -128,7 +128,7 @@ export interface GameState {
 export type Action =
   | { type: 'PLACE' }
   | { type: 'DISCARD_NONE' } // sends drawn to discards (no perk used)
-  | { type: 'BEGIN_SUIT_ACTION' }
+  | { type: 'BEGIN_SUIT_ACTION'; forSuit?: Suit }
   | { type: 'RESOLVE_HOP'; i: number; j: number }
   | { type: 'SLIDE_SELECT_SOURCE'; slot: number }
   | { type: 'RESOLVE_SLIDE'; from: number; direction: Direction; distance: number }
@@ -360,17 +360,26 @@ const pickRandomAvailablePerk = (s: GameState, rng: () => number): Suit | null =
   return candidates[Math.floor(rng() * candidates.length)];
 };
 
-const handleBeginSuitAction = (s: GameState, rng: () => number): GameState => {
+const handleBeginSuitAction = (
+  s: GameState,
+  rng: () => number,
+  forSuit?: Suit
+): GameState => {
   if (s.phase.kind !== 'awaiting-action' || !s.drawn || isJoker(s.drawn)) return s;
   const drawn = s.drawn;
-  // In Short Circuit, the perk that fires is randomized — pick a
-  // uniformly-random suit from those whose perk is currently
-  // available, then drop into the same switch below as if the drawn
-  // card had been that suit. perkSpent still records the actual
-  // drawn card so Burnout / Frugal stay correct.
-  const effectiveSuit: Suit = s.randomPerks
-    ? pickRandomAvailablePerk(s, rng) ?? drawn.suit
-    : drawn.suit;
+  // Decide which perk to fire:
+  //   - `forSuit` (caller override) wins. Used by the wild-card perk
+  //     chooser to let the player pick any suit perk when the drawn
+  //     card's suit is flexible.
+  //   - Otherwise Short Circuit picks a uniformly-random available
+  //     perk (the engine's existing behavior).
+  //   - Otherwise the drawn card's own suit determines the perk.
+  // perkSpent still records the actual drawn card so Burnout /
+  // Frugal stay correct regardless of which branch fires.
+  const effectiveSuit: Suit = forSuit
+    ?? (s.randomPerks
+      ? pickRandomAvailablePerk(s, rng) ?? drawn.suit
+      : drawn.suit);
   switch (effectiveSuit) {
     case 'H': {
       if (!canHop(s.grid)) return s;
@@ -662,7 +671,7 @@ export const step = (
       next = handleDiscardNone(state);
       break;
     case 'BEGIN_SUIT_ACTION':
-      next = handleBeginSuitAction(state, rng);
+      next = handleBeginSuitAction(state, rng, action.forSuit);
       break;
     case 'RESOLVE_HOP':
       next = handleResolveHop(state, action.i, action.j);
