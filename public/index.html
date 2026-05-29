@@ -47,15 +47,18 @@
         browsers that support it:
           - 100vh: fallback for older browsers
           - 100dvh: modern dynamic viewport (URL bar collapse)
-          - -webkit-fill-available: iOS-only fix. When the site is
-            launched as a PWA from the iOS Home Screen, 100dvh reports
-            a stale height on first paint until the bottom home
-            indicator zone settles, leaving a dark strip below the
-            app that disappears once the user scrolls. -webkit-fill-
-            available always reflects the actual visible viewport on
-            iOS, so the body fills correctly from the first frame.
-            Chrome / Firefox ignore -webkit-fill-available for height
-            (treats it as `auto`), so they stay on 100dvh.
+          - -webkit-fill-available: iOS-only fallback. On most surfaces
+            this is enough, but in iOS PWA standalone mode it can
+            still report a stale viewport on the very first paint —
+            the bottom home-indicator zone gets settled a frame or
+            two AFTER mount, and any content tall enough to brush
+            the bottom edge surfaces a dark band until the user
+            scrolls.
+          - var(--app-h): set by the script below from
+            window.visualViewport.height (authoritative on iOS) and
+            re-applied on every visualViewport resize. This is the
+            line that actually fills the viewport when the simpler
+            fallbacks underreport.
       */
       html,
       body,
@@ -65,6 +68,7 @@
         height: 100vh;
         height: 100dvh;
         height: -webkit-fill-available;
+        height: var(--app-h, 100dvh);
         background-color: #06070d;
         color-scheme: dark;
       }
@@ -78,6 +82,33 @@
         overflow: hidden;
       }
     </style>
+
+    <script>
+      // iOS PWA-mode viewport height fix. window.visualViewport.height
+      // is the authoritative "actual visible viewport" API and updates
+      // synchronously when the home-indicator zone settles, so we
+      // mirror it onto --app-h for the CSS height cascade above. The
+      // requestAnimationFrame double-tap catches the 1–2-frame lag
+      // some iOS versions show between first paint and the
+      // visualViewport reporting the post-settle value.
+      (function () {
+        var root = document.documentElement;
+        function apply() {
+          var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+          if (h) root.style.setProperty('--app-h', h + 'px');
+        }
+        apply();
+        window.addEventListener('resize', apply);
+        window.addEventListener('orientationchange', apply);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', apply);
+        }
+        requestAnimationFrame(function () {
+          apply();
+          requestAnimationFrame(apply);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
