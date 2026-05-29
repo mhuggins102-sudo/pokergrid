@@ -763,7 +763,8 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   }, [state.grid, inspectLine]);
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
+    <ScrollView style={styles.scrollFlex} contentContainerStyle={styles.content}>
       <BannerHero
         won={won}
         score={total}
@@ -1042,12 +1043,43 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         currentValue={bonusDetailIdx !== null ? bonusValues[bonusDetailIdx] : undefined}
         onClose={() => setBonusDetailIdx(null)}
       />
-    </ScrollView>
+      </ScrollView>
+
+      {/* Sticky reminder, pinned outside the ScrollView. While a Targets-Up
+          win still owes an upgrade pick, a player who scrolls up to re-read
+          the grid/breakdown can't lose track that the run is blocked. The
+          actual advance control is the in-scroll Next button (already labeled
+          "Pick to continue" while blocked); this just keeps the state in view. */}
+      {context.mode === 'targets-up' && won && !pickerComplete && (
+        <View style={styles.stickyHintBar} pointerEvents="none">
+          <Text style={styles.stickyHintText}>↑ Pick your upgrade above to continue</Text>
+        </View>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
+  scrollFlex: { flex: 1 },
+  stickyHintBar: {
+    backgroundColor: colors.bgPanel,
+    borderTopWidth: 1,
+    borderTopColor: colors.warn,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+  },
+  stickyHintText: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
+  },
   content: { paddingBottom: spacing.xxl, paddingHorizontal: spacing.md },
   banner: {
     marginTop: spacing.lg,
