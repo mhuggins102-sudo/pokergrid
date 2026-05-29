@@ -24,6 +24,12 @@ const TUTORIAL_SEEN_KEY = 'pokergrid:tutorial-seen:v1';
 export const markTutorialSeen = () =>
   AsyncStorage.setItem(TUTORIAL_SEEN_KEY, '1').catch(() => {});
 
+// Re-arm the first-run Rules popup so it shows again on next launch. Used by
+// Settings → "Replay tutorial" so a player who skipped onboarding can get it
+// back the same way a first-time player sees it.
+export const clearTutorialSeen = () =>
+  AsyncStorage.removeItem(TUTORIAL_SEEN_KEY).catch(() => {});
+
 export const tutorialSeen = async (): Promise<boolean> => {
   try {
     const v = await AsyncStorage.getItem(TUTORIAL_SEEN_KEY);

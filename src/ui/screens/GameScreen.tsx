@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { anyPerkAvailable, slideDestinationsFrom, suitActionAvailable } from '../../game/actions';
 import { Card, isJoker } from '../../game/cards';
-import { BONUS_HAND_LIMIT } from '../../game/bonusCards';
+import { BONUS_HAND_LIMIT, SPOTLIGHT_ID } from '../../game/bonusCards';
 import {
   Direction,
   GRID_SIZE,
@@ -18,7 +18,7 @@ import {
   slideChain,
   SPIRAL_ORDER,
 } from '../../game/grid';
-import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
+import { bonusShapleyValues, INCOMPLETE_LINE_PENALTY, scoreGrid } from '../../game/scoring';
 import { Action, canPreviewDeck, GameState } from '../../game/state';
 import {
   ANIM_DURATION,
@@ -405,6 +405,22 @@ export const GameScreen = ({
     ]
   );
   const liveScore = liveReport.total;
+
+  // Endgame penalty preview for the ScoreBar. The live score ignores the
+  // incomplete-line penalty (it's optimistic), so a player can be blindsided
+  // by the -25/line hit at game-over. Surface it only as the run nears its
+  // end — when the deck is low OR few grid slots remain — so early-game play
+  // isn't cluttered with a warning about lines they still have plenty of time
+  // to fill. Patience negates the penalty entirely, so the cue stays hidden
+  // while it's held.
+  const hasPatience = state.bonusCards.some(c => c.negatesIncompletePenalty);
+  const emptySlots = state.grid.filter(c => c === null).length;
+  const nearEnd = state.deck.length <= 5 || emptySlots <= 5;
+  const openLines =
+    hasPatience || !nearEnd
+      ? 0
+      : liveReport.lines.filter(l => l.incomplete).length;
+  const openPenalty = openLines * INCOMPLETE_LINE_PENALTY;
 
   // Shapley-value attribution of the bonus contribution, so multiple cards
   // stacking multiplicatively don't each "claim" the joint multiplier. Sum of
@@ -1098,6 +1114,8 @@ export const GameScreen = ({
           kicker={kicker}
           onUndoPress={handleUndoPress}
           undoState={undoState}
+          openLines={openLines}
+          openPenalty={openPenalty}
         />
       </View>
       {!state.noBonusCards && (
@@ -1760,6 +1778,24 @@ const renderBottom = (
 
   if (p.kind === 'bonus-card-resolving') {
     const atMax = state.bonusCards.length >= BONUS_HAND_LIMIT;
+    // Spotlight is exclusive — it can't share the hand with any other bonus
+    // card (see enforceSpotlight in state.ts). The eviction happens silently
+    // on keep/swap, so warn before the player commits and loses cards by
+    // surprise. Two directions:
+    //  - a drawn card IS Spotlight while you hold other cards → keeping it
+    //    drops the rest of your hand.
+    //  - you already hold Spotlight and a drawn card ISN'T → keeping that one
+    //    drops your Spotlight.
+    const holdsSpotlight = state.bonusCards.some(c => c.id === SPOTLIGHT_ID);
+    const holdsOthers = state.bonusCards.some(c => c.id !== SPOTLIGHT_ID);
+    const drawnHasSpotlight = p.drawn.some(c => c.id === SPOTLIGHT_ID);
+    const drawnHasOther = p.drawn.some(c => c.id !== SPOTLIGHT_ID);
+    const spotlightWarning =
+      drawnHasSpotlight && holdsOthers
+        ? 'Spotlight is exclusive — keeping it discards every other bonus card you hold.'
+        : holdsSpotlight && drawnHasOther
+        ? 'You hold Spotlight (exclusive) — keeping any card here discards your Spotlight.'
+        : null;
     return (
       <View style={styles.actionCol}>
         <Text style={[styles.drawnLabel, { color: colors.suitC, textAlign: 'center' }]}>
@@ -1767,9 +1803,12 @@ const renderBottom = (
         </Text>
         <Text style={styles.hint}>
           {atMax
-            ? 'You\'re at 3 bonus cards. Pick one to swap in — old one is dropped.'
+            ? 'You\'re at 3 bonus cards. Pick one to swap in — the card you replace is gone for good.'
             : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
+        {spotlightWarning && (
+          <Text style={styles.spotlightWarning}>{spotlightWarning}</Text>
+        )}
         <View style={styles.bonusRow}>
           {p.drawn.map((b, i) => {
             const s = bonusStyleFor(b);
@@ -1820,6 +1859,17 @@ const renderBottom = (
 
   if (p.kind === 'bonus-card-replacing') {
     const newCard = p.drawn[p.pickedNew];
+    // At the cap, bringing Spotlight in evicts ALL other held cards (not just
+    // the one tapped to replace), and bringing a non-Spotlight card in while
+    // you hold Spotlight evicts the Spotlight. Either way the player can lose
+    // more than the single card they think they're swapping — warn first.
+    const newIsSpotlight = newCard?.id === SPOTLIGHT_ID;
+    const holdsSpotlight = state.bonusCards.some(c => c.id === SPOTLIGHT_ID);
+    const spotlightWarning = newIsSpotlight
+      ? 'Spotlight is exclusive — swapping it in discards all your other bonus cards, not just the one you tap.'
+      : holdsSpotlight
+      ? 'You hold Spotlight (exclusive) — swapping in this card discards your Spotlight too.'
+      : null;
     return (
       <View style={styles.actionCol}>
         <Text style={[styles.drawnLabel, { color: colors.suitC, textAlign: 'center' }]}>
@@ -1828,6 +1878,9 @@ const renderBottom = (
         <Text style={styles.hint}>
           Tap one of your 3 to replace with "{newCard?.name}". The old one is gone for good.
         </Text>
+        {spotlightWarning && (
+          <Text style={styles.spotlightWarning}>{spotlightWarning}</Text>
+        )}
         <View style={styles.bonusRow}>
           {state.bonusCards.map((b, i) => {
             const s = bonusStyleFor(b);
@@ -1980,6 +2033,20 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     letterSpacing: 1,
+  },
+  spotlightWarning: {
+    color: colors.warn,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+    textAlign: 'center',
+    backgroundColor: 'rgba(255, 183, 74, 0.10)',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.warn,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
   },
   bonusRow: {
     flexDirection: 'row',

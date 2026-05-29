@@ -7,13 +7,17 @@ import Animated, {
 } from 'react-native-reanimated';
 import { NeonButton } from '../components/NeonButton';
 import { trigger } from '../haptics';
-import { useSettings } from '../settings';
+import { resetHintsPatch, useSettings } from '../settings';
 import { useSound } from '../sound';
 import { useStats } from '../stats';
+import { clearTutorialSeen } from './TutorialScreen';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   onBack: () => void;
+  // Re-arms the first-run Rules popup and jumps straight into the tutorial
+  // so a player who skipped onboarding can get it back.
+  onReplayTutorial: () => void;
 }
 
 const Switch = ({
@@ -75,11 +79,12 @@ const Toggle = ({
   </View>
 );
 
-export const SettingsScreen = ({ onBack }: Props) => {
+export const SettingsScreen = ({ onBack, onReplayTutorial }: Props) => {
   const { settings, update } = useSettings();
   const { reset } = useStats();
   const playSound = useSound();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [hintsReset, setHintsReset] = useState(false);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -135,6 +140,36 @@ export const SettingsScreen = ({ onBack }: Props) => {
         value={settings.twoColorDeck}
         onChange={v => update({ twoColorDeck: v })}
       />
+
+      <View style={styles.divider} />
+
+      <Text style={styles.sectionLabel}>Help</Text>
+      <Text style={styles.copy}>
+        New here, or want a refresher? Replay the walkthrough, or re-arm the
+        one-time pop-up tips that explain jokers, bonus cards, and the suit perks
+        as they first come up in a game.
+      </Text>
+      <View style={styles.helpRow}>
+        <NeonButton
+          label="Replay tutorial"
+          variant="primary"
+          size="sm"
+          onPress={() => {
+            clearTutorialSeen();
+            onReplayTutorial();
+          }}
+        />
+        <NeonButton
+          label={hintsReset ? 'Hints reset ✓' : 'Reset first-time hints'}
+          variant="secondary"
+          size="sm"
+          disabled={hintsReset}
+          onPress={() => {
+            update(resetHintsPatch());
+            setHintsReset(true);
+          }}
+        />
+      </View>
 
       <View style={styles.divider} />
 
@@ -256,6 +291,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
+  helpRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', marginTop: spacing.xs },
   divider: { height: 1, backgroundColor: colors.outlineSoft, marginVertical: spacing.lg },
   copy: {
     color: colors.textMid,

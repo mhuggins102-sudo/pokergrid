@@ -53,6 +53,27 @@ export const DEFAULT_SETTINGS: Settings = {
   seenLowDeckHint: false,
 };
 
+// Every one-time-acknowledgement flag, in one place. Used by Settings →
+// "Reset first-time hints" so re-arming them all doesn't mean hand-listing
+// the keys at the call site (and silently missing one when a hint is added).
+export const HINT_KEYS: (keyof Settings)[] = [
+  'undoWarningSeen',
+  'seenJokerHint',
+  'seenBonusCapHint',
+  'seenGridEffectHint',
+  'seenHeartsSwapHint',
+  'seenSpadesSlideHint',
+  'seenDiamondsDestroyHint',
+  'seenClubsBonusHint',
+  'seenBonusHeldHint',
+  'seenFirstScoringLineHint',
+  'seenLowDeckHint',
+];
+
+// Build a patch that sets every hint flag back to false (un-seen).
+export const resetHintsPatch = (): Partial<Settings> =>
+  Object.fromEntries(HINT_KEYS.map(k => [k, false])) as Partial<Settings>;
+
 const STORAGE_KEY = 'pokergrid:settings:v1';
 
 export const loadSettings = async (): Promise<Settings> => {
