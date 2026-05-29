@@ -371,8 +371,15 @@ interface Stats {
   pctWin: number;
 }
 
-const summarize = (difficulty: Difficulty, scores: number[]): Stats => {
-  const target = TARGET_BY_DIFFICULTY[difficulty];
+// Optional target override per difficulty — used to bucket the same
+// score distribution against multiple proposed target schedules in
+// one sim run. When undefined, falls back to TARGET_BY_DIFFICULTY.
+const summarize = (
+  difficulty: Difficulty,
+  scores: number[],
+  targetOverride?: number
+): Stats => {
+  const target = targetOverride ?? TARGET_BY_DIFFICULTY[difficulty];
   const sorted = [...scores].sort((a, b) => a - b);
   const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -412,18 +419,46 @@ const reportStats = (s: Stats): string => {
   return lines.join('\n');
 };
 
+// Proposed target schedule the user is comparing against the
+// current one. Bucketing the same scores against both lets us
+// answer "should I bump these targets?" without a second sim run.
+const PROPOSED_TARGETS: Record<Difficulty, number> = {
+  easy: 350,
+  medium: 425,
+  hard: 500,
+  extreme: 400,
+};
+
 (SHOULD_RUN ? describe : describe.skip)('bot simulation', () => {
   test(
     `${N_GAMES} games per difficulty`,
     () => {
       const allStats: Stats[] = [];
+      const allScores: Record<Difficulty, number[]> = {
+        easy: [], medium: [], hard: [], extreme: [],
+      };
       for (const difficulty of DIFFICULTIES) {
         const scores: number[] = [];
         for (let i = 0; i < N_GAMES; i++) {
           scores.push(runOneGame(difficulty));
         }
+        allScores[difficulty] = scores;
         const stats = summarize(difficulty, scores);
         allStats.push(stats);
+        console.log(reportStats(stats));
+      }
+      // Second pass: same scores, bucketed against the proposed
+      // target schedule. Prints under a "PROPOSED" header so the
+      // two reports are easy to diff.
+      console.log('\n========================================');
+      console.log('PROPOSED TARGETS — same scores, re-bucketed');
+      console.log('========================================');
+      for (const difficulty of DIFFICULTIES) {
+        const stats = summarize(
+          difficulty,
+          allScores[difficulty],
+          PROPOSED_TARGETS[difficulty]
+        );
         console.log(reportStats(stats));
       }
       for (const s of allStats) {
