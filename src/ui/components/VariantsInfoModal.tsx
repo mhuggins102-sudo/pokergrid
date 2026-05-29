@@ -50,7 +50,7 @@ export const VariantsInfoModal = ({ visible, onClose }: Props) => (
             </View>
             <View style={[styles.tableRow, styles.tableRowLast]}>
               <Text style={styles.tableCell}>SS</Text>
-              <Text style={styles.tableCell}>≥ 1.5× target</Text>
+              <Text style={styles.tableCell}>≥ 1.6× target</Text>
               <Text style={styles.tableCell}>Both</Text>
             </View>
           </View>
