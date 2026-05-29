@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useMemo, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Card, Rank, StandardCard, Suit } from '../../game/cards';
 import { BONUS_DECK_POOL } from '../../game/bonusCards';
@@ -858,13 +858,17 @@ export const TutorialScreen = ({ onDone }: Props) => {
         </Animated.View>
       </ScrollView>
 
-      <Modal
-        visible={bonusCardsOpen}
-        animationType="slide"
-        onRequestClose={() => setBonusCardsOpen(false)}
-      >
-        <BonusCardsScreen onBack={() => setBonusCardsOpen(false)} />
-      </Modal>
+      {/* Render the catalog inline as an absolute overlay rather than
+          via React Native's <Modal>. On react-native-web Modal portals
+          to the document body, escaping the WebScaler's transform and
+          spanning the full browser width on desktop; an in-tree
+          overlay stays inside the scaled phone frame so it reads as
+          portrait on every viewport. */}
+      {bonusCardsOpen && (
+        <View style={styles.bonusCardsOverlay}>
+          <BonusCardsScreen onBack={() => setBonusCardsOpen(false)} />
+        </View>
+      )}
 
       <View style={styles.actions}>
         <NeonButton
@@ -895,6 +899,17 @@ export const TutorialScreen = ({ onDone }: Props) => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
+  // Full-bleed overlay for the "See all cards" catalog. Lives inside
+  // the WebScaler's transform context so the desktop browser frames
+  // it as the same scaled phone portrait the rest of the app uses.
+  bonusCardsOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.bgBase,
+  },
   progress: {
     flexDirection: 'row',
     gap: 3,

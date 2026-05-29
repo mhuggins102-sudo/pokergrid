@@ -9,7 +9,6 @@ import { NeonButton } from '../components/NeonButton';
 import { trigger } from '../haptics';
 import { resetHintsPatch, useSettings } from '../settings';
 import { useSound } from '../sound';
-import { useStats } from '../stats';
 import { clearTutorialSeen } from './TutorialScreen';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -81,9 +80,7 @@ const Toggle = ({
 
 export const SettingsScreen = ({ onBack, onReplayTutorial }: Props) => {
   const { settings, update } = useSettings();
-  const { reset } = useStats();
   const playSound = useSound();
-  const [confirmReset, setConfirmReset] = useState(false);
   const [hintsReset, setHintsReset] = useState(false);
 
   return (
@@ -171,41 +168,6 @@ export const SettingsScreen = ({ onBack, onReplayTutorial }: Props) => {
         />
       </View>
 
-      <View style={styles.divider} />
-
-      <Text style={styles.sectionLabel}>Data</Text>
-      <Text style={styles.copy}>
-        Stats and preferences are stored locally on this device. Clearing the browser data or
-        deleting the app removes them.
-      </Text>
-      {!confirmReset ? (
-        <NeonButton
-          label="Reset stats"
-          variant="danger"
-          onPress={() => setConfirmReset(true)}
-        />
-      ) : (
-        <View style={styles.confirmRow}>
-          <Text style={styles.confirmText}>Erase all stats and history?</Text>
-          <View style={styles.confirmBtns}>
-            <NeonButton
-              label="Cancel"
-              variant="secondary"
-              size="sm"
-              onPress={() => setConfirmReset(false)}
-            />
-            <NeonButton
-              label="Yes, reset"
-              variant="danger"
-              size="sm"
-              onPress={() => {
-                reset();
-                setConfirmReset(false);
-              }}
-            />
-          </View>
-        </View>
-      )}
     </ScrollView>
   );
 };
@@ -300,14 +262,4 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginBottom: spacing.md,
   },
-  confirmRow: { gap: spacing.sm },
-  confirmText: {
-    color: colors.danger,
-    fontFamily: fonts.mono,
-    fontSize: 12,
-    letterSpacing: 1,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  confirmBtns: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' },
 });

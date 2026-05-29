@@ -31,6 +31,9 @@ interface Props {
   // looming hit as the run nears its end. 0 / undefined hides the cue.
   openLines?: number;
   openPenalty?: number;
+  // First-game hint plumbing — anchor for the scoring-info hint
+  // that points at the ⓘ button next to the score readout.
+  infoBtnRef?: React.Ref<View>;
 }
 
 // Live-score readout. Ticks softly on every change so the number feels alive.
@@ -91,6 +94,7 @@ export const ScoreBar = ({
   kicker,
   openLines = 0,
   openPenalty = 0,
+  infoBtnRef,
 }: Props) => {
   const showUndo = undoState !== 'hidden';
   const undoActive = undoState === 'available';
@@ -124,13 +128,22 @@ export const ScoreBar = ({
             onPress={undoActive ? onUndoPress : undefined}
             hitSlop={10}
             disabled={!undoActive}
-            style={[styles.iconBtn, !undoActive && styles.iconBtnDisabled]}
+            style={[
+              styles.iconBtn,
+              styles.undoBtnSpacer,
+              !undoActive && styles.iconBtnDisabled,
+            ]}
           >
             <Text style={[styles.iconText, !undoActive && styles.iconTextDisabled]}>↶</Text>
           </Pressable>
         )}
         {onInfoPress && (
-          <Pressable onPress={onInfoPress} hitSlop={10} style={styles.iconBtn}>
+          <Pressable
+            ref={infoBtnRef}
+            onPress={onInfoPress}
+            hitSlop={10}
+            style={styles.iconBtn}
+          >
             <Text style={styles.iconText}>ⓘ</Text>
           </Pressable>
         )}
@@ -154,6 +167,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 56,
   },
+  // Pushes the undo icon left a bit so it doesn't sit shoulder-to-
+  // shoulder with the score-breakdown ⓘ button. Only the undo gets
+  // this gap; the other icons hug the row edges as before.
+  undoBtnSpacer: { marginRight: spacing.sm },
   iconBtn: {
     width: 32,
     height: 32,

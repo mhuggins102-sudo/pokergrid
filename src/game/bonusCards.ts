@@ -241,8 +241,25 @@ const rainbowLine: BonusCard = {
   baseMultValue: 2,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
-    const suits = new Set(standardCards(line).map(c => c.suit));
-    return suits.size >= 4 ? { multiplier: card.multValue ?? 2 } : {};
+    // Wild-supercharged cards and jokers are suit-flexible — each one
+    // can stand in for whichever suit is still missing from the line.
+    // Count them separately and add to the distinct-standard-suits
+    // tally so a line of (H, S, D, wild) reads as 4 distinct suits
+    // even though the wild's ORIGINAL suit duplicated one of the
+    // standards. Capped naturally at 4 since the line has 5 cards.
+    let flexible = 0;
+    const distinctSuits = new Set<Suit>();
+    for (const c of line.cards) {
+      if (c === null) continue;
+      if (isJoker(c) || c.supercharge === 'wild') {
+        flexible += 1;
+      } else {
+        distinctSuits.add(c.suit);
+      }
+    }
+    return distinctSuits.size + flexible >= 4
+      ? { multiplier: card.multValue ?? 2 }
+      : {};
   },
 };
 

@@ -85,6 +85,23 @@ describe('scoring with bonus cards', () => {
     expect(row0.multiplier).toBe(2);
   });
 
+  test('Rainbow ×2 treats wild-supercharged cards as a flexible suit', () => {
+    // Regression: a wild that originally rolled a suit already in the
+    // line wasn't filling the missing 4th suit, so Rainbow failed to
+    // trigger even though the wild SHOULD have counted as the
+    // missing distinct suit. Line below has 3 distinct standard
+    // suits (H, C, D) plus a wild that originally rolled H — without
+    // the fix the wild's H duplicates, distinct count = 3, no
+    // trigger. With the fix the wild fills the missing S and the
+    // line reads as 4 distinct.
+    const rainbow = findCard('rainbow-line-x2');
+    const wildH = { ...C('A', 'H'), supercharge: 'wild' as const };
+    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildH, C('K', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(2);
+  });
+
   test('Row 3 ×2 only multiplies row index 2', () => {
     const row3 = findCard('row-3-x2');
     const g = emptyGrid();
