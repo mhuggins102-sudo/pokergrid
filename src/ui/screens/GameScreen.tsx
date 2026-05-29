@@ -1368,17 +1368,19 @@ const HintModal = ({
   // the popup even opened.
   const [dismissArmed, setDismissArmed] = useState(false);
 
-  // Arm the dismiss lockout when a new hint opens; reset popup
-  // measurement so we re-measure for the new copy. We deliberately
-  // DON'T reset popupSize when hint goes to null — the modal is in
-  // the middle of fading out and reusing the last measurement keeps
-  // the popup anchored to the same spot until it's gone.
+  // Arm the dismiss lockout when a new hint opens. popupSize is NOT
+  // reset here on purpose — for subsequent hints (hint going
+  // null → set again), the popup Pressable's `key={stableHint}` below
+  // forces a remount, which fires onLayout fresh and updates
+  // popupSize from there. Resetting popupSize manually here used to
+  // race the remount and could leave the popup stuck at opacity 0
+  // when onLayout didn't re-fire (the spotlight would render but the
+  // text box + arrow stayed invisible).
   useEffect(() => {
     if (hint === null) {
       setDismissArmed(false);
       return;
     }
-    setPopupSize(null);
     setDismissArmed(false);
     const id = setTimeout(() => setDismissArmed(true), HINT_DISMISS_LOCKOUT_MS);
     return () => clearTimeout(id);
@@ -1504,8 +1506,13 @@ const HintModal = ({
 
         {/* Popup — absolutely positioned. Wrapped in its own Pressable
             so taps on the chrome don't bubble up to the dismiss
-            handler on the backdrop. */}
+            handler on the backdrop. The key forces a remount every
+            time the hint changes so onLayout reliably re-measures
+            the new content (without this, hint 2+ in a session could
+            render with the previous hint's popupSize OR get stuck at
+            opacity 0 if onLayout didn't re-fire). */}
         <Pressable
+          key={stableHint ?? 'closed'}
           collapsable={false}
           onPress={() => {}}
           onLayout={e => {
