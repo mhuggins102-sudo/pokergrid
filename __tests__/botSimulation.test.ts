@@ -9,35 +9,42 @@
  *   SIMULATE=1 npm test -- --testPathPattern botSimulation
  *   SIM_N=500 SIMULATE=1 npm test -- --testPathPattern botSimulation
  *
- * Bot strategy — 1-step greedy lookahead:
+ * Bot strategy — multi-step projection:
  *   On every awaiting-action turn the bot enumerates every legal
- *   alternative (place / discard / suit-perk if available) and
- *   simulates the resulting grid. scoreGrid (with
- *   ignoreIncompletePenalty so partial lines don't dominate the
- *   ranking) is the evaluator. The action whose simulated grid
- *   scores highest wins.
+ *   alternative (place / discard / suit-perk if available),
+ *   simulates the resulting grid, and PROJECTS THE REMAINING DECK
+ *   onto it (placing every remaining card greedily). The projected
+ *   end-of-game grid is scored with scoreGrid INCLUDING the
+ *   incomplete-line penalty — i.e. the score the run would actually
+ *   end at if the bot stopped making decisions right now. The action
+ *   whose projection scores highest wins.
  *
- *     ♥ Swap   — iterate validHopSwaps, simulate every swap,
- *                pick the highest-scoring rearrangement.
- *     ♠ Slide  — iterate validSlideSources × slideDestinationsFrom,
- *                simulate each via executeSlide, pick the best.
- *     ♦ Destroy — iterate destroyableSlots, simulate removing each,
- *                 pick the destroy whose post-grid scores highest.
- *                 Gated by deck headroom — destroying late-game
- *                 leaves an empty slot we can't refill.
- *     ♣ Bonus  — always taken when below cap and the bonus deck
- *                has cards. The +1 bonus card is more or less a
- *                free multiplier; we don't try to estimate its
- *                future EV.
+ *   Projection unlocks two things the previous 1-step evaluator
+ *   couldn't see:
+ *     - Grid achievements (Clean Border, Monochrome Border, Rainbow
+ *       Corners, etc.) only fire on near-full grids; on a 5-card
+ *       grid they were always 0, so the bot couldn't favor a move
+ *       that set up Clean Border two turns later. The projection
+ *       fills the grid all the way out so those triggers count.
+ *     - Slot-spending choices (DISCARD, DESTROY) get their late-game
+ *       cost priced in. Discarding now means a slot still gets
+ *       filled later from the projection's deck; destroying now
+ *       leaves a permanently empty slot that the projection can't
+ *       refill, so the projected score takes the -50/line hit.
  *
- *   On the perk-resolution phases (awaiting-target-*), the bot
- *   re-runs the same per-action search to choose the actual target.
- *   Bonus pick phases keep the simple "take the first card / replace
- *   the first held card" rule — picking the BEST bonus card requires
- *   Shapley analysis against the whole deck, well outside the scope
- *   of a baseline bot.
+ *   Bonus card picking uses the same projection: when ♣ offers two
+ *   options, simulate the rest of the deck with EACH option added
+ *   to the hand and pick the one whose projected end-score is
+ *   highest. Same idea for the at-cap replace flow.
  *
- *   Discards are still gated by deck headroom (don't strand the grid).
+ *   Perks searched: ♥ Swap (validHopSwaps), ♠ Slide
+ *   (validSlideSources × slideDestinationsFrom via executeSlide),
+ *   ♦ Destroy (destroyableSlots). ♣ Bonus is unconditionally taken
+ *   when below cap and the bonus deck has cards — the bonus-pick
+ *   step below figures out which of the two offered cards to keep.
+ *
+ *   Discards are still gated by deck headroom so the projection
+ *   actually has cards to fill the slot we'd discard into.
  */
 import {
   Action,
@@ -46,7 +53,7 @@ import {
   step,
 } from '../src/game/state';
 import { Card, isJoker } from '../src/game/cards';
-import { BONUS_HAND_LIMIT } from '../src/game/bonusCards';
+import { BONUS_HAND_LIMIT, BonusCard } from '../src/game/bonusCards';
 import {
   destroyableSlots,
   executeSlide,
@@ -54,7 +61,7 @@ import {
   validHopSwaps,
   validSlideSources,
 } from '../src/game/actions';
-import { Direction, Grid, placeAtSpiralNext } from '../src/game/grid';
+import { Direction, Grid, isFull, placeAtSpiralNext } from '../src/game/grid';
 import { scoreGrid } from '../src/game/scoring';
 import {
   Difficulty,
@@ -65,19 +72,63 @@ const SHOULD_RUN = process.env.SIMULATE === '1';
 const N_GAMES = parseInt(process.env.SIM_N ?? '200', 10);
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
-// Compute the score of a hypothetical grid given the rest of the
-// run's context (bonus cards, deck remaining, etc.) — the evaluator
-// the lookahead bot ranks candidate actions with. ignoreIncomplete
-// is set so partial lines score 0 instead of −25; otherwise every
-// non-place action would look terrible mid-game just for leaving the
-// grid less full, even when the perk produces a real hand.
-const evalGrid = (g: Grid, s: GameState): number =>
-  scoreGrid(g, s.bonusCards, {
-    deckRemaining: s.deck.length,
-    ignoreIncompletePenalty: true,
-    discards: s.discards,
-    perkSpent: s.perkSpent,
+// Place every card from `deck` onto `start` in sequence until the
+// deck is empty or the grid is full. The result is the grid the run
+// would end on if the player just placed everything from this point
+// forward — the baseline projection the evaluator scores.
+const projectFill = (
+  start: Grid,
+  deck: ReadonlyArray<Card>
+): { grid: Grid; deckRem: number } => {
+  let g = start;
+  let i = 0;
+  while (i < deck.length && !isFull(g)) {
+    g = placeAtSpiralNext(g, deck[i]);
+    i++;
+  }
+  return { grid: g, deckRem: deck.length - i };
+};
+
+// Multi-step evaluator. Project the rest of the deck onto the
+// candidate grid, then score the projected end-state with the FINAL
+// scoring rules (incomplete-line penalty applied). This is the
+// score the run would actually finish at if the bot committed to
+// this action and then played out the deck as "always place".
+//
+// Why this is better than the previous 1-step scoreGrid:
+//   - Grid achievement multipliers (Clean Border, Monochrome Border,
+//     etc.) only fire on near-full grids; the projection fills the
+//     grid so they actually score, so the bot can favor moves that
+//     set them up turns in advance.
+//   - The incomplete-line penalty is real at the end of the run;
+//     including it makes the bot avoid actions (destroys, late-game
+//     discards) that strand the grid.
+//   - For "place" candidates the projected score is monotone in
+//     placement value, so the relative ranking is at least as good
+//     as 1-step; for "discard" and "perk" candidates it captures
+//     downstream consequences 1-step missed.
+const projectScore = (
+  candidateGrid: Grid,
+  candidateBonusCards: BonusCard[],
+  candidateDeck: ReadonlyArray<Card>,
+  ctx: GameState
+): number => {
+  const { grid, deckRem } = projectFill(candidateGrid, candidateDeck);
+  return scoreGrid(grid, candidateBonusCards, {
+    deckRemaining: deckRem,
+    // Use the FULL final-scoring rules so the projection reflects
+    // the actual run end, including line penalties.
+    ignoreIncompletePenalty: false,
+    discards: ctx.discards,
+    perkSpent: ctx.perkSpent,
   }).total;
+};
+
+// Convenience: project against the state's current bonus hand + deck.
+// Used by the awaiting-action evaluator where the only thing varying
+// across candidates is the grid.
+const evalGrid = (g: Grid, s: GameState): number =>
+  projectScore(g, s.bonusCards, s.deck, s);
 
 // For each candidate perk, return the best (score, target) the perk
 // can produce. Used both to RANK perks against place/discard AND to
@@ -246,15 +297,18 @@ const pickAction = (s: GameState): Action => {
       return { type: 'RESOLVE_DESTROY', slot: destroy.slot };
     }
     case 'bonus-card-resolving': {
-      // Pick whichever drawn card lifts the live score most if added
-      // to the hand. Below cap → BONUS_KEEP; at cap → SELECT_NEW so
-      // the bonus-card-replacing phase runs next.
+      // Pick whichever drawn card, paired with the rest of the deck
+      // projected forward, produces the highest end-of-game score.
+      // The projection is the same one used for placement decisions,
+      // so a bonus card that only pays off at game end (any grid
+      // achievement / deck-management card) gets credit even when
+      // it'd be invisible to a current-grid evaluator.
       const drawn = s.phase.drawn;
       let bestIdx = 0;
       let bestSc = -Infinity;
       for (let i = 0; i < drawn.length; i++) {
         const hypothetical = [...s.bonusCards, drawn[i]];
-        const sc = evalGrid(s.grid, { ...s, bonusCards: hypothetical });
+        const sc = projectScore(s.grid, hypothetical, s.deck, s);
         if (sc > bestSc) { bestSc = sc; bestIdx = i; }
       }
       if (s.bonusCards.length < BONUS_HAND_LIMIT) {
@@ -263,15 +317,16 @@ const pickAction = (s: GameState): Action => {
       return { type: 'BONUS_SELECT_NEW', idx: bestIdx };
     }
     case 'bonus-card-replacing': {
-      // Replace the held card that contributes LEAST. Try each
-      // index, score the hand with the new card swapped in.
+      // Replace the held card whose absence — once the new card slots
+      // in — maximises the projected end-score. Brute force over
+      // every replacement target.
       const newCard = s.phase.drawn[s.phase.pickedNew];
       let bestIdx = 0;
       let bestSc = -Infinity;
       for (let i = 0; i < s.bonusCards.length; i++) {
         const hand = s.bonusCards.slice();
         hand[i] = newCard;
-        const sc = evalGrid(s.grid, { ...s, bonusCards: hand });
+        const sc = projectScore(s.grid, hand, s.deck, s);
         if (sc > bestSc) { bestSc = sc; bestIdx = i; }
       }
       return { type: 'BONUS_REPLACE', oldIdx: bestIdx };
