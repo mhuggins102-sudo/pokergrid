@@ -9,8 +9,8 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import type { PlayContext } from '../../../App';
-import { BonusCard, powerUpBonusCard } from '../../game/bonusCards';
-import { Card, isJoker, Supercharge } from '../../game/cards';
+import { BonusCard } from '../../game/bonusCards';
+import { Card, isJoker } from '../../game/cards';
 import {
   ACHIEVEMENTS,
   Achievement,
@@ -21,12 +21,12 @@ import { LineKind } from '../../game/grid';
 import { HandRank } from '../../game/hands';
 import { bonusShapleyValues, scoreGrid } from '../../game/scoring';
 import { GameState } from '../../game/state';
-import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
 import { NeonButton } from '../components/NeonButton';
+import { RewardsFlow, RewardsResult } from '../components/RewardsFlow';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
@@ -234,124 +234,6 @@ const BannerHero = ({
   );
 };
 
-// Picker chip with a mount-time "power-up" animation: scale pulses up
-// briefly + a bright glow flash, then settles into its resting state.
-// The glow color matches the card's category tone so the visual reads
-// in step with the rest of the chip styling. Reduce-motion disables the
-// animation but the chip still shows the new (post-boost) value.
-//
-// `blocked` is the no-consecutive-same-card constraint: this chip's
-// base id matches the card the player kept last round, so they can't
-// keep it again. The chip still animates (its multiplier did get
-// powered up) but it's greyed out, unselectable, and carries a small
-// "kept last round" tag.
-const PickerChip = ({
-  card,
-  selected,
-  dimmed,
-  blocked,
-  onPress,
-}: {
-  card: BonusCard;
-  selected: boolean;
-  dimmed: boolean;
-  blocked: boolean;
-  onPress: () => void;
-}) => {
-  const { settings } = useSettings();
-  const tone = bonusStyleFor(card);
-  const scale = useSharedValue(settings.reduceMotion ? 1 : 0.85);
-  const glowOpacity = useSharedValue(settings.reduceMotion ? 0.3 : 0);
-
-  useEffect(() => {
-    if (settings.reduceMotion) {
-      scale.value = 1;
-      glowOpacity.value = 0.3;
-      return;
-    }
-    scale.value = withSequence(
-      withTiming(1.12, { duration: 320, easing: Easing.out(Easing.cubic) }),
-      withTiming(1, { duration: 260 })
-    );
-    glowOpacity.value = withSequence(
-      withTiming(1, { duration: 320 }),
-      withTiming(0.3, { duration: 540 })
-    );
-  }, [scale, glowOpacity, settings.reduceMotion]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    shadowOpacity: glowOpacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        styles.pickerCard,
-        { borderColor: tone.borderColor, shadowColor: tone.borderColor, shadowRadius: 10 },
-        selected && styles.pickerCardSelected,
-        dimmed && styles.pickerCardDimmed,
-        blocked && styles.pickerCardBlocked,
-        animStyle,
-      ]}
-    >
-      <Pressable
-        onPress={blocked ? undefined : onPress}
-        style={styles.pickerCardInner}
-      >
-        <Text
-          style={[styles.pickerCardTitle, { color: tone.titleColor, textShadowColor: tone.titleColor }]}
-          numberOfLines={2}
-          adjustsFontSizeToFit
-        >
-          {card.title}
-        </Text>
-        <Text style={styles.pickerCardMult} numberOfLines={1} adjustsFontSizeToFit>
-          {card.mult}
-        </Text>
-        {blocked ? (
-          <Text style={styles.pickerCardBlockedTag}>picked last round</Text>
-        ) : card.baseMultValue !== undefined && card.baseMultValue !== card.multValue ? (
-          <Text style={styles.pickerCardWas}>was ×{card.baseMultValue}</Text>
-        ) : null}
-      </Pressable>
-    </Animated.View>
-  );
-};
-
-// Supercharge reveal text: fades + scales in when the player taps a card
-// on the grid and the wild/double coin flip resolves. Anchored under the
-// "S-tier reward" prompt so the player's attention is pulled from the
-// grid tap to the rolled outcome.
-const SuperchargeReveal = ({ supercharge }: { supercharge: Supercharge }) => {
-  const { settings } = useSettings();
-  const opacity = useSharedValue(settings.reduceMotion ? 1 : 0);
-  const scale = useSharedValue(settings.reduceMotion ? 1 : 0.8);
-  useEffect(() => {
-    if (settings.reduceMotion) {
-      opacity.value = 1;
-      scale.value = 1;
-      return;
-    }
-    opacity.value = withTiming(1, { duration: 360 });
-    scale.value = withSequence(
-      withTiming(1.18, { duration: 260, easing: Easing.out(Easing.cubic) }),
-      withTiming(1, { duration: 220 })
-    );
-  }, [opacity, scale, settings.reduceMotion, supercharge]);
-  const animStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-  return (
-    <Animated.Text style={[styles.superchargeRevealText, animStyle]}>
-      {supercharge === 'wild'
-        ? '✦ WILD — suit is now flexible for flush / straight flush.'
-        : '×2 DOUBLE — counts as 2 same-rank cards.'}
-    </Animated.Text>
-  );
-};
-
 export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
@@ -433,209 +315,97 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
 
   const tier = tierFor(total, state.target, won);
 
-  // ---- Targets-Up reward gating --------------------------------------
-  // Upgrades are now tied to tier:
-  //   A   — no upgrades (the level still advances; cards in hand simply
-  //         don't carry forward, and no grid card gets supercharged).
-  //   S   — the player picks ONE of the two upgrades (keep-one bonus
-  //         power-up OR grid supercharge).
-  //   SS  — BOTH upgrades, sequentially (keep-one first, then grid).
+  // ---- Targets Up rewards (S / SS) -----------------------------------
+  // Rewards now run through the RewardsFlow modal instead of the
+  // inline picker chain. A-tier wins skip the modal entirely; S/SS
+  // wins surface a "Rewards →" button on the result screen that
+  // opens the modal. The modal handles both pick categories itself
+  // (single-step for S, sequential for SS) and reports back with a
+  // single RewardsResult, which we turn into the save args + the
+  // next-level carry-overs below.
   const isTUWin = context.mode === 'targets-up' && won;
-  const requiresTierChoice = isTUWin && tier === 'S';
-  const [tierChoice, setTierChoice] = useState<'bonus' | 'grid' | null>(null);
-  const showTierChoice = requiresTierChoice && tierChoice === null;
-  const showBonusPicker =
-    isTUWin && (tier === 'SS' || (tier === 'S' && tierChoice === 'bonus'));
-  const showGridPicker =
-    isTUWin && (tier === 'SS' || (tier === 'S' && tierChoice === 'grid'));
+  const tierRequiresRewards = isTUWin && (tier === 'S' || tier === 'SS');
+  const [rewards, setRewards] = useState<RewardsResult | null>(null);
+  const [rewardsOpen, setRewardsOpen] = useState(false);
 
-  // If the player has no bonus cards in hand at S tier, the bonus
-  // option isn't viable — auto-resolve the choice to grid so the
-  // player doesn't get stuck on a picker that can't render.
-  useEffect(() => {
-    if (!requiresTierChoice || tierChoice !== null) return;
-    if (state.bonusCards.length === 0) setTierChoice('grid');
-  }, [requiresTierChoice, tierChoice, state.bonusCards.length]);
-
-  const poweredCards = useMemo<BonusCard[]>(
-    () => (showBonusPicker ? state.bonusCards.map(c => powerUpBonusCard(c)) : []),
-    [showBonusPicker, state.bonusCards]
-  );
-  const [keptIdx, setKeptIdx] = useState<number | null>(null);
-
-  // No consecutive same-card upgrade: any chip whose base id matches
-  // the card the player kept last round is blocked. Each chip's base
-  // id is the id with the -pwrN suffix stripped so Pair ×4 and Pair
-  // ×4.8 register as the same card.
+  // baseIdOf strips the -pwrN suffix so Pair ×4 and Pair ×4.8 register
+  // as the same card for the no-repeat cooldown. Shared with the
+  // modal via the `lastKeptBaseId` prop we hand it.
   const lastKeptBaseId = context.mode === 'targets-up'
     ? (context.lastKeptBaseId ?? null)
     : null;
   const baseIdOf = (c: BonusCard): string => c.id.replace(/-pwr\d+$/, '');
-  const blockedIndices = useMemo(() => {
-    if (!lastKeptBaseId) return new Set<number>();
-    return new Set(
-      poweredCards
-        .map((c, i) => (baseIdOf(c) === lastKeptBaseId ? i : -1))
-        .filter(i => i >= 0)
-    );
-  }, [poweredCards, lastKeptBaseId]);
-  const allBlocked = isTUWin && poweredCards.length > 0
-    && blockedIndices.size === poweredCards.length;
 
-  // Base id passed forward as next round's `lastKeptBaseId`. null when
-  // the player picked nothing (0-card hand, all blocked, or never
-  // resolved the picker) so next round has no constraint. Declared
-  // before the picker-state useEffects so they can reference it via
-  // their dependency arrays without hitting a temporal-dead-zone
-  // ReferenceError at render time.
-  const nextLastKeptBaseId =
-    keptIdx !== null && poweredCards[keptIdx]
-      ? baseIdOf(poweredCards[keptIdx])
-      : null;
-
-  // Single-card hands auto-pick (the player has no real choice — keep
-  // the one card they had) UNLESS that single card is the blocked one,
-  // in which case the round just yields no keep. 0-card hands skip
-  // the picker entirely.
-  useEffect(() => {
-    if (poweredCards.length === 1 && keptIdx === null && !blockedIndices.has(0)) {
-      setKeptIdx(0);
-    }
-  }, [poweredCards.length, keptIdx, blockedIndices]);
-
-  // Cumulative deck extras for TU runs: previous levels' supercharged
-  // bonus cards plus the ONE the player picked this round (if any).
-  // Cards the player didn't pick are simply discarded — no carry-over.
+  // Derived carry-overs from the rewards result.
   const prevDeckExtras = context.mode === 'targets-up'
     ? (context.deckExtras ?? [])
     : [];
-  const newDeckExtras = useMemo<BonusCard[]>(
-    () => (keptIdx === null ? [] : [poweredCards[keptIdx]]),
-    [poweredCards, keptIdx]
-  );
-  const allDeckExtras = useMemo<BonusCard[]>(
-    () => [...prevDeckExtras, ...newDeckExtras],
-    [prevDeckExtras, newDeckExtras]
-  );
-
-  // Persist the picker outcome as it happens — so if the player closes
-  // the app between picking and tapping Next, they still resume with
-  // their carry-over intact. Preserve any prior supercharged-deck cards
-  // (from earlier S-tier wins) on this write; the supercharge picker's
-  // own useEffect re-saves with the new pick once it resolves.
-  useEffect(() => {
-    if (!isTUWin || keptIdx === null) return;
-    saveTUProgress(
-      context.level + 1,
-      context.wins + 1,
-      allDeckExtras,
-      context.mode === 'targets-up' ? context.superchargedDeckCards : undefined,
-      nextLastKeptBaseId
-    );
-  }, [
-    isTUWin,
-    keptIdx,
-    allDeckExtras,
-    context,
-    nextLastKeptBaseId,
-    saveTUProgress,
-  ]);
-
-  // When every chip is blocked (all 3 would repeat last round) we also
-  // overwrite the save's lastKeptBaseId to null so the player gets a
-  // clean slate next round — otherwise they'd carry the same block
-  // forward forever.
-  useEffect(() => {
-    if (!isTUWin || !allBlocked) return;
-    saveTUProgress(
-      context.level + 1,
-      context.wins + 1,
-      allDeckExtras,
-      context.mode === 'targets-up' ? context.superchargedDeckCards : undefined,
-      null
-    );
-  }, [isTUWin, allBlocked, allDeckExtras, context, saveTUProgress]);
-
-  // ---- S/SS-tier grid supercharge picker -----------------------------
-  // Visibility is gated on `showGridPicker` computed above with the
-  // tier-choice logic: SS shows it unconditionally, S only shows it
-  // when the player chose 'grid' over the bonus power-up.
-  const [superchargedSlot, setSuperchargedSlot] = useState<number | null>(null);
-  const [supercharge, setSupercharge] = useState<Supercharge | null>(null);
-  const handleGridPick = (slot: number) => {
-    if (!showGridPicker || superchargedSlot !== null) return;
-    const target = state.grid[slot];
-    if (!target || isJoker(target)) return;
-    // Roll a fresh wild vs double for this pick. Coin flip.
-    const roll: Supercharge = Math.random() < 0.5 ? 'wild' : 'double';
-    setSuperchargedSlot(slot);
-    setSupercharge(roll);
-  };
-
-  const superchargedCard: Card | undefined = useMemo(() => {
-    if (superchargedSlot === null || supercharge === null) return undefined;
-    const c = state.grid[superchargedSlot];
-    if (!c || isJoker(c)) return undefined;
-    return { ...c, supercharge };
-  }, [superchargedSlot, supercharge, state.grid]);
-
-  // Apply the picked supercharge to the displayed grid so the suit glyph
-  // (or ×2 badge) updates immediately when the player taps a card.
-  const gridForDisplay = useMemo(() => {
-    if (!superchargedCard || superchargedSlot === null) return state.grid;
-    const next = [...state.grid];
-    next[superchargedSlot] = superchargedCard;
-    return next;
-  }, [state.grid, superchargedCard, superchargedSlot]);
-
-  // Cumulative supercharged-deck list = previous-level supercharges +
-  // this level's pick (if any).
   const prevSupercharged = context.mode === 'targets-up'
     ? (context.superchargedDeckCards ?? [])
     : [];
+
+  // Build the supercharged grid card from the rewards pick (used for
+  // the next-level deck splice AND for displaying the supercharge
+  // badge on the result-screen grid once the modal closes).
+  const superchargedCard: Card | undefined = useMemo(() => {
+    if (rewards?.gridSlot === undefined || rewards.gridSupercharge === undefined) {
+      return undefined;
+    }
+    const c = state.grid[rewards.gridSlot];
+    if (!c || isJoker(c)) return undefined;
+    return { ...c, supercharge: rewards.gridSupercharge };
+  }, [rewards, state.grid]);
+
+  const gridForDisplay = useMemo(() => {
+    if (!superchargedCard || rewards?.gridSlot === undefined) return state.grid;
+    const next = [...state.grid];
+    next[rewards.gridSlot] = superchargedCard;
+    return next;
+  }, [state.grid, superchargedCard, rewards]);
+
+  const allDeckExtras = useMemo<BonusCard[]>(
+    () => (rewards?.bonusCard ? [...prevDeckExtras, rewards.bonusCard] : prevDeckExtras),
+    [prevDeckExtras, rewards]
+  );
   const allSuperchargedDeckCards: Card[] = useMemo(
     () => (superchargedCard ? [...prevSupercharged, superchargedCard] : prevSupercharged),
     [prevSupercharged, superchargedCard]
   );
+  const nextLastKeptBaseId =
+    rewards?.bonusCard !== undefined ? baseIdOf(rewards.bonusCard) : null;
 
-  // Update the save once the player completes the supercharge pick so
-  // closing the app between picking and Next preserves it.
+  // Persist as soon as the modal completes so closing the app between
+  // picking rewards and tapping Next preserves the carry-over. Falls
+  // through to no-op for A-tier wins (rewards stays null).
   useEffect(() => {
-    if (!isTUWin) return;
-    if (!showGridPicker) return;
-    if (superchargedSlot === null) return;
+    if (!isTUWin || rewards === null) return;
     saveTUProgress(
       context.level + 1,
       context.wins + 1,
       allDeckExtras,
       allSuperchargedDeckCards,
-      // Preserve the bonus-supercharge picker's effect on
-      // lastKeptBaseId — if we omitted this, the save default would
-      // null it out and undo the cooldown the bonus picker just set.
+      // If the player picked a bonus card, set the new cooldown.
+      // Otherwise carry the prior round's cooldown forward so SS-with-
+      // only-grid wins (rare edge case where the bonus picker auto-
+      // resolved to unavailable) don't accidentally clear it.
       nextLastKeptBaseId !== null
         ? nextLastKeptBaseId
-        : (context.lastKeptBaseId ?? null)
+        : lastKeptBaseId
     );
   }, [
     isTUWin,
-    showGridPicker,
-    superchargedSlot,
+    rewards,
     allDeckExtras,
     allSuperchargedDeckCards,
     context,
     nextLastKeptBaseId,
+    lastKeptBaseId,
     saveTUProgress,
   ]);
 
-  // TU win blocks the Next button until the picker(s) resolve. For all
-  // other modes (loss, free play, challenge) Next/Replay are immediate.
-  // `allBlocked` short-circuits the keep picker: every chip matched
-  // last round's pick so no choice is possible — the round forfeits
-  // its kept-card boost and proceeds.
-  const keepPickerDone =
-    !showBonusPicker || keptIdx !== null || poweredCards.length === 0 || allBlocked;
-  const superchargePickerDone = !showGridPicker || superchargedSlot !== null;
-  const pickerComplete = !showTierChoice && keepPickerDone && superchargePickerDone;
+  // The Next button is ready when: it's not a TU win OR rewards
+  // aren't required OR the modal already completed.
+  const advanceReady = !tierRequiresRewards || rewards !== null;
 
   // Personal-best detection. Tainted runs don't count — they wouldn't be
   // recorded either, so flagging them as "new best" would be misleading.
@@ -763,8 +533,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   }, [state.grid, inspectLine]);
 
   return (
-    <View style={styles.root}>
-    <ScrollView style={styles.scrollFlex} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <BannerHero
         won={won}
         score={total}
@@ -813,21 +582,13 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         <GridView
           grid={gridForDisplay}
           onLinePress={(kind, index) => setInspectLine({ kind, index })}
-          onSlotPress={
-            showGridPicker && keepPickerDone && superchargedSlot === null
-              ? handleGridPick
-              : undefined
-          }
+          // Once a grid supercharge is picked the resulting slot is
+          // highlighted on the result-screen grid so the player can
+          // see what they got. No more inline tap-to-pick.
           highlight={
-            showGridPicker && keepPickerDone && superchargedSlot === null
-              ? new Set(
-                  state.grid
-                    .map((c, i) => (c && !isJoker(c) ? i : -1))
-                    .filter(i => i >= 0)
-                )
-              : showGridPicker && superchargedSlot !== null
-                ? new Set([superchargedSlot])
-                : undefined
+            rewards?.gridSlot !== undefined
+              ? new Set([rewards.gridSlot])
+              : undefined
           }
           compact
         />
@@ -901,107 +662,39 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         </View>
       </View>
 
-      {showTierChoice && (
-        <View style={styles.pickerBlock}>
-          <Text style={styles.pickerLabel}>S-tier reward · Pick one to supercharge</Text>
-          <Text style={styles.pickerHint}>
-            Score an S to supercharge one card; an SS supercharges both. Choose carefully — once you tap, it's locked in for this round.
-          </Text>
-          <View style={styles.tierChoiceRow}>
-            <Pressable
-              onPress={() => setTierChoice('bonus')}
-              style={[styles.tierChoiceCard, { borderColor: colors.warn }, glow(colors.warn, 8, 0.4)]}
-            >
-              <Text style={[styles.tierChoiceTitle, { color: colors.warn, textShadowColor: colors.warn }]}>
-                Supercharge a bonus card
-              </Text>
-              <Text style={styles.tierChoiceBody}>
-                Pick one of your held cards. It gets ×1.2 power and joins the bonus deck for the rest of the run.
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setTierChoice('grid')}
-              style={[styles.tierChoiceCard, { borderColor: colors.joker }, glow(colors.joker, 8, 0.4)]}
-            >
-              <Text style={[styles.tierChoiceTitle, { color: colors.joker, textShadowColor: colors.joker }]}>
-                Supercharge a grid card
-              </Text>
-              <Text style={styles.tierChoiceBody}>
-                Pick any non-joker card on the grid. A coin flip turns it into a wild or a double for the rest of the run.
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {showBonusPicker && poweredCards.length >= 1 && (
-        <View style={styles.pickerBlock}>
-          <Text style={styles.pickerLabel}>Supercharge a bonus card</Text>
-          <Text style={styles.pickerHint}>
-            Pick one of your held cards. It gets ×1.2 power and joins the bonus deck for the rest of the run; the others are discarded. You can't supercharge the same card type two rounds in a row.
-          </Text>
-          {allBlocked && (
-            <Text style={styles.pickerAllBlocked}>
-              All three cards match last round's pick — no card supercharged this round, but you can repeat any of them next round.
-            </Text>
-          )}
-          <View style={styles.pickerRow}>
-            {poweredCards.map((c, i) => (
-              <PickerChip
-                key={i}
-                card={c}
-                selected={keptIdx === i}
-                dimmed={keptIdx !== null && keptIdx !== i}
-                blocked={blockedIndices.has(i)}
-                onPress={() => setKeptIdx(i)}
-              />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {showGridPicker && keepPickerDone && (
-        <View style={styles.pickerBlock}>
-          <Text style={styles.pickerLabel}>
-            S-tier reward · Supercharge a card
-          </Text>
-          {superchargedSlot === null ? (
-            <Text style={styles.pickerHint}>
-              Tap any non-joker card on the grid above. A coin flip
-              decides whether it becomes WILD (✦, any suit for flush)
-              or DOUBLE (×2, counts twice for pair-class hands). The
-              supercharge follows the card into the next level's deck.
-            </Text>
-          ) : (
-            supercharge && <SuperchargeReveal supercharge={supercharge} />
-          )}
-        </View>
-      )}
-
       <View style={styles.btnRow}>
         {context.mode === 'targets-up' && won ? (
-          <NeonButton
-            label={pickerComplete ? 'Next' : 'Pick to continue'}
-            variant="primary"
-            size="lg"
-            disabled={!pickerComplete}
-            onPress={() =>
-              onAdvance(
-                allDeckExtras,
-                allSuperchargedDeckCards,
-                // Only overwrite the cooldown when the bonus picker
-                // actually resolved (player picked, or all blocked).
-                // Otherwise carry the prior lastKeptBaseId forward so
-                // A tier and S-tier-grid wins don't lose the cooldown.
-                showBonusPicker
-                  ? nextLastKeptBaseId
-                  : context.mode === 'targets-up'
-                    ? (context.lastKeptBaseId ?? null)
-                    : null
-              )
-            }
-            style={{ flex: 1 }}
-          />
+          // For S/SS the button label switches between "Rewards →" and
+          // "Next →" depending on whether the modal has run; for A it
+          // just reads "Next →" since there are no rewards to pick.
+          // Tap behavior mirrors that — Rewards opens the modal, Next
+          // calls onAdvance with the carry-overs we computed up top.
+          tierRequiresRewards && rewards === null ? (
+            <NeonButton
+              label="Rewards →"
+              variant="primary"
+              size="lg"
+              onPress={() => setRewardsOpen(true)}
+              style={{ flex: 1 }}
+            />
+          ) : (
+            <NeonButton
+              label="Next"
+              variant="primary"
+              size="lg"
+              disabled={!advanceReady}
+              onPress={() =>
+                onAdvance(
+                  allDeckExtras,
+                  allSuperchargedDeckCards,
+                  nextLastKeptBaseId !== null
+                    ? nextLastKeptBaseId
+                    : lastKeptBaseId
+                )
+              }
+              style={{ flex: 1 }}
+            />
+          )
         ) : (
           <NeonButton
             label="Replay"
@@ -1043,43 +736,26 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         currentValue={bonusDetailIdx !== null ? bonusValues[bonusDetailIdx] : undefined}
         onClose={() => setBonusDetailIdx(null)}
       />
-      </ScrollView>
-
-      {/* Sticky reminder, pinned outside the ScrollView. While a Targets-Up
-          win still owes an upgrade pick, a player who scrolls up to re-read
-          the grid/breakdown can't lose track that the run is blocked. The
-          actual advance control is the in-scroll Next button (already labeled
-          "Pick to continue" while blocked); this just keeps the state in view. */}
-      {context.mode === 'targets-up' && won && !pickerComplete && (
-        <View style={styles.stickyHintBar} pointerEvents="none">
-          <Text style={styles.stickyHintText}>↑ Pick your upgrade above to continue</Text>
-        </View>
+      {tierRequiresRewards && (tier === 'S' || tier === 'SS') && (
+        <RewardsFlow
+          visible={rewardsOpen}
+          tier={tier}
+          grid={state.grid}
+          bonusCards={state.bonusCards}
+          lastKeptBaseId={lastKeptBaseId}
+          onComplete={result => {
+            setRewards(result);
+            setRewardsOpen(false);
+          }}
+          onCancel={() => setRewardsOpen(false)}
+        />
       )}
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
-  scrollFlex: { flex: 1 },
-  stickyHintBar: {
-    backgroundColor: colors.bgPanel,
-    borderTopWidth: 1,
-    borderTopColor: colors.warn,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-  },
-  stickyHintText: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    textShadowColor: colors.warn,
-    textShadowRadius: 3,
-  },
   content: { paddingBottom: spacing.xxl, paddingHorizontal: spacing.md },
   banner: {
     marginTop: spacing.lg,
@@ -1384,154 +1060,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 13,
     fontWeight: '700',
-  },
-  // TU power-up keep-one picker. Sits between the score breakdown and the
-  // action buttons; only rendered on TU wins with at least 2 held bonus
-  // cards (1-card hands auto-keep, 0-card hands skip entirely).
-  pickerBlock: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 320,
-    borderTopWidth: 1,
-    borderTopColor: colors.outlineSoft,
-  },
-  pickerLabel: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    textShadowColor: colors.warn,
-    textShadowRadius: 4,
-    marginBottom: spacing.xs,
-  },
-  pickerHint: {
-    color: colors.textMid,
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    lineHeight: 15,
-    marginBottom: spacing.sm,
-  },
-  pickerRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  tierChoiceRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  tierChoiceCard: {
-    flex: 1,
-    backgroundColor: colors.bgGlass,
-    borderWidth: 1.5,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    minHeight: 96,
-    justifyContent: 'center',
-  },
-  tierChoiceTitle: {
-    fontFamily: fonts.mono,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textShadowRadius: 4,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  tierChoiceBody: {
-    color: colors.textMid,
-    fontFamily: fonts.sans,
-    fontSize: 10,
-    lineHeight: 14,
-    textAlign: 'center',
-  },
-  pickerCard: {
-    flex: 1,
-    backgroundColor: colors.bgGlass,
-    borderWidth: 1.5,
-    borderRadius: radius.md,
-    minHeight: 76,
-  },
-  pickerCardInner: {
-    flex: 1,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pickerCardSelected: {
-    borderWidth: 2.5,
-  },
-  pickerCardDimmed: {
-    opacity: 0.45,
-  },
-  pickerCardBlocked: {
-    opacity: 0.4,
-    borderStyle: 'dashed',
-  },
-  pickerCardBlockedTag: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    fontStyle: 'italic',
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  pickerAllBlocked: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontStyle: 'italic',
-    lineHeight: 15,
-    marginBottom: spacing.sm,
-    textShadowColor: colors.warn,
-    textShadowRadius: 3,
-  },
-  pickerCardTitle: {
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textShadowRadius: 3,
-    textAlign: 'center',
-  },
-  pickerCardMult: {
-    color: colors.success,
-    fontFamily: fonts.mono,
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textShadowColor: colors.success,
-    textShadowRadius: 4,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  pickerCardWas: {
-    color: colors.textLow,
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    fontStyle: 'italic',
-    marginTop: 2,
-    letterSpacing: 0.3,
-  },
-  superchargeRevealText: {
-    color: colors.joker,
-    fontFamily: fonts.mono,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textShadowColor: colors.joker,
-    textShadowRadius: 5,
-    textAlign: 'center',
-    paddingVertical: spacing.xs,
   },
   // Mirror the breakdownBlock width so the buttons sit directly beneath it.
   btnRow: {
