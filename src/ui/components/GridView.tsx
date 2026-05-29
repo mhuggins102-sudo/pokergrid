@@ -36,6 +36,13 @@ interface Props {
   // Pressable into this array by slot index so the parent can
   // measureInWindow a specific cell (e.g. the joker's tile).
   cellRefs?: React.MutableRefObject<(View | null)[]>;
+  // First-game hint plumbing: per-line-header refs so a hint can
+  // anchor on a specific R-N or C-N label (used by the line-value
+  // hint to point at a completed line). Indexed by row/col index 0–4.
+  lineHeaderRefs?: React.MutableRefObject<{
+    row: (View | null)[];
+    col: (View | null)[];
+  }>;
 }
 
 const FULL_CELL = gridCellSize;
@@ -78,6 +85,7 @@ export const GridView = ({
   onLinePress,
   compact,
   cellRefs,
+  lineHeaderRefs,
 }: Props) => {
   const CELL = compact ? COMPACT_CELL : FULL_CELL;
   const cardSizeKey = compact ? 'sm' : 'md';
@@ -90,6 +98,9 @@ export const GridView = ({
             key={c}
             style={[styles.colHeader, { width: CELL }]}
             onPress={onLinePress ? () => onLinePress('col', c) : undefined}
+            ref={el => {
+              if (lineHeaderRefs) lineHeaderRefs.current.col[c] = el;
+            }}
           >
             <Text style={styles.headerText}>C{c + 1}</Text>
           </Pressable>
@@ -101,6 +112,9 @@ export const GridView = ({
           <Pressable
             style={[styles.rowHeader, { height: CELL, width: HEADER }]}
             onPress={onLinePress ? () => onLinePress('row', r) : undefined}
+            ref={el => {
+              if (lineHeaderRefs) lineHeaderRefs.current.row[r] = el;
+            }}
           >
             <Text style={styles.headerText}>R{r + 1}</Text>
           </Pressable>

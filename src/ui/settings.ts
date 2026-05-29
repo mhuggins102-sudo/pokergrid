@@ -32,6 +32,7 @@ export interface Settings {
   seenBonusHeldHint: boolean;
   seenFirstScoringLineHint: boolean;
   seenScoringInfoHint: boolean;
+  seenLineValueHint: boolean;
   seenLowDeckHint: boolean;
 }
 
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   seenBonusHeldHint: false,
   seenFirstScoringLineHint: false,
   seenScoringInfoHint: false,
+  seenLineValueHint: false,
   seenLowDeckHint: false,
 };
 
@@ -70,6 +72,7 @@ export const HINT_KEYS: (keyof Settings)[] = [
   'seenBonusHeldHint',
   'seenFirstScoringLineHint',
   'seenScoringInfoHint',
+  'seenLineValueHint',
   'seenLowDeckHint',
 ];
 

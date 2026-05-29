@@ -94,12 +94,13 @@ type HintId =
   | 'bonus-held'
   | 'first-scoring-line'
   | 'scoring-info'
+  | 'line-value'
   | 'low-deck';
 
 const HINT_TITLE: Record<HintId, string> = {
   joker: 'Meet the joker',
   'bonus-cap': 'Bonus hand is full',
-  'grid-effect': 'Grid achievement is live',
+  'grid-effect': 'End-game bonus is live',
   'hearts-swap': '♥ Swap',
   'spades-slide': '♠ Slide',
   'diamonds-destroy': '♦ Destroy',
@@ -107,30 +108,33 @@ const HINT_TITLE: Record<HintId, string> = {
   'bonus-held': 'Your first bonus card',
   'first-scoring-line': 'First scoring line',
   'scoring-info': 'Hand value reference',
+  'line-value': "Check a line's value",
   'low-deck': 'Deck running low',
 };
 
 const HINT_BODY: Record<HintId, string> = {
   joker:
-    'A joker is wild — its row and its column each score as the best 5-card hand they can. Jokers auto-place when drawn and can\'t be discarded normally; only a ♦ Destroy removes one. Easy difficulty ships two jokers in the deck, Medium / Hard one, Extreme none.',
+    "A joker is wild — its row and column each score the best 5-card hand they can. Jokers auto-place when drawn and can't be discarded initially; however, a ♦ can be used later to destroy one. Easy difficulty includes two jokers in the deck, Medium / Hard one, Extreme none.",
   'bonus-cap':
     'You\'re holding 3 bonus cards — the maximum. On this difficulty, drawing another ♣ Bonus forces you to swap one out (no decline allowed).',
   'grid-effect':
-    'A grid achievement (purple border) is now satisfying its condition — it multiplies your TOTAL score at game end, on top of any per-line bonuses.',
+    'One of your purple bonus cards (a grid achievement or deck-management card) is now satisfying its condition — purple cards multiply your TOTAL score at game end, on top of any per-line bonuses.',
   'hearts-swap':
-    '♥ swaps two cards that share a row OR a column. Tap one card and then its partner — or drag one straight onto the other (a green outline shows where it\'ll land). The drawn ♥ is then spent.',
+    '♥ swaps two cards that share a row OR a column. Tap one card and then its partner — or drag one straight onto the other (a green outline shows where it\'ll land).',
   'spades-slide':
     '♠ slides a chain of cards in one direction. Tap a card to see valid landings, then tap one — or drag the card the way you want it to go. Cards keep their relative order.',
   'diamonds-destroy':
-    '♦ removes any card from the grid (joker included). The slot becomes empty; if you can\'t refill it before the run ends it costs -25 at scoring time, so use ♦ deliberately.',
+    '♦ removes any card from the grid (joker included), and the slot becomes empty. Use ♦ deliberately — empty lines at end of game are worth -25 points each.',
   'clubs-bonus':
-    '♣ draws 2 bonus cards from a separate deck — pick one to keep. Multipliers stack MULTIPLICATIVELY: two ×2 cards on the same line is ×4, not ×3.',
+    '♣ draws 2 bonus cards from a separate deck — pick one to keep. You may have up to 3 bonus cards in your hand.',
   'bonus-held':
     'Bonus cards modify your score. Border tone tells you when they pay out: yellow = pays out per line during the run, purple = multiplies the final total at game end. Tap any held card for full details.',
   'first-scoring-line':
     'Nice — your first scoring line. Each completed row and column scores as a 5-card poker hand. Pair and above pay out; High Card scores 0. Bonus cards modify these per-line totals.',
   'scoring-info':
-    "Tap the ⓘ here any time to open the hand-value reference — base points for each poker hand and how bonus card multipliers stack on top. Keep it handy whenever you're not sure what a line is worth.",
+    'Tap the ⓘ at any time to open the hand-value reference, which displays the base points for each poker hand and how bonus card multipliers stack on top.',
+  'line-value':
+    "Tap any row label (R1–R5) or column label (C1–C5) to see that line's current score breakdown, including any bonus card multipliers.",
   'low-deck':
     'The deck is almost empty. The run ends when the deck runs out or the grid fills up. Lines you haven\'t completed by then cost -25 each, so plan your last few placements carefully.',
 };
@@ -162,6 +166,7 @@ const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
   'bonus-held': 'seenBonusHeldHint',
   'first-scoring-line': 'seenFirstScoringLineHint',
   'scoring-info': 'seenScoringInfoHint',
+  'line-value': 'seenLineValueHint',
   'low-deck': 'seenLowDeckHint',
 };
 
@@ -286,6 +291,13 @@ export const GameScreen = ({
   const perkButtonRef = useRef<View>(null);
   const deckCountRef = useRef<Text>(null);
   const scoreInfoBtnRef = useRef<View>(null);
+  // Per-line-header refs so the line-value hint can point at a
+  // specific R/C label. Both arrays are length-5 and indexed by the
+  // line's row or column index.
+  const lineHeaderRefs = useRef<{
+    row: (View | null)[];
+    col: (View | null)[];
+  }>({ row: [], col: [] });
 
   // Pending-hint timer — we delay the popup by HINT_REVEAL_DELAY_MS so
   // the triggering animation/sound has time to land. Stored in a ref
@@ -427,14 +439,14 @@ export const GameScreen = ({
 
   // Endgame penalty preview for the ScoreBar. The live score ignores the
   // incomplete-line penalty (it's optimistic), so a player can be blindsided
-  // by the -25/line hit at game-over. Surface it only as the run nears its
-  // end — when the deck is low OR few grid slots remain — so early-game play
-  // isn't cluttered with a warning about lines they still have plenty of time
-  // to fill. Patience negates the penalty entirely, so the cue stays hidden
-  // while it's held.
+  // by the -25/line hit at game-over. Surface it once there are 10 or
+  // fewer cards left in the deck — same threshold as the "deck running
+  // low" hint, simple to reason about, and late enough that early-game
+  // play isn't cluttered with a warning about lines the player has
+  // plenty of time to fill. Patience negates the penalty entirely so
+  // the cue stays hidden while it's held.
   const hasPatience = state.bonusCards.some(c => c.negatesIncompletePenalty);
-  const emptySlots = state.grid.filter(c => c === null).length;
-  const nearEnd = state.deck.length <= 5 || emptySlots <= 5;
+  const nearEnd = state.deck.length <= 10;
   const openLines =
     hasPatience || !nearEnd
       ? 0
@@ -517,6 +529,16 @@ export const GameScreen = ({
         liveReport.lines.some(l => l.hand !== null)) {
       return 'scoring-info';
     }
+    // Once a few lines have scored, the player has the context to
+    // think about per-line value — point at an R/C label so they
+    // know they can tap it for the breakdown. Waits for 3 scoring
+    // lines so it doesn't pile on right after the first-scoring-line
+    // popup (which would feel cluttered with two teach moments
+    // landing back-to-back).
+    if (!settings.seenLineValueHint &&
+        liveReport.lines.filter(l => l.hand !== null).length >= 3) {
+      return 'line-value';
+    }
     if (!settings.seenGridEffectHint &&
         (liveReport.gridMultiplier !== 1 || liveReport.gridFlat !== 0)) {
       // Skip grid-effect on the early turns when a free starter bonus
@@ -528,7 +550,7 @@ export const GameScreen = ({
       if (placed >= GRID_EFFECT_MIN_TURNS) return 'grid-effect';
     }
     if (!settings.seenLowDeckHint &&
-        state.deck.length > 0 && state.deck.length <= 5) {
+        state.deck.length > 0 && state.deck.length <= 10) {
       return 'low-deck';
     }
     return null;
@@ -619,6 +641,16 @@ export const GameScreen = ({
         return measure(deckCountRef.current);
       case 'scoring-info':
         return measure(scoreInfoBtnRef.current);
+      case 'line-value': {
+        // Anchor on the first completed line's R/C label. liveReport
+        // iterates rows before columns so a completed row wins ties.
+        const line = liveReport.lines.find(l => l.hand !== null);
+        if (!line) return Promise.resolve(null);
+        const ref = line.kind === 'row'
+          ? lineHeaderRefs.current.row[line.index]
+          : lineHeaderRefs.current.col[line.index];
+        return measure(ref);
+      }
     }
   };
 
@@ -674,6 +706,7 @@ export const GameScreen = ({
     settings.seenFirstScoringLineHint,
     settings.seenLowDeckHint,
     settings.seenScoringInfoHint,
+    settings.seenLineValueHint,
   ]);
 
   const dismissHint = () => {
@@ -1179,6 +1212,7 @@ export const GameScreen = ({
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
               cellRefs={gridCellRefs}
+              lineHeaderRefs={lineHeaderRefs}
             />
             <AnimationLayer anim={anim} />
           </View>
@@ -1315,6 +1349,13 @@ const HintModal = ({
   // first render we draw at the screen center hidden, then re-render
   // at the computed position once we know the popup's size.
   const [popupSize, setPopupSize] = useState<{ w: number; h: number } | null>(null);
+  // Stable text contents during the close fade-out. Without these,
+  // when hint goes to null the popup briefly re-renders with empty
+  // title + body strings while the modal is still mid-fade — that
+  // shows as a one-frame "blank popup" flicker before it disappears.
+  const lastHintRef = useRef<HintId | null>(null);
+  if (hint !== null) lastHintRef.current = hint;
+  const stableHint = hint ?? lastHintRef.current;
   // Holds the last non-null anchor so the popup stays put during the
   // close fade-out animation. Without this, dismissing wipes the
   // anchor instantly and the popup snaps back to screen center for
@@ -1487,9 +1528,9 @@ const HintModal = ({
           ]}
         >
           <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
-          <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
+          <Text style={hintModalStyles.title}>{stableHint ? HINT_TITLE[stableHint] : ''}</Text>
           <Text style={hintModalStyles.body}>
-            {hint ? hintBodyFor(hint, bonusDeclineAllowed) : ''}
+            {stableHint ? hintBodyFor(stableHint, bonusDeclineAllowed) : ''}
           </Text>
           <View style={hintModalStyles.btnRow}>
             <NeonButton
@@ -2004,11 +2045,15 @@ const renderBottom = (
     const holdsOthers = state.bonusCards.some(c => c.id !== SPOTLIGHT_ID);
     const drawnHasSpotlight = p.drawn.some(c => c.id === SPOTLIGHT_ID);
     const drawnHasOther = p.drawn.some(c => c.id !== SPOTLIGHT_ID);
+    // Line 1 of the warning is always the same "Spotlight is exclusive!"
+    // hook. Line 2 explains the specific consequence for the current
+    // hand/draw combination. Both render in the same warn-tinted box
+    // below so the warning reads as one block, not two separate notes.
     const spotlightWarning =
       drawnHasSpotlight && holdsOthers
-        ? 'Spotlight is exclusive — keeping it discards every other bonus card you hold.'
+        ? 'Keeping it discards every other bonus card you hold.'
         : holdsSpotlight && drawnHasOther
-        ? 'You hold Spotlight (exclusive) — keeping any card here discards your Spotlight.'
+        ? 'Keeping a different card discards your Spotlight.'
         : null;
     return (
       <View style={styles.actionCol}>
@@ -2021,7 +2066,10 @@ const renderBottom = (
             : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
         {spotlightWarning && (
-          <Text style={styles.spotlightWarning}>{spotlightWarning}</Text>
+          <View style={styles.spotlightWarning}>
+            <Text style={styles.spotlightWarningTitle}>Spotlight is exclusive!</Text>
+            <Text style={styles.spotlightWarningBody}>{spotlightWarning}</Text>
+          </View>
         )}
         <View style={styles.bonusRow}>
           {p.drawn.map((b, i) => {
@@ -2087,9 +2135,9 @@ const renderBottom = (
     const newIsSpotlight = newCard?.id === SPOTLIGHT_ID;
     const holdsSpotlight = state.bonusCards.some(c => c.id === SPOTLIGHT_ID);
     const spotlightWarning = newIsSpotlight
-      ? 'Spotlight is exclusive — swapping it in discards all your other bonus cards, not just the one you tap.'
+      ? 'Swapping it in discards all your other bonus cards, not just the one you tap.'
       : holdsSpotlight
-      ? 'You hold Spotlight (exclusive) — swapping in this card discards your Spotlight too.'
+      ? 'Swapping in this card discards your Spotlight too.'
       : null;
     return (
       <View style={styles.actionCol}>
@@ -2100,7 +2148,10 @@ const renderBottom = (
           Tap one of your 3 to replace with "{newCard?.name}". The old one is gone for good.
         </Text>
         {spotlightWarning && (
-          <Text style={styles.spotlightWarning}>{spotlightWarning}</Text>
+          <View style={styles.spotlightWarning}>
+            <Text style={styles.spotlightWarningTitle}>Spotlight is exclusive!</Text>
+            <Text style={styles.spotlightWarningBody}>{spotlightWarning}</Text>
+          </View>
         )}
         <View style={styles.bonusRow}>
           {state.bonusCards.map((b, i) => {
@@ -2255,19 +2306,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 1,
   },
+  // Container for the two-line Spotlight warning — bordered warn-tinted
+  // box wrapping the bold "Spotlight is exclusive!" headline and the
+  // contextual consequence body.
   spotlightWarning: {
-    color: colors.warn,
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 15,
-    textAlign: 'center',
     backgroundColor: 'rgba(255, 183, 74, 0.10)',
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.warn,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+  },
+  spotlightWarningTitle: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  spotlightWarningBody: {
+    color: colors.warn,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+    textAlign: 'center',
   },
   bonusRow: {
     flexDirection: 'row',
