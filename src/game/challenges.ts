@@ -1,5 +1,6 @@
 import { ScoreReport } from './scoring';
 import type { GameState } from './state';
+import { Difficulty, TARGET_BY_DIFFICULTY } from './rules';
 
 // ============================================================================
 // Challenges — playable game variants. The other entries that used to live
@@ -120,4 +121,27 @@ export const targetForLevel = (level: number): number => {
     TARGETS_UP_BREAK_TARGET +
     (level - TARGETS_UP_BREAK_LEVEL) * TARGETS_UP_BIG_STEP
   );
+};
+
+// Targets Up runs on Easy / Medium / Hard settings depending on the
+// level's target, keyed off the Free Play target schedule so the
+// two stay in sync:
+//
+//   target < Medium's Free Play target → Easy settings
+//   target < Hard's   Free Play target → Medium settings
+//   target ≥ Hard's   Free Play target → Hard settings
+//
+// With the current schedule (Easy 350 / Medium 425 / Hard 500) this
+// works out to:
+//   L1–3 (350 / 375 / 400) → Easy
+//   L4–6 (425 / 450 / 475) → Medium
+//   L7+  (500 / 550 / …)   → Hard
+//
+// Extreme is never selected — Targets Up doesn't strip tools the
+// way Extreme does even at its hardest levels.
+export const difficultyForLevel = (level: number): Difficulty => {
+  const t = targetForLevel(level);
+  if (t < TARGET_BY_DIFFICULTY.medium) return 'easy';
+  if (t < TARGET_BY_DIFFICULTY.hard) return 'medium';
+  return 'hard';
 };
