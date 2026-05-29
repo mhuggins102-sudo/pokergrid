@@ -31,7 +31,14 @@ const TINT: Record<
   { border: string; text: string; bg: string; borderW: number }
 > = {
   primary: { border: colors.accent, text: colors.accent, bg: 'rgba(107, 214, 255, 0.08)', borderW: 1.5 },
-  secondary: { border: colors.outlineStrong, text: colors.textMid, bg: 'rgba(255,255,255,0.02)', borderW: 1.5 },
+  // Border is colors.textMid (fully opaque) rather than outlineStrong
+  // (35% alpha). On the dark canvas the half-transparent border
+  // dissolved into the background — fine when paired with a glow
+  // halo that defined the edge, but in the noGlow awaiting-action
+  // row it made the secondary-variant Discard look visibly shorter
+  // than its primary / warn / danger peers since their borders read
+  // sharply and Discard's didn't.
+  secondary: { border: colors.textMid, text: colors.textMid, bg: 'rgba(255,255,255,0.02)', borderW: 1.5 },
   danger: { border: colors.danger, text: colors.danger, bg: 'rgba(255, 100, 100, 0.06)', borderW: 1.5 },
   warn: { border: colors.warn, text: colors.warn, bg: 'rgba(255, 183, 74, 0.06)', borderW: 1.5 },
   ghost: { border: 'transparent', text: colors.textMid, bg: 'transparent', borderW: 1.5 },
