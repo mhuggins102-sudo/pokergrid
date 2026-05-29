@@ -39,13 +39,38 @@ describe('per-difficulty rules tables', () => {
   });
 
   it('Easy has the spec values', () => {
-    expect(TARGET_BY_DIFFICULTY.easy).toBe(300);
+    expect(TARGET_BY_DIFFICULTY.easy).toBe(350);
     expect(JOKERS_BY_DIFFICULTY.easy).toBe(2);
     expect(UNDOS_BY_DIFFICULTY.easy).toBe(1);
     expect(STARTER_BONUS_BY_DIFFICULTY.easy).toBe(1);
     expect(BONUS_DECLINE_AT_CAP_BY_DIFFICULTY.easy).toBe(true);
     expect(NO_DISCARDS_BY_DIFFICULTY.easy).toBe(false);
     expect(CAN_PREVIEW_DECK_BY_DIFFICULTY.easy).toBe(true);
+  });
+});
+
+describe('Targets Up — targetForLevel schedule', () => {
+  // L1-7 use +25 steps starting at 350; L8+ switches to +50 from 500.
+  // Aligns the ladder with the Free Play tiers: L1-3 cover Easy 350-400,
+  // L4-6 cover Medium 425-475, L7+ enters Hard 500+.
+  it('L1 starts at the base target', () => {
+    const { targetForLevel } = require('../src/game/challenges');
+    expect(targetForLevel(1)).toBe(350);
+  });
+  it('+25 steps through L7', () => {
+    const { targetForLevel } = require('../src/game/challenges');
+    expect(targetForLevel(2)).toBe(375);
+    expect(targetForLevel(3)).toBe(400);
+    expect(targetForLevel(4)).toBe(425);
+    expect(targetForLevel(5)).toBe(450);
+    expect(targetForLevel(6)).toBe(475);
+    expect(targetForLevel(7)).toBe(500);
+  });
+  it('+50 steps starting at L8', () => {
+    const { targetForLevel } = require('../src/game/challenges');
+    expect(targetForLevel(8)).toBe(550);
+    expect(targetForLevel(9)).toBe(600);
+    expect(targetForLevel(10)).toBe(650);
   });
 });
 

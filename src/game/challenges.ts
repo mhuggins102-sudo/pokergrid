@@ -91,13 +91,33 @@ export const challengeWon = (
 // ============================================================================
 // Targets Up — Levels mode.
 //
-// Start at Level 1 (target 300). On a win, level += 1 and target += 50.
-// On a loss, the run is over; the final result is the number of consecutive
-// wins (= level - 1).
+// Levels 1–7 use +25 steps starting at 350, climbing through Easy
+// (350 / 375 / 400), Medium (425 / 450 / 475), and finally Hard
+// territory at Level 7 (500). Levels 8+ switch to the +50 cadence
+// (550, 600, 650, ...) — past Hard the rises get steeper.
+//
+// On a win, level += 1 and target advances per the step schedule.
+// On a loss, the run is over; the final result is the number of
+// consecutive wins (= level - 1).
 // ============================================================================
 
-export const TARGETS_UP_BASE = 300;
-export const TARGETS_UP_STEP = 50;
+export const TARGETS_UP_BASE = 350;
+// Step size for the first leg of the ladder (Easy + Medium territory,
+// L1 → L7). +25 keeps the in-difficulty rises gentle.
+export const TARGETS_UP_SMALL_STEP = 25;
+// Step size after Hard's 500 threshold. +50 makes each post-Hard
+// level a real jump.
+export const TARGETS_UP_BIG_STEP = 50;
+// Where the +25 leg ends and the +50 leg begins.
+const TARGETS_UP_BREAK_LEVEL = 7;
+const TARGETS_UP_BREAK_TARGET = 500;
 
-export const targetForLevel = (level: number): number =>
-  TARGETS_UP_BASE + (level - 1) * TARGETS_UP_STEP;
+export const targetForLevel = (level: number): number => {
+  if (level <= TARGETS_UP_BREAK_LEVEL) {
+    return TARGETS_UP_BASE + (level - 1) * TARGETS_UP_SMALL_STEP;
+  }
+  return (
+    TARGETS_UP_BREAK_TARGET +
+    (level - TARGETS_UP_BREAK_LEVEL) * TARGETS_UP_BIG_STEP
+  );
+};

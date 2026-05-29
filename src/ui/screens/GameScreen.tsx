@@ -1812,6 +1812,17 @@ const renderBottom = (
         <View style={styles.bonusRow}>
           {p.drawn.map((b, i) => {
             const s = bonusStyleFor(b);
+            // Spotlight at the cap skips the bonus-card-replacing
+            // step. The "pick which held card to replace" UI is
+            // pointless when the answer is "all of them" — Spotlight
+            // evicts every other held card on pickup. Dispatch
+            // BONUS_KEEP directly; the reducer's cap check has a
+            // matching Spotlight bypass.
+            const isSpotlight = b.id === SPOTLIGHT_ID;
+            const action: Action =
+              atMax && !isSpotlight
+                ? { type: 'BONUS_SELECT_NEW', idx: i }
+                : { type: 'BONUS_KEEP', idx: i };
             return (
               <Pressable
                 key={i}
@@ -1819,11 +1830,7 @@ const renderBottom = (
                 onPress={() => {
                   haptic('bonus');
                   playSound('bonus');
-                  dispatch(
-                    atMax
-                      ? { type: 'BONUS_SELECT_NEW', idx: i }
-                      : { type: 'BONUS_KEEP', idx: i }
-                  );
+                  dispatch(action);
                 }}
               >
                 {colorBlindAssist && (

@@ -521,9 +521,19 @@ const enforceSpotlight = (
 const handleBonusKeep = (s: GameState, idx: number): GameState => {
   if (s.phase.kind !== 'bonus-card-resolving') return s;
   if (idx < 0 || idx >= s.phase.drawn.length) return s;
-  // Only valid when below the limit; at limit, use BONUS_SELECT_NEW + BONUS_REPLACE.
-  if (s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
   const kept = s.phase.drawn[idx];
+  // Spotlight bypasses the cap check: it evicts every other held card
+  // on pickup via enforceSpotlight, so the bonus-card-replacing
+  // "which one to swap out?" step is meaningless — the held cards all
+  // get discarded regardless of which the player would tap. For
+  // every other card the at-cap path still routes through
+  // BONUS_SELECT_NEW + BONUS_REPLACE.
+  if (
+    kept.id !== SPOTLIGHT_ID &&
+    s.bonusCards.length >= BONUS_HAND_LIMIT
+  ) {
+    return s;
+  }
   const returning = s.phase.drawn.filter((_, i) => i !== idx);
   const newHand = enforceSpotlight([...s.bonusCards, kept], kept);
   return finishBonusFlow(s, returning, newHand);

@@ -703,7 +703,7 @@ const STEPS: Slide[] = [
   {
     kicker: '01 · GOAL',
     title: 'Beat your target',
-    copy: '5×5 poker solitaire. Place every drawn card on the grid; at game end, score the 5 rows and 5 columns as poker hands. Free Play targets: Easy 300, Medium 400, Hard 500, Extreme 400 (no jokers + no discards).',
+    copy: '5×5 poker solitaire. Place every drawn card on the grid; at game end, score the 5 rows and 5 columns as poker hands. Free Play targets: Easy 350, Medium 425, Hard 500, Extreme 400 (no jokers + no discards).',
     accent: colors.accent,
     Visual: GoalVisual,
   },
