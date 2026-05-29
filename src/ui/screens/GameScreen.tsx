@@ -122,7 +122,7 @@ const HINT_BODY: Record<HintId, string> = {
   'spades-slide':
     '♠ slides a chain of cards in one direction. Tap a card to see valid landings, then tap one — or drag the card the way you want it to go. Cards keep their relative order.',
   'diamonds-destroy':
-    '♦ removes any card from the grid (joker included). The slot becomes empty; if you can\'t refill it before the run ends it costs -25 at scoring time, so use ♦ deliberately.',
+    '♦ removes any card from the grid (joker included), and the slot becomes empty. Use ♦ deliberately — empty lines at end of game are worth -25 points each.',
   'clubs-bonus':
     '♣ draws 2 bonus cards from a separate deck — pick one to keep. Multipliers stack MULTIPLICATIVELY: two ×2 cards on the same line is ×4, not ×3.',
   'bonus-held':
@@ -1315,6 +1315,13 @@ const HintModal = ({
   // first render we draw at the screen center hidden, then re-render
   // at the computed position once we know the popup's size.
   const [popupSize, setPopupSize] = useState<{ w: number; h: number } | null>(null);
+  // Stable text contents during the close fade-out. Without these,
+  // when hint goes to null the popup briefly re-renders with empty
+  // title + body strings while the modal is still mid-fade — that
+  // shows as a one-frame "blank popup" flicker before it disappears.
+  const lastHintRef = useRef<HintId | null>(null);
+  if (hint !== null) lastHintRef.current = hint;
+  const stableHint = hint ?? lastHintRef.current;
   // Holds the last non-null anchor so the popup stays put during the
   // close fade-out animation. Without this, dismissing wipes the
   // anchor instantly and the popup snaps back to screen center for
@@ -1487,9 +1494,9 @@ const HintModal = ({
           ]}
         >
           <Text style={hintModalStyles.kicker}>· FIRST TIME ·</Text>
-          <Text style={hintModalStyles.title}>{hint ? HINT_TITLE[hint] : ''}</Text>
+          <Text style={hintModalStyles.title}>{stableHint ? HINT_TITLE[stableHint] : ''}</Text>
           <Text style={hintModalStyles.body}>
-            {hint ? hintBodyFor(hint, bonusDeclineAllowed) : ''}
+            {stableHint ? hintBodyFor(stableHint, bonusDeclineAllowed) : ''}
           </Text>
           <View style={hintModalStyles.btnRow}>
             <NeonButton

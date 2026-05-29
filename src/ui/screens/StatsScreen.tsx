@@ -717,8 +717,8 @@ const styles = StyleSheet.create({
   // page that surfaces your run history also offers the way to
   // clear it.
   dataBlock: {
-    marginTop: spacing.xl,
-    paddingTop: spacing.lg,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.outlineSoft,
   },
