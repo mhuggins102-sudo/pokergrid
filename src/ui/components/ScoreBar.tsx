@@ -25,6 +25,12 @@ interface Props {
   undoState?: UndoState;
   // Optional kicker shown above the score (e.g. "level 3", "balanced").
   kicker?: string;
+  // Endgame penalty preview: how many lines are still incomplete and the
+  // total points they'll cost if left unfinished. The live score is
+  // optimistic (it ignores the incomplete-line penalty), so this surfaces the
+  // looming hit as the run nears its end. 0 / undefined hides the cue.
+  openLines?: number;
+  openPenalty?: number;
 }
 
 // Live-score readout. Ticks softly on every change so the number feels alive.
@@ -83,9 +89,12 @@ export const ScoreBar = ({
   onScorePress,
   undoState = 'hidden',
   kicker,
+  openLines = 0,
+  openPenalty = 0,
 }: Props) => {
   const showUndo = undoState !== 'hidden';
   const undoActive = undoState === 'available';
+  const showPenalty = openLines > 0 && openPenalty < 0;
   return (
     <View style={styles.bar}>
       <View style={styles.topRow}>
@@ -103,6 +112,11 @@ export const ScoreBar = ({
           {kicker && <Text style={styles.kicker}>{kicker}</Text>}
           {liveScore !== undefined && (
             <ScoreReadout score={liveScore} target={target} />
+          )}
+          {showPenalty && (
+            <Text style={styles.penaltyNote}>
+              {openLines} line{openLines === 1 ? '' : 's'} open · {openPenalty}
+            </Text>
           )}
         </Pressable>
         {showUndo && (
@@ -202,5 +216,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  penaltyNote: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginTop: 2,
+    textShadowColor: colors.warn,
+    textShadowRadius: 3,
   },
 });

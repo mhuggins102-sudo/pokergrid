@@ -29,6 +29,17 @@ interface Props {
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
+// A worded intensity ramp shown under each tile. Extreme's target (400) is
+// lower than Hard's (500), so the bare number reads as a step DOWN even though
+// Extreme is the toughest mode — the word fixes the ordering at a glance. The
+// per-difficulty rule details live in the Difficulty Modes info popup.
+const DIFF_TAGLINE: Record<Difficulty, string> = {
+  easy: 'gentle',
+  medium: 'steady',
+  hard: 'tough',
+  extreme: 'brutal',
+};
+
 const NeonTitle = () => {
   const { settings } = useSettings();
   const pulse = useSharedValue(0.7);
@@ -86,6 +97,9 @@ export const HomeScreen = ({
           >
             <Text style={[styles.diffName, { color: difficultyColor(d), textShadowColor: difficultyColor(d) }]}>
               {d}
+            </Text>
+            <Text style={[styles.diffTagline, { color: difficultyColor(d) }]}>
+              {DIFF_TAGLINE[d]}
             </Text>
             <Text style={styles.diffTarget}>target {TARGET_BY_DIFFICULTY[d]}</Text>
             <Text style={styles.diffBest}>
@@ -186,8 +200,8 @@ export const HomeScreen = ({
       </View>
 
       <View style={styles.navRow}>
-        <NeonButton label="How to Play" variant="primary" size="sm" onPress={onOpenRules} />
-        <NeonButton label="Settings" variant="secondary" size="sm" onPress={onOpenSettings} />
+        <NeonButton label="How to Play" variant="primary" size="md" onPress={onOpenRules} />
+        <NeonButton label="Settings" variant="secondary" size="md" onPress={onOpenSettings} />
       </View>
 
       <DifficultyInfoModal
@@ -348,6 +362,15 @@ const styles = StyleSheet.create({
   // "target N" / "best N" use the same sans body voice as the mode
   // card descriptions ("Climb the ladder…") rather than the mono
   // numeric voice — keeps them as soft labels, not data readouts.
+  diffTagline: {
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 3,
+    opacity: 0.9,
+  },
   diffTarget: {
     fontFamily: fonts.sans,
     fontSize: 11,
