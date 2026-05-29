@@ -3,7 +3,7 @@ import { seededRng } from '../src/game/deck';
 import { GRID_SLOTS, SPIRAL_ORDER } from '../src/game/grid';
 import { scoreGrid } from '../src/game/scoring';
 import { GameState, newGame, step } from '../src/game/state';
-import { BONUS_DECK_POOL, BONUS_HAND_LIMIT } from '../src/game/bonusCards';
+import { BonusCard, BONUS_DECK_POOL, BONUS_HAND_LIMIT } from '../src/game/bonusCards';
 
 const emptyGrid25 = () => Array.from({ length: 25 }, () => null) as GameState['grid'];
 
@@ -34,7 +34,7 @@ describe('GameState — initial state', () => {
   test('newGame seeds a complete state', () => {
     const s = newGame('easy', seededRng(1));
     expect(s.difficulty).toBe('easy');
-    expect(s.target).toBe(300);
+    expect(s.target).toBe(350);
     // Center slot is filled first (spiral position 1 = slot 12).
     expect(s.grid[12]).not.toBeNull();
     // Easy and Medium each seed 1 starter bonus card from the shuffled deck.
@@ -446,6 +446,54 @@ describe('GameState — Spotlight exclusivity rule', () => {
     const { categoryOf } = require('../src/ui/bonusCardCategory') as
       typeof import('../src/ui/bonusCardCategory');
     expect(categoryOf(spotlight)).toBe('deck-management');
+  });
+
+  test('Spotlight at the cap is kept directly (no replace step)', () => {
+    // 3-card hand of non-Spotlight cards. Player draws Spotlight + any
+    // other; picking Spotlight should jump straight to a 1-card hand
+    // ({Spotlight}) WITHOUT going through bonus-card-replacing.
+    const triple: BonusCard[] = [other, other, other].map((c, i) => ({
+      ...c,
+      // Slight id variants so the hand has distinguishable entries —
+      // not strictly required but mirrors a real run's state shape.
+      id: `${c.id}-${i}`,
+    }));
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      bonusCards: triple,
+      phase: {
+        kind: 'bonus-card-resolving',
+        drawn: [spotlight, other],
+        returnTo: 'awaiting-action',
+      },
+    });
+    const after = step(state, { type: 'BONUS_KEEP', idx: 0 }); // pick Spotlight
+    // Phase advanced past the bonus flow — Spotlight kept, hand evicted.
+    expect(after.phase.kind).not.toBe('bonus-card-replacing');
+    expect(after.bonusCards.map(c => c.id)).toEqual(['spotlight-x1_5']);
+  });
+
+  test('non-Spotlight at the cap still routes to the replace flow', () => {
+    // Regression: the Spotlight cap bypass must be NARROW. A normal
+    // card at the cap still hits the "pick which held card to swap"
+    // step — handleBonusKeep rejects it and the UI is expected to
+    // dispatch BONUS_SELECT_NEW instead.
+    const triple: BonusCard[] = [other, other, other];
+    const state = baseState({
+      deck: [filler],
+      drawn: club,
+      bonusCards: triple,
+      phase: {
+        kind: 'bonus-card-resolving',
+        drawn: [other, other],
+        returnTo: 'awaiting-action',
+      },
+    });
+    const after = step(state, { type: 'BONUS_KEEP', idx: 0 });
+    // BONUS_KEEP is a no-op at cap for non-Spotlight (the UI is
+    // expected to dispatch BONUS_SELECT_NEW instead).
+    expect(after).toBe(state);
   });
 });
 

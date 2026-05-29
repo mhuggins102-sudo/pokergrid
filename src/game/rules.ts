@@ -6,12 +6,12 @@ export type Difficulty = 'easy' | 'medium' | 'hard' | 'extreme';
 // read from these.
 
 export const TARGET_BY_DIFFICULTY: Record<Difficulty, number> = {
-  easy: 300,
-  medium: 400,
+  easy: 350,
+  medium: 425,
   hard: 500,
-  // Extreme keeps the same target as Medium but every other knob is
-  // dialed harder — fewer tools, no jokers, no discards. Reaching 400
-  // becomes meaningfully tougher than Medium's 400.
+  // Extreme keeps a lower numeric target than Hard but every other knob
+  // is dialed harder — fewer tools, no jokers, no discards. Reaching
+  // 400 becomes meaningfully tougher than Medium's 425.
   extreme: 400,
 };
 
