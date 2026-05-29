@@ -74,6 +74,39 @@ describe('Targets Up — targetForLevel schedule', () => {
   });
 });
 
+describe('Targets Up — difficultyForLevel mapping', () => {
+  // Pins the Free-Play-target-keyed mapping so any future change to
+  // TARGET_BY_DIFFICULTY auto-validates the ladder ↔ difficulty
+  // alignment. With Easy 350 / Medium 425 / Hard 500:
+  //   L1–3 (targets 350 / 375 / 400) → Easy
+  //   L4–6 (targets 425 / 450 / 475) → Medium
+  //   L7+  (targets 500 / 550 / …)   → Hard
+  it('L1–3 (targets < 425) → easy', () => {
+    const { difficultyForLevel } = require('../src/game/challenges');
+    expect(difficultyForLevel(1)).toBe('easy');
+    expect(difficultyForLevel(2)).toBe('easy');
+    expect(difficultyForLevel(3)).toBe('easy');
+  });
+  it('L4–6 (targets 425–475) → medium', () => {
+    const { difficultyForLevel } = require('../src/game/challenges');
+    expect(difficultyForLevel(4)).toBe('medium');
+    expect(difficultyForLevel(5)).toBe('medium');
+    expect(difficultyForLevel(6)).toBe('medium');
+  });
+  it('L7+ (targets ≥ 500) → hard', () => {
+    const { difficultyForLevel } = require('../src/game/challenges');
+    expect(difficultyForLevel(7)).toBe('hard');
+    expect(difficultyForLevel(8)).toBe('hard');
+    expect(difficultyForLevel(20)).toBe('hard');
+  });
+  it('never returns extreme', () => {
+    const { difficultyForLevel } = require('../src/game/challenges');
+    for (let lvl = 1; lvl <= 50; lvl++) {
+      expect(difficultyForLevel(lvl)).not.toBe('extreme');
+    }
+  });
+});
+
 describe('newGame difficulty wiring', () => {
   it('Easy deck contains 2 jokers', () => {
     const g = newGame('easy', seededRng(7));

@@ -7,6 +7,7 @@ import { BonusCard } from './src/game/bonusCards';
 import { Card } from './src/game/cards';
 import {
   ChallengeId,
+  difficultyForLevel,
   findChallenge,
   targetForLevel,
 } from './src/game/challenges';
@@ -313,15 +314,7 @@ const contextTarget = (ctx: PlayContext): number => {
 const contextDifficulty = (ctx: PlayContext): Difficulty => {
   switch (ctx.mode) {
     case 'free': return ctx.difficulty;
-    case 'targets-up': {
-      // Difficulty tracks the target for the round: easy bands (<400) get
-      // easy perks (starter bonus + deck peek), medium bands (400–499) get
-      // the medium curve, and high targets (500+) play on hard.
-      const t = targetForLevel(ctx.level);
-      if (t < 400) return 'easy';
-      if (t < 500) return 'medium';
-      return 'hard';
-    }
+    case 'targets-up': return difficultyForLevel(ctx.level);
     case 'challenge': return 'hard';
   }
 };
@@ -338,12 +331,14 @@ const contextKicker = (ctx: PlayContext): string | undefined => {
 };
 
 // Per-mode undo cap. Challenge runs are honor-only: no undo. Targets Up
-// lets the player erase one misclick per run. Free Play caps undos by
-// difficulty (Easy / Medium: 1; Hard / Extreme: 0) per UNDOS_BY_DIFFICULTY.
+// inherits the cap from the Free Play difficulty its current level
+// maps to via difficultyForLevel — so L1–6 (Easy / Medium bands) get
+// the 1-undo cap, and L7+ (Hard band) match Free Play Hard's no-undo
+// rule. Free Play itself reads straight from UNDOS_BY_DIFFICULTY.
 const contextMaxUndos = (ctx: PlayContext): number => {
   switch (ctx.mode) {
     case 'free': return UNDOS_BY_DIFFICULTY[ctx.difficulty];
-    case 'targets-up': return 1;
+    case 'targets-up': return UNDOS_BY_DIFFICULTY[difficultyForLevel(ctx.level)];
     case 'challenge': return 0;
   }
 };
