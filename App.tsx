@@ -66,6 +66,10 @@ const AppShell = () => {
   const [screen, setScreen] = useState<Screen>('home');
   const [playContext, setPlayContext] = useState<PlayContext | null>(null);
   const [nonce, setNonce] = useState(0);
+  // Where the tutorial should return to when finished. First-run / Rules flow
+  // returns to 'rules'; launching it from Settings → "Replay tutorial" returns
+  // to 'settings'.
+  const [tutorialReturn, setTutorialReturn] = useState<Screen>('rules');
   const { save: tuSave } = useTUSave();
 
   // First-run: pop up the single-page Rules. Mark seen on dismiss so we
@@ -159,16 +163,27 @@ const AppShell = () => {
       {screen === 'achievements' && (
         <AchievementsScreen onBack={() => setScreen('home')} />
       )}
-      {screen === 'settings' && <SettingsScreen onBack={() => setScreen('home')} />}
+      {screen === 'settings' && (
+        <SettingsScreen
+          onBack={() => setScreen('home')}
+          onReplayTutorial={() => {
+            setTutorialReturn('settings');
+            setScreen('tutorial');
+          }}
+        />
+      )}
       {screen === 'rules' && (
         <RulesScreen
           onBack={dismissRules}
-          onOpenTutorial={() => setScreen('tutorial')}
+          onOpenTutorial={() => {
+            setTutorialReturn('rules');
+            setScreen('tutorial');
+          }}
           onOpenBonusCards={() => setScreen('bonusCards')}
         />
       )}
       {screen === 'tutorial' && (
-        <TutorialScreen onDone={() => setScreen('rules')} />
+        <TutorialScreen onDone={() => setScreen(tutorialReturn)} />
       )}
       {screen === 'bonusCards' && (
         <BonusCardsScreen onBack={() => setScreen('rules')} />
