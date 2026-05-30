@@ -244,14 +244,26 @@ const rainbowLine: BonusCard = {
   baseMultValue: 2,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
-    // Per the Targets Up spec: wilds count as their ORIGINAL suit
-    // here — their flexibility is reserved for flush evaluation, not
-    // for boosting Rainbow's distinct-suit tally. Jokers occupy a
-    // slot but contribute no suit (excluded by standardCards), so a
-    // line of 4 standards + 1 joker reads as the distinct count of
-    // those 4 standards.
-    const suits = new Set(standardCards(line).map(c => c.suit));
-    return suits.size >= 4 ? { multiplier: card.multValue ?? 2 } : {};
+    // Jokers and wild-supercharged cards are suit-flexible — each
+    // one can stand in for whichever suit is still missing from the
+    // line. Counted separately and added to the distinct-standard-
+    // suits tally so the line scores as 4+ distinct whenever flex
+    // cards can fill the gaps. Wilds lose their original suit when
+    // supercharged, so they behave like jokers here (their
+    // suit-flex is the whole point of the supercharge).
+    let flexible = 0;
+    const distinctSuits = new Set<Suit>();
+    for (const c of line.cards) {
+      if (c === null) continue;
+      if (isJoker(c) || c.supercharge === 'wild') {
+        flexible += 1;
+      } else {
+        distinctSuits.add(c.suit);
+      }
+    }
+    return distinctSuits.size + flexible >= 4
+      ? { multiplier: card.multValue ?? 2 }
+      : {};
   },
 };
 
@@ -444,17 +456,16 @@ const rainbowCorners: BonusCard = {
     const cards = CORNER_SLOTS.map(i => grid[i]);
     // Empty corners block the achievement — we need all four filled.
     if (cards.some(c => c === null)) return {};
-    // Jokers stay suit-flexible (no suit at all → can fill whatever's
-    // missing). Per the Targets Up spec, wilds DON'T flex here — they
-    // count as their original suit. So a wild rolled H sitting on a
-    // corner blocks the achievement if another corner is also H, just
-    // like a normal H card would. The achievement triggers iff the
-    // non-joker corners have distinct suits among themselves.
+    // Both the joker and wild-supercharged cards are suit-flexible:
+    // they can fill whichever suit is missing. The achievement
+    // triggers iff the non-flexible corners have distinct suits
+    // among themselves (no duplicates), since the remaining flex
+    // cards can always be assigned the missing suits.
     const nonFlexSuits: Suit[] = [];
     let flexCount = 0;
     for (const c of cards) {
       if (c === null) continue;
-      if (isJoker(c)) {
+      if (isJoker(c) || c.supercharge === 'wild') {
         flexCount += 1;
       } else {
         nonFlexSuits.push(c.suit);
