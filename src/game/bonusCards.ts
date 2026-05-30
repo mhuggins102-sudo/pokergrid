@@ -1,6 +1,5 @@
 import { Card, isJoker, Suit } from './cards';
 import {
-  BORDER_SLOTS,
   CORNER_SLOTS,
   Grid,
   INNER_SLOTS,
@@ -236,12 +235,12 @@ const lineCanBlackjack = (line: LineContext): boolean => {
 
 const rainbowLine: BonusCard = {
   id: 'rainbow-line-x2',
-  name: 'Rainbow ×2 (each)',
+  name: 'Rainbow ×1.5 (each)',
   title: 'Rainbow',
-  mult: '×2 (each)',
+  mult: '×1.5 (each)',
   description: 'Lines with 4+ distinct suits.',
-  multValue: 2,
-  baseMultValue: 2,
+  multValue: 1.5,
+  baseMultValue: 1.5,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
     // Jokers and wild-supercharged cards are suit-flexible — each
@@ -262,7 +261,7 @@ const rainbowLine: BonusCard = {
       }
     }
     return distinctSuits.size + flexible >= 4
-      ? { multiplier: card.multValue ?? 2 }
+      ? { multiplier: card.multValue ?? 1.5 }
       : {};
   },
 };
@@ -319,12 +318,12 @@ const highball: BonusCard = {
   name: 'Highball ×1.5 (each)',
   title: 'Highball',
   mult: '×1.5 (each)',
-  description: 'Lines totalling 40+ (A=11, face=10).',
+  description: 'Lines totalling 45+ (A=11, face=10).',
   multValue: 1.5,
   baseMultValue: 1.5,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
-    return lineBlackjackTotal(line, true) >= 40
+    return lineBlackjackTotal(line, true) >= 45
       ? { multiplier: card.multValue ?? 1.5 }
       : {};
   },
@@ -335,12 +334,12 @@ const lowball: BonusCard = {
   name: 'Lowball ×1.5 (each)',
   title: 'Lowball',
   mult: '×1.5 (each)',
-  description: 'Lines totalling 15 or less (A=1, face=10).',
+  description: 'Lines totalling 20 or less (A=1, face=10).',
   multValue: 1.5,
   baseMultValue: 1.5,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
-    return lineBlackjackTotal(line, false) <= 15
+    return lineBlackjackTotal(line, false) <= 20
       ? { multiplier: card.multValue ?? 1.5 }
       : {};
   },
@@ -382,28 +381,10 @@ const spiralCore: BonusCard = {
 const isFace = (c: Card): boolean =>
   !isJoker(c) && (c.rank === 'J' || c.rank === 'Q' || c.rank === 'K');
 
-const cleanBorder: BonusCard = {
-  id: 'clean-border-x1_5',
-  name: 'Clean Border ×1.5',
-  title: 'Clean Border',
-  mult: '×1.5',
-  description: 'No face cards on the 16 border slots.',
-  multValue: 1.5,
-  baseMultValue: 1.5,
-  gridEffect: ({ grid }, card) => {
-    const anyFace = BORDER_SLOTS.some(i => {
-      const c = grid[i];
-      return c !== null && isFace(c);
-    });
-    return anyFace ? {} : { totalMultiplier: card.multValue ?? 1.5 };
-  },
-};
-
-// Each of the four grid edges as a 5-slot index list, used by the
-// per-edge Monochrome Border check. Corner slots intentionally appear
-// in two edges — a red corner contributes to BOTH the row edge and
-// the column edge it sits on, so the corner cards do double duty in
-// the multiplier roll-up.
+// Each of the four grid edges as a 5-slot index list. Corner slots
+// intentionally appear in two edges — a corner card contributes to BOTH
+// the row edge and the column edge it sits on, so per-edge bonus cards
+// (Clean Border, Monochrome Border) can double-count them.
 const BORDER_EDGES: readonly (readonly number[])[] = [
   [0, 1, 2, 3, 4],        // top row (R1)
   [20, 21, 22, 23, 24],   // bottom row (R5)
@@ -411,24 +392,49 @@ const BORDER_EDGES: readonly (readonly number[])[] = [
   [4, 9, 14, 19, 24],     // right column (C5)
 ];
 
-const monochromeBorder: BonusCard = {
-  id: 'monochrome-border-x1_75',
-  name: 'Monochrome Border ×1.15 (each)',
-  title: 'Monochrome Border',
+const cleanBorder: BonusCard = {
+  id: 'clean-border-x1_5',
+  name: 'Clean Border ×1.15 (each)',
+  title: 'Clean Border',
   mult: '×1.15 (each)',
   description:
-    'Each grid edge (top / bottom / left / right) whose filled cards are all the same color (red or black). Stacks up to ×1.15⁴.',
+    'Each grid edge (top / bottom / left / right) that is fully filled and contains no face cards. Stacks up to ×1.15⁴.',
   multValue: 1.15,
   baseMultValue: 1.15,
   gridEffect: ({ grid }, card) => {
     const m = card.multValue ?? 1.15;
-    // For each of the 4 edges, count it as a hit if every FILLED,
-    // non-joker, non-wild card on that edge shares a color. Wilds and
-    // jokers are excluded because they're suit-flexible; empty slots
-    // are skipped so a partially-filled edge can still qualify
-    // (matching the original card's lenient "no color conflict" rule).
     let mult = 1;
     for (const edge of BORDER_EDGES) {
+      // Edge must be fully filled — partials don't count.
+      if (edge.some(i => grid[i] === null)) continue;
+      const hasFace = edge.some(i => {
+        const c = grid[i];
+        return c !== null && isFace(c);
+      });
+      if (!hasFace) mult *= m;
+    }
+    return mult > 1 ? { totalMultiplier: mult } : {};
+  },
+};
+
+const monochromeBorder: BonusCard = {
+  id: 'monochrome-border-x1_75',
+  name: 'Monochrome Border ×1.1 (each)',
+  title: 'Monochrome Border',
+  mult: '×1.1 (each)',
+  description:
+    'Each grid edge (top / bottom / left / right) that is fully filled with cards of the same color (red or black). Stacks up to ×1.1⁴.',
+  multValue: 1.1,
+  baseMultValue: 1.1,
+  gridEffect: ({ grid }, card) => {
+    const m = card.multValue ?? 1.1;
+    let mult = 1;
+    for (const edge of BORDER_EDGES) {
+      // Edge must be fully filled — partials don't count.
+      if (edge.some(i => grid[i] === null)) continue;
+      // Wilds and jokers are suit-flexible: they don't conflict with
+      // either color. Pull them out, then check that every remaining
+      // non-flex card on the edge shares a color.
       const cards = edge
         .map(i => grid[i])
         .filter(
