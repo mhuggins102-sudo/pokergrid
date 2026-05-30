@@ -165,10 +165,12 @@ const colBoost = (colIdx: number, multiplier: number): BonusCard => {
 };
 
 // Per-suit-in-line: multiplies the line by 1.1 for each card of `suit` in it.
-// A 'double' supercharge counts as 2 cards of its suit (per the user's
-// "6 card flush could help with the ×1.1 multiplier for that suit"); wild
-// supercharges don't contribute to density — they're flexible for flush
-// evaluation only.
+// Per the Targets Up spec, supercharges DON'T scale the count here:
+//  - A 'wild' supercharge contributes nothing — wild's flexibility is
+//    for flush evaluation, not for boosting per-suit density bonuses.
+//  - A 'double' supercharge counts as ONE physical card of its suit
+//    (its 2× effect is for rank-count hand evaluation, not for
+//    density which is a per-physical-card tally).
 const suitDensity = (suit: Suit): BonusCard => ({
   id: `suit-density-${suit.toLowerCase()}`,
   name: `${SUIT_GLYPH[suit]} Density ×1.1 (each)`,
@@ -180,8 +182,9 @@ const suitDensity = (suit: Suit): BonusCard => ({
   lineEffect: (line, card) => {
     if (!line.hand) return {};
     const n = standardCards(line).reduce((acc, c) => {
+      if (c.supercharge === 'wild') return acc;
       if (c.suit !== suit) return acc;
-      return acc + (c.supercharge === 'double' ? 2 : 1);
+      return acc + 1;
     }, 0);
     const base = card.multValue ?? 1.1;
     return n > 0 ? { multiplier: Math.pow(base, n) } : {};
@@ -241,25 +244,14 @@ const rainbowLine: BonusCard = {
   baseMultValue: 2,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
-    // Wild-supercharged cards and jokers are suit-flexible — each one
-    // can stand in for whichever suit is still missing from the line.
-    // Count them separately and add to the distinct-standard-suits
-    // tally so a line of (H, S, D, wild) reads as 4 distinct suits
-    // even though the wild's ORIGINAL suit duplicated one of the
-    // standards. Capped naturally at 4 since the line has 5 cards.
-    let flexible = 0;
-    const distinctSuits = new Set<Suit>();
-    for (const c of line.cards) {
-      if (c === null) continue;
-      if (isJoker(c) || c.supercharge === 'wild') {
-        flexible += 1;
-      } else {
-        distinctSuits.add(c.suit);
-      }
-    }
-    return distinctSuits.size + flexible >= 4
-      ? { multiplier: card.multValue ?? 2 }
-      : {};
+    // Per the Targets Up spec: wilds count as their ORIGINAL suit
+    // here — their flexibility is reserved for flush evaluation, not
+    // for boosting Rainbow's distinct-suit tally. Jokers occupy a
+    // slot but contribute no suit (excluded by standardCards), so a
+    // line of 4 standards + 1 joker reads as the distinct count of
+    // those 4 standards.
+    const suits = new Set(standardCards(line).map(c => c.suit));
+    return suits.size >= 4 ? { multiplier: card.multValue ?? 2 } : {};
   },
 };
 
@@ -452,16 +444,17 @@ const rainbowCorners: BonusCard = {
     const cards = CORNER_SLOTS.map(i => grid[i]);
     // Empty corners block the achievement — we need all four filled.
     if (cards.some(c => c === null)) return {};
-    // Both the joker and wild-supercharged cards are suit-flexible:
-    // they can fill any missing suit. The achievement triggers iff
-    // the non-flexible corners have distinct suits among themselves
-    // (no duplicates), since the remaining flex cards can always be
-    // assigned the missing suits.
+    // Jokers stay suit-flexible (no suit at all → can fill whatever's
+    // missing). Per the Targets Up spec, wilds DON'T flex here — they
+    // count as their original suit. So a wild rolled H sitting on a
+    // corner blocks the achievement if another corner is also H, just
+    // like a normal H card would. The achievement triggers iff the
+    // non-joker corners have distinct suits among themselves.
     const nonFlexSuits: Suit[] = [];
     let flexCount = 0;
     for (const c of cards) {
       if (c === null) continue;
-      if (isJoker(c) || c.supercharge === 'wild') {
+      if (isJoker(c)) {
         flexCount += 1;
       } else {
         nonFlexSuits.push(c.suit);
