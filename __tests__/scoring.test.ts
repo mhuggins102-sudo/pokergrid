@@ -76,6 +76,33 @@ describe('scoring with bonus cards', () => {
     expect(row0.total).toBe(40);
   });
 
+  test('Suit Density: wild cards do NOT contribute', () => {
+    // Per the Targets Up spec, wilds are flush-flexible but don't
+    // boost the suit-density count. Line below has 2 hearts + 1
+    // wild that rolled H. Without the rule the wild would count
+    // as a 3rd H; with the rule density counts just 2.
+    const hearts = findCard('suit-density-h');
+    const wildH = { ...C('4', 'H'), supercharge: 'wild' as const };
+    const line = [C('6', 'H'), wildH, C('7', 'H'), C('9', 'C'), C('J', 'D')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hearts]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    // 2 hearts → ×1.1²; not 3 hearts → ×1.1³.
+    expect(row0.multiplier).toBeCloseTo(1.21);
+  });
+
+  test('Suit Density: double cards count as ONE card of their suit', () => {
+    // Per the Targets Up spec, a double card's 2× effect is for
+    // rank-count hand evaluation; it counts as a single physical
+    // card for suit density.
+    const hearts = findCard('suit-density-h');
+    const doubleH = { ...C('4', 'H'), supercharge: 'double' as const };
+    const line = [C('6', 'H'), doubleH, C('7', 'C'), C('9', 'D'), C('J', 'S')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hearts]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    // 2 hearts (one of which is a double) → ×1.1². Not ×1.1³.
+    expect(row0.multiplier).toBeCloseTo(1.21);
+  });
+
   test('Rainbow ×2 only triggers on lines with 4+ distinct suits', () => {
     const rainbow = findCard('rainbow-line-x2');
     // 4 distinct suits: H, C, D, S, H (suits: 4)
@@ -85,18 +112,26 @@ describe('scoring with bonus cards', () => {
     expect(row0.multiplier).toBe(2);
   });
 
-  test('Rainbow ×2 treats wild-supercharged cards as a flexible suit', () => {
-    // Regression: a wild that originally rolled a suit already in the
-    // line wasn't filling the missing 4th suit, so Rainbow failed to
-    // trigger even though the wild SHOULD have counted as the
-    // missing distinct suit. Line below has 3 distinct standard
-    // suits (H, C, D) plus a wild that originally rolled H — without
-    // the fix the wild's H duplicates, distinct count = 3, no
-    // trigger. With the fix the wild fills the missing S and the
-    // line reads as 4 distinct.
+  test('Rainbow ×2: wild cards count as their original suit (no flex bonus)', () => {
+    // Per the Targets Up spec, wilds DON'T help Rainbow — their
+    // flexibility is reserved for flush evaluation. A wild that
+    // originally rolled H counts as H here, so a line of (H, C, D,
+    // wildH, H) reads as 3 distinct suits and Rainbow doesn't fire.
     const rainbow = findCard('rainbow-line-x2');
     const wildH = { ...C('A', 'H'), supercharge: 'wild' as const };
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildH, C('K', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1);
+  });
+
+  test('Rainbow ×2: a wild rolled on a missing suit still triggers', () => {
+    // (H, C, D, wildS, H) has 4 distinct standard suits — the wild
+    // happens to be S, the missing suit, so even without flex it
+    // contributes the missing suit as its original. Trigger.
+    const rainbow = findCard('rainbow-line-x2');
+    const wildS = { ...C('A', 'S'), supercharge: 'wild' as const };
+    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildS, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
     expect(row0.multiplier).toBe(2);
