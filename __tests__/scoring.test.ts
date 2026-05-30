@@ -104,16 +104,16 @@ describe('scoring with bonus cards', () => {
     expect(row0.multiplier).toBeCloseTo(1.21);
   });
 
-  test('Rainbow ×2 only triggers on lines with 4+ distinct suits', () => {
+  test('Rainbow ×1.5 only triggers on lines with 4+ distinct suits', () => {
     const rainbow = findCard('rainbow-line-x2');
     // 4 distinct suits: H, C, D, S, H (suits: 4)
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(2);
+    expect(row0.multiplier).toBe(1.5);
   });
 
-  test('Rainbow ×2: a wild card is suit-flex (fills missing suit)', () => {
+  test('Rainbow ×1.5: a wild card is suit-flex (fills missing suit)', () => {
     // Wilds lose their original suit; the wild fills whichever suit
     // is missing from the line. (H, C, D, wildH, H) has 3 distinct
     // standard suits + 1 flex → 4 distinct → trigger.
@@ -122,10 +122,10 @@ describe('scoring with bonus cards', () => {
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildH, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(2);
+    expect(row0.multiplier).toBe(1.5);
   });
 
-  test('Rainbow ×2: a joker is also suit-flex', () => {
+  test('Rainbow ×1.5: a joker is also suit-flex', () => {
     // (H, C, D, joker, H) — 3 distinct standard suits + 1 flex
     // (joker as the missing 4th) → trigger. Mirrors the wild
     // behavior since both are suit-flexible.
@@ -133,10 +133,10 @@ describe('scoring with bonus cards', () => {
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), JOKER, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(2);
+    expect(row0.multiplier).toBe(1.5);
   });
 
-  test('Rainbow ×2: needs ≥ 4 distinct (3 standards + 1 flex is enough; 2 + 1 isn\'t)', () => {
+  test('Rainbow ×1.5: needs ≥ 4 distinct (3 standards + 1 flex is enough; 2 + 1 isn\'t)', () => {
     const rainbow = findCard('rainbow-line-x2');
     // 2 distinct standards (H, C) + 1 wild flex = 3 effective. No trigger.
     const wildH = { ...C('A', 'H'), supercharge: 'wild' as const };
@@ -526,37 +526,57 @@ describe('live-score ignore-penalty option', () => {
 });
 
 describe('grid-level achievements', () => {
-  test('Clean border ×1.5 applies only when no face cards on the border', () => {
+  test('Clean Border ×1.15 (each) — per-edge, stacks up to ×1.15⁴', () => {
     const clean = findCard('clean-border-x1_5');
-    // Fill the grid completely with non-face cards so only the border test matters.
+    // Fill the entire grid with non-face cards so all 4 edges qualify by default.
     const g: Grid = emptyGrid();
     const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
     const suitCycle: Suit[] = ['H', 'C', 'D', 'S'];
     for (let i = 0; i < 25; i++) {
       g[i] = C(ranks2to10[i % ranks2to10.length], suitCycle[i % suitCycle.length]);
     }
-    // Force a clean Pair on row 0 for a known scoring delta.
-    g[0] = C('2', 'H');
-    g[1] = C('2', 'C');
-    g[2] = C('5', 'D');
-    g[3] = C('8', 'S');
-    g[4] = C('10', 'H');
 
     const noBonus = scoreGrid(g, []).total;
     const withClean = scoreGrid(g, [clean]).total;
-    expect(withClean).toBe(Math.ceil(noBonus * 1.5));
+    // All 4 edges clean → ×1.15⁴.
+    expect(withClean).toBe(Math.ceil(noBonus * Math.pow(1.15, 4)));
 
-    // Place a face card on the border → bonus disabled.
-    g[20] = C('K', 'C');
-    const broken = scoreGrid(g, [clean]).total;
-    expect(broken).toBeLessThanOrEqual(scoreGrid(g, []).total);
+    // Place a face card on the top edge → that edge no longer clean.
+    // Bottom + left + right still clean (left/right also include slot 0/4
+    // corners which weren't touched, so they remain clean as long as
+    // we put the face card in a non-corner top slot). Slot 2 is the
+    // top edge only. After:
+    //   - top edge:    has K → not clean
+    //   - bottom edge: still clean
+    //   - left edge:   slot 0..20, no face → still clean
+    //   - right edge:  slot 4..24, no face → still clean
+    // → 3 edges qualify → ×1.15³.
+    g[2] = C('K', 'C');
+    const noBonusFace = scoreGrid(g, []).total;
+    const threeEdges = scoreGrid(g, [clean]).total;
+    expect(threeEdges).toBe(Math.ceil(noBonusFace * Math.pow(1.15, 3)));
   });
 
-  test('Monochrome Border ×1.15 (each) — per-edge, stacks up to ×1.15⁴', () => {
+  test('Clean Border: partially-filled edges do NOT qualify', () => {
+    const clean = findCard('clean-border-x1_5');
+    const g: Grid = emptyGrid();
+    // Fill only row 0 (the top edge) with non-face cards; leave the rest empty.
+    g[0] = C('2', 'H');
+    g[1] = C('3', 'C');
+    g[2] = C('5', 'D');
+    g[3] = C('8', 'S');
+    g[4] = C('10', 'H');
+    // No other edges are full → only the top edge qualifies.
+    const noBonus = scoreGrid(g, []).total;
+    const withClean = scoreGrid(g, [clean]).total;
+    expect(withClean).toBe(Math.ceil(noBonus * 1.15));
+  });
+
+  test('Monochrome Border ×1.1 (each) — per-edge, stacks up to ×1.1⁴', () => {
     const mono = findCard('monochrome-border-x1_75');
     // Fill the grid with a baseline of mixed-color borders so no edge
     // qualifies. We'll then flip edges to all-red one at a time and
-    // confirm each flip adds a single ×1.15 factor.
+    // confirm each flip adds a single ×1.1 factor.
     const g: Grid = emptyGrid();
     const ranks2to10: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
     const suitCycle: Suit[] = ['H', 'S', 'D', 'C'];
@@ -573,12 +593,24 @@ describe('grid-level achievements', () => {
     g[0] = C('2', 'H'); g[1] = C('3', 'D'); g[2] = C('4', 'H'); g[3] = C('5', 'D'); g[4] = C('6', 'H');
     const noBonusTop = scoreGrid(g, []).total;
     const oneEdge = scoreGrid(g, [mono]).total;
-    expect(oneEdge).toBe(Math.ceil(noBonusTop * 1.15));
+    expect(oneEdge).toBe(Math.ceil(noBonusTop * 1.1));
 
     // Bottom edge ALSO all red — second factor stacks multiplicatively.
     g[20] = C('7', 'H'); g[21] = C('8', 'D'); g[22] = C('9', 'H'); g[23] = C('10', 'D'); g[24] = C('2', 'H');
     const noBonusTwo = scoreGrid(g, []).total;
     const twoEdges = scoreGrid(g, [mono]).total;
-    expect(twoEdges).toBe(Math.ceil(noBonusTwo * 1.15 * 1.15));
+    expect(twoEdges).toBe(Math.ceil(noBonusTwo * 1.1 * 1.1));
+  });
+
+  test('Monochrome Border: partially-filled edges do NOT qualify', () => {
+    const mono = findCard('monochrome-border-x1_75');
+    const g: Grid = emptyGrid();
+    // Fill 4 of the 5 top-edge slots with all-red cards. With "must be
+    // full" the top edge no longer qualifies despite color agreement.
+    g[0] = C('2', 'H'); g[1] = C('3', 'D'); g[2] = C('4', 'H'); g[3] = C('5', 'D');
+    // Top edge missing slot 4 → not full → no bonus.
+    const noBonus = scoreGrid(g, []).total;
+    const withMono = scoreGrid(g, [mono]).total;
+    expect(withMono).toBe(noBonus);
   });
 });

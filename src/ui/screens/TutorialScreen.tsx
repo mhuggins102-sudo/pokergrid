@@ -334,7 +334,7 @@ const BonusVisual: React.FC<TutorialVisualProps> = ({
         ]}
       >
         <Text style={[demoStyles.bonusName, { color: colors.joker }]}>Clean Border</Text>
-        <Text style={demoStyles.bonusDesc}>×1.5 on the FINAL total (grid achievement).</Text>
+        <Text style={demoStyles.bonusDesc}>×1.15 per clean edge on the FINAL total (grid achievement).</Text>
       </View>
     </View>
     <Caption>
@@ -572,8 +572,8 @@ const ACHIEVEMENT_GROUPS: { label: string; entries: string[] }[] = [
   {
     label: 'Shape',
     entries: [
-      'Clean Border ×1.5',
-      'Monochrome Border ×1.15 each edge',
+      'Clean Border ×1.15 each edge',
+      'Monochrome Border ×1.1 each edge',
       'Rainbow Corners ×1.25',
       'Cozy Joker ×1.15 each',
       'Diagonal ×1.25 each',
