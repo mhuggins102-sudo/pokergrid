@@ -1,4 +1,4 @@
-import { Rank, StandardCard, Suit } from '../src/game/cards';
+import { Card, Rank, StandardCard, Suit } from '../src/game/cards';
 import {
   BonusCard,
   BONUS_DECK_POOL,
@@ -9,8 +9,9 @@ import { emptyGrid, Grid, GRID_SLOTS } from '../src/game/grid';
 import { bonusShapleyValues, HAND_BASE_VALUE, scoreGrid } from '../src/game/scoring';
 
 const C = (rank: Rank, suit: Suit): StandardCard => ({ kind: 'standard', rank, suit });
+const JOKER: Card = { kind: 'joker' };
 
-const gridWithRow0 = (line: StandardCard[]): Grid => {
+const gridWithRow0 = (line: Card[]): Grid => {
   const g: Grid = emptyGrid();
   for (let i = 0; i < 5; i++) g[i] = line[i];
   const junkRanks: Rank[] = ['2', '3', '4', '6', '7'];
@@ -112,29 +113,37 @@ describe('scoring with bonus cards', () => {
     expect(row0.multiplier).toBe(2);
   });
 
-  test('Rainbow ×2: wild cards count as their original suit (no flex bonus)', () => {
-    // Per the Targets Up spec, wilds DON'T help Rainbow — their
-    // flexibility is reserved for flush evaluation. A wild that
-    // originally rolled H counts as H here, so a line of (H, C, D,
-    // wildH, H) reads as 3 distinct suits and Rainbow doesn't fire.
+  test('Rainbow ×2: a wild card is suit-flex (fills missing suit)', () => {
+    // Wilds lose their original suit; the wild fills whichever suit
+    // is missing from the line. (H, C, D, wildH, H) has 3 distinct
+    // standard suits + 1 flex → 4 distinct → trigger.
     const rainbow = findCard('rainbow-line-x2');
     const wildH = { ...C('A', 'H'), supercharge: 'wild' as const };
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildH, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(1);
+    expect(row0.multiplier).toBe(2);
   });
 
-  test('Rainbow ×2: a wild rolled on a missing suit still triggers', () => {
-    // (H, C, D, wildS, H) has 4 distinct standard suits — the wild
-    // happens to be S, the missing suit, so even without flex it
-    // contributes the missing suit as its original. Trigger.
+  test('Rainbow ×2: a joker is also suit-flex', () => {
+    // (H, C, D, joker, H) — 3 distinct standard suits + 1 flex
+    // (joker as the missing 4th) → trigger. Mirrors the wild
+    // behavior since both are suit-flexible.
     const rainbow = findCard('rainbow-line-x2');
-    const wildS = { ...C('A', 'S'), supercharge: 'wild' as const };
-    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildS, C('K', 'H')];
+    const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), JOKER, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
     expect(row0.multiplier).toBe(2);
+  });
+
+  test('Rainbow ×2: needs ≥ 4 distinct (3 standards + 1 flex is enough; 2 + 1 isn\'t)', () => {
+    const rainbow = findCard('rainbow-line-x2');
+    // 2 distinct standards (H, C) + 1 wild flex = 3 effective. No trigger.
+    const wildH = { ...C('A', 'H'), supercharge: 'wild' as const };
+    const line = [C('2', 'H'), C('2', 'C'), C('5', 'C'), wildH, C('K', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1);
   });
 
   test('Row 3 ×2 only multiplies row index 2', () => {
