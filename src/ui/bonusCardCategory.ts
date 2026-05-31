@@ -22,7 +22,11 @@ export type BonusCategory =
   | 'suit'
   | 'conditional'
   | 'grid'
-  | 'deck-management';
+  | 'deck-management'
+  // One-time-use action cards (Three Tricks challenge). No scoring
+  // effect; rendered in green to set them apart from the yellow
+  // (in-game) and purple (end-game) multiplier categories.
+  | 'special';
 
 // Cards in the "Row / Column bonus" category that aren't row-N / col-N —
 // they target specific lines by LOCATION rather than by conditional on the
@@ -54,6 +58,9 @@ const DECK_MANAGEMENT_IDS = new Set([
 ]);
 
 export const categoryOf = (card: BonusCard): BonusCategory => {
+  // One-time action cards (Three Tricks) — bypass the id-prefix dispatch
+  // since they declare their nature via specialKind directly.
+  if (card.specialKind) return 'special';
   // Power-ups append a "-pwrN" suffix to the id (see powerUpBonusCard in
   // src/game/bonusCards.ts). Strip it before matching so a powered-up
   // Rainbow stays in the 'conditional' bucket instead of falling through
@@ -91,13 +98,15 @@ const CATEGORY_ICON: Record<BonusCategory, string> = {
   conditional: '✦',       // per-line conditional — spark
   grid: '▦',              // grid achievement — full-board pattern
   'deck-management': '▤', // deck management — horizontal stack (cards in a deck)
+  special: '★',           // one-time action — star (consume-on-use)
 };
 
 // In-game icons all share the warn tint; end-game multiplier categories
 // (grid + deck-management) use the joker tint so the player reads tone
 // → trigger time without memorizing each card. Suit-density overrides
 // this with the actual suit's color so colorblind players can still
-// tell the four density cards apart.
+// tell the four density cards apart. 'special' uses the success green
+// to match its chip border.
 const CATEGORY_ICON_COLOR: Record<BonusCategory, string> = {
   hand: colors.warn,
   line: colors.warn,
@@ -105,6 +114,7 @@ const CATEGORY_ICON_COLOR: Record<BonusCategory, string> = {
   conditional: colors.warn,
   grid: colors.joker,
   'deck-management': colors.joker,
+  special: colors.success,
 };
 
 export const CATEGORY_LABEL: Record<BonusCategory, string> = {
@@ -114,13 +124,16 @@ export const CATEGORY_LABEL: Record<BonusCategory, string> = {
   conditional: 'Per-line conditional',
   grid: 'Grid achievement',
   'deck-management': 'Deck management',
+  special: 'One-time action',
 };
 
-// Two tones: yellow = pays out during the run, purple = pays out at
-// game end. Every in-game category shares yellow; only grid-achievement
-// uses purple. Players read "what color is the chip?" → "when does it
-// fire?" without needing to memorize each card.
-type CategoryTone = 'yellow' | 'purple';
+// Three tones: yellow = pays out during the run, purple = pays out at
+// game end, green = one-time consumable action. Every in-game scoring
+// category shares yellow; grid-achievement / deck-management share
+// purple; the Three Tricks specials share green. Players read "what
+// color is the chip?" → "when does it fire?" without needing to
+// memorize each card.
+type CategoryTone = 'yellow' | 'purple' | 'green';
 
 const TONE_OF: Record<BonusCategory, CategoryTone> = {
   hand: 'yellow',
@@ -129,11 +142,13 @@ const TONE_OF: Record<BonusCategory, CategoryTone> = {
   line: 'yellow',
   grid: 'purple',
   'deck-management': 'purple',
+  special: 'green',
 };
 
 const TONE_COLOR: Record<CategoryTone, string> = {
   yellow: colors.warn,
   purple: colors.joker,
+  green: colors.success,
 };
 
 const withAlpha = (hex: string, alpha: number): string => {

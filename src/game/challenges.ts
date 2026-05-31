@@ -20,7 +20,8 @@ export type ChallengeId =
   | 'short-deck'
   | 'no-discards'
   | 'short-circuit'
-  | 'poker-purist';
+  | 'poker-purist'
+  | 'three-tricks';
 
 export interface Challenge {
   id: ChallengeId;
@@ -72,6 +73,16 @@ export const CHALLENGES: Challenge[] = [
     // Enforced at newGame: bonusCards and bonusDeck are both empty,
     // which naturally disables ♣ (canDrawBonus returns false) and
     // hides the bonus card strip in the UI.
+    conditionMet: () => true,
+  },
+  {
+    id: 'three-tricks',
+    name: 'Three Tricks',
+    goal: 'Score 500+ with no bonus-card deck. You start holding three one-time action cards: Power Swap (swap any two grid cards), The Doubler (turn a card into a "double"), and Wildcard (turn a card into a wild). Each is consumed on use.',
+    scoreTarget: 500,
+    // Enforced at newGame: noBonusCards strips the regular bonus deck,
+    // and initialBonusCards seeds the hand with the three specials.
+    // App.tsx wires the seeding via contextInitialBonusCards.
     conditionMet: () => true,
   },
 ];

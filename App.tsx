@@ -3,7 +3,12 @@ import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { BonusCard } from './src/game/bonusCards';
+import {
+  BonusCard,
+  DOUBLER_CARD,
+  POWER_SWAP_CARD,
+  WILDCARD_CARD,
+} from './src/game/bonusCards';
 import { Card } from './src/game/cards';
 import {
   ChallengeId,
@@ -366,11 +371,22 @@ const contextNoDiscards = (ctx: PlayContext): boolean =>
 const contextRandomPerks = (ctx: PlayContext): boolean =>
   ctx.mode === 'challenge' && ctx.id === 'short-circuit';
 
-// Poker Purist: zero bonus cards anywhere. newGame uses this to
-// empty both the starter hand and the bonus deck; GameScreen hides
-// the bonus card strip when this flag is on.
+// Poker Purist + Three Tricks: zero bonus cards in the regular draw
+// deck. newGame uses this to empty both the starter hand and the bonus
+// deck; GameScreen hides the bonus card strip when this flag is on AND
+// the hand is empty. Three Tricks reuses noBonusCards but seeds the
+// hand with the three specials via initialBonusCards (below).
 const contextNoBonusCards = (ctx: PlayContext): boolean =>
-  ctx.mode === 'challenge' && ctx.id === 'poker-purist';
+  ctx.mode === 'challenge' &&
+  (ctx.id === 'poker-purist' || ctx.id === 'three-tricks');
+
+// Three Tricks: seed the bonus hand with the three one-time action
+// cards. newGame uses these instead of the normal starter draw when
+// noBonusCards is true.
+const contextInitialBonusCards = (ctx: PlayContext): BonusCard[] => {
+  if (ctx.mode !== 'challenge' || ctx.id !== 'three-tricks') return [];
+  return [POWER_SWAP_CARD, DOUBLER_CARD, WILDCARD_CARD];
+};
 
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
@@ -393,7 +409,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     superchargedDeckCards,
     contextNoDiscards(context),
     contextRandomPerks(context),
-    contextNoBonusCards(context)
+    contextNoBonusCards(context),
+    contextInitialBonusCards(context)
   );
   if (state.phase.kind === 'game-over') {
     return (

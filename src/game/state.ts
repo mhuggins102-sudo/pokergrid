@@ -6,6 +6,7 @@ import {
   BonusCard,
   BONUS_DECK_POOL,
   BONUS_HAND_LIMIT,
+  isSpecialCard,
   SPOTLIGHT_ID,
 } from './bonusCards';
 import {
@@ -32,8 +33,10 @@ import {
   executeDestroy,
   executeHop,
   executeSlide,
+  occupiedSlots,
   SlideMove,
   slideDestinationsFrom,
+  supercharchableSlots,
   validHopSwaps,
   validSlideSources,
 } from './actions';
@@ -65,6 +68,36 @@ export type Phase =
       kind: 'bonus-card-replacing';
       drawn: BonusCard[];
       pickedNew: number; // index into drawn
+      returnTo: TargetReturnTo;
+    }
+  // Three Tricks challenge — special-card activation phases. `cardIdx`
+  // points back into state.bonusCards so the handler can remove the
+  // consumed card on commit. `slots` is the precomputed list of valid
+  // grid targets (all occupied non-joker slots for doubler / wildcard,
+  // all occupied slots for power-swap).
+  | {
+      kind: 'awaiting-special-power-swap-source';
+      cardIdx: number;
+      slots: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-special-power-swap-dest';
+      cardIdx: number;
+      source: number;
+      slots: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-special-doubler';
+      cardIdx: number;
+      slots: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-special-wildcard';
+      cardIdx: number;
+      slots: number[];
       returnTo: TargetReturnTo;
     }
   | { kind: 'game-over' };
@@ -138,6 +171,13 @@ export type Action =
   | { type: 'BONUS_REPLACE'; oldIdx: number }
   | { type: 'BONUS_DECLINE' }
   | { type: 'CANCEL_ACTION' }
+  // Three Tricks: activate a held special card. The current draw is NOT
+  // spent — these are independent of the suit-perk flow.
+  | { type: 'ACTIVATE_SPECIAL_CARD'; idx: number }
+  | { type: 'RESOLVE_POWER_SWAP_SOURCE'; slot: number }
+  | { type: 'RESOLVE_POWER_SWAP'; i: number; j: number }
+  | { type: 'RESOLVE_DOUBLER'; slot: number }
+  | { type: 'RESOLVE_WILDCARD'; slot: number }
   | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -201,7 +241,13 @@ export const newGame = (
   // Both the starting hand and the bonus deck are emptied; ♣ becomes
   // unavailable (canDrawBonus → false against an empty deck) and the
   // UI hides the bonus card strip.
-  noBonusCards = false
+  noBonusCards = false,
+  // Three Tricks challenge: a fixed initial bonus hand that REPLACES
+  // the normal starter draw. Combined with noBonusCards=true the
+  // player starts with these specific cards (the three one-time
+  // specials) and the bonus deck stays empty, so the ♣ perk can't
+  // draw anything.
+  initialBonusCards: BonusCard[] = []
 ): GameState => {
   // Joker count is determined by difficulty (Easy ships 2 jokers, Hard
   // ships 1, Extreme ships 0). Targets-Up infers difficulty from level
@@ -252,14 +298,16 @@ export const newGame = (
   const shuffledBonus = shuffle(drawable, rng);
   // Poker Purist short-circuits the whole bonus setup — no starter
   // draw, no shuffled deck, no carry-overs. Hand and deck both stay
-  // empty for the entire run.
+  // empty for the entire run. Three Tricks rides on top of this:
+  // noBonusCards stays true (no draw deck, no ♣) but the assembled
+  // hand is seeded with the three special action cards.
   const starterCount = noBonusCards ? 0 : STARTER_BONUS_BY_DIFFICULTY[difficulty];
   // Player's hand starts with the kept carry-overs first, then the
   // difficulty-based free starter on top (capped at BONUS_HAND_LIMIT just
   // in case future power-ups push the carry to 3 cards on hard).
   const starterDraw = noBonusCards ? [] : shuffledBonus.slice(0, starterCount);
   const assembledHand = noBonusCards
-    ? []
+    ? initialBonusCards.slice(0, BONUS_HAND_LIMIT)
     : [...keptBonusCards, ...starterDraw].slice(0, BONUS_HAND_LIMIT);
   // Apply Spotlight's exclusivity rule if the starter draw or a
   // carry-over brought Spotlight into the hand alongside anything
@@ -482,6 +530,118 @@ const handleResolveDestroy = (s: GameState, slot: number): GameState => {
   return drawNext(log(pushPerkSpent(afterTarget, s.drawn), `Destroy slot ${slot}`));
 };
 
+// ---------- special card handlers (Three Tricks challenge) ----------
+
+// Remove the special card at `cardIdx` from the bonus hand. Used by every
+// special-card resolver on commit so the card is consumed.
+const consumeSpecial = (s: GameState, cardIdx: number): BonusCard[] => {
+  return s.bonusCards.filter((_, i) => i !== cardIdx);
+};
+
+const handleActivateSpecial = (s: GameState, idx: number): GameState => {
+  if (s.phase.kind !== 'awaiting-action') return s;
+  if (idx < 0 || idx >= s.bonusCards.length) return s;
+  const card = s.bonusCards[idx];
+  if (!isSpecialCard(card)) return s;
+  switch (card.specialKind) {
+    case 'power-swap': {
+      const slots = occupiedSlots(s.grid);
+      // Need at least two cards on the grid to swap. With a partially
+      // filled board this can theoretically fail; reject gracefully.
+      if (slots.length < 2) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-power-swap-source',
+          cardIdx: idx,
+          slots,
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+    case 'doubler':
+    case 'wildcard': {
+      const slots = supercharchableSlots(s.grid);
+      if (slots.length === 0) return s;
+      return {
+        ...s,
+        phase: {
+          kind:
+            card.specialKind === 'doubler'
+              ? 'awaiting-special-doubler'
+              : 'awaiting-special-wildcard',
+          cardIdx: idx,
+          slots,
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+  }
+  return s;
+};
+
+const handlePowerSwapSource = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-power-swap-source') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  return {
+    ...s,
+    phase: {
+      kind: 'awaiting-special-power-swap-dest',
+      cardIdx: s.phase.cardIdx,
+      source: slot,
+      // Any other occupied slot is a valid dest.
+      slots: s.phase.slots.filter(i => i !== slot),
+      returnTo: s.phase.returnTo,
+    },
+  };
+};
+
+const handlePowerSwap = (s: GameState, i: number, j: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-power-swap-dest') return s;
+  if (s.phase.source !== i && s.phase.source !== j) return s;
+  const a = s.grid[i];
+  const b = s.grid[j];
+  if (!a || !b) return s;
+  const grid = s.grid.slice();
+  grid[i] = b;
+  grid[j] = a;
+  const newHand = consumeSpecial(s, s.phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Power Swap ${i}↔${j}`
+  );
+};
+
+const handleResolveDoubler = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-doubler') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  const card = s.grid[slot];
+  if (!card || isJoker(card)) return s;
+  const grid = s.grid.slice();
+  // Re-supercharging replaces any prior supercharge (matches Targets Up
+  // semantics — see cards.ts Supercharge comment).
+  grid[slot] = { ...card, supercharge: 'double' };
+  const newHand = consumeSpecial(s, s.phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Doubler on slot ${slot}`
+  );
+};
+
+const handleResolveWildcard = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-wildcard') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  const card = s.grid[slot];
+  if (!card || isJoker(card)) return s;
+  const grid = s.grid.slice();
+  grid[slot] = { ...card, supercharge: 'wild' };
+  const newHand = consumeSpecial(s, s.phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Wildcard on slot ${slot}`
+  );
+};
+
 // ---------- bonus card handlers ----------
 
 // Send `drawn` cards back to bottom of bonus deck (in the given order), then
@@ -623,10 +783,26 @@ const handleCancelAction = (s: GameState): GameState => {
           returnTo: s.phase.returnTo,
         },
       };
+    case 'awaiting-special-power-swap-dest':
+      // Back to source selection within the same power-swap flow —
+      // includes the previously-picked source as a valid candidate
+      // again so the player can re-pick the first card.
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-power-swap-source',
+          cardIdx: s.phase.cardIdx,
+          slots: occupiedSlots(s.grid),
+          returnTo: s.phase.returnTo,
+        },
+      };
     case 'awaiting-target-hop':
     case 'awaiting-target-slide-source':
     case 'awaiting-target-destroy':
     case 'bonus-card-resolving':
+    case 'awaiting-special-power-swap-source':
+    case 'awaiting-special-doubler':
+    case 'awaiting-special-wildcard':
       return { ...s, phase: { kind: s.phase.returnTo } };
   }
 };
@@ -643,6 +819,11 @@ const SNAP_ACTIONS = new Set<Action['type']>([
   'BONUS_KEEP',
   'BONUS_REPLACE',
   'BONUS_DECLINE',
+  // Special-card commits — each consumes a one-time card and mutates the
+  // grid, so undo should restore both.
+  'RESOLVE_POWER_SWAP',
+  'RESOLVE_DOUBLER',
+  'RESOLVE_WILDCARD',
 ]);
 
 const handleUndo = (s: GameState): GameState => {
@@ -699,6 +880,21 @@ export const step = (
       break;
     case 'CANCEL_ACTION':
       next = handleCancelAction(state);
+      break;
+    case 'ACTIVATE_SPECIAL_CARD':
+      next = handleActivateSpecial(state, action.idx);
+      break;
+    case 'RESOLVE_POWER_SWAP_SOURCE':
+      next = handlePowerSwapSource(state, action.slot);
+      break;
+    case 'RESOLVE_POWER_SWAP':
+      next = handlePowerSwap(state, action.i, action.j);
+      break;
+    case 'RESOLVE_DOUBLER':
+      next = handleResolveDoubler(state, action.slot);
+      break;
+    case 'RESOLVE_WILDCARD':
+      next = handleResolveWildcard(state, action.slot);
       break;
   }
   if (next === state) return state;
