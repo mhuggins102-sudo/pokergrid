@@ -54,12 +54,18 @@ const DECK_MANAGEMENT_IDS = new Set([
 ]);
 
 export const categoryOf = (card: BonusCard): BonusCategory => {
-  if (card.id.startsWith('hand-')) return 'hand';
-  if (card.id.startsWith('row-') || card.id.startsWith('col-')) return 'line';
-  if (LINE_LOCATION_IDS.has(card.id)) return 'line';
-  if (card.id.startsWith('suit-density-')) return 'suit';
-  if (CONDITIONAL_IDS.has(card.id)) return 'conditional';
-  if (DECK_MANAGEMENT_IDS.has(card.id)) return 'deck-management';
+  // Power-ups append a "-pwrN" suffix to the id (see powerUpBonusCard in
+  // src/game/bonusCards.ts). Strip it before matching so a powered-up
+  // Rainbow stays in the 'conditional' bucket instead of falling through
+  // to the default 'grid' (which would flip its chip from yellow to
+  // purple).
+  const baseId = card.id.replace(/-pwr\d+$/, '');
+  if (baseId.startsWith('hand-')) return 'hand';
+  if (baseId.startsWith('row-') || baseId.startsWith('col-')) return 'line';
+  if (LINE_LOCATION_IDS.has(baseId)) return 'line';
+  if (baseId.startsWith('suit-density-')) return 'suit';
+  if (CONDITIONAL_IDS.has(baseId)) return 'conditional';
+  if (DECK_MANAGEMENT_IDS.has(baseId)) return 'deck-management';
   return 'grid';
 };
 
