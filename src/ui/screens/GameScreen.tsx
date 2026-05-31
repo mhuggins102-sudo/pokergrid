@@ -95,7 +95,8 @@ type HintId =
   | 'first-scoring-line'
   | 'scoring-info'
   | 'line-value'
-  | 'low-deck';
+  | 'low-deck'
+  | 'special-cards';
 
 const HINT_TITLE: Record<HintId, string> = {
   joker: 'Meet the joker',
@@ -110,6 +111,7 @@ const HINT_TITLE: Record<HintId, string> = {
   'scoring-info': 'Hand value reference',
   'line-value': "Check a line's value",
   'low-deck': 'Deck running low',
+  'special-cards': 'Special action cards',
 };
 
 const HINT_BODY: Record<HintId, string> = {
@@ -137,6 +139,8 @@ const HINT_BODY: Record<HintId, string> = {
     "Tap any row label (R1–R5) or column label (C1–C5) to see that line's current score breakdown, including any bonus card multipliers.",
   'low-deck':
     'The deck is almost empty. The run ends when the deck runs out or the grid fills up. Lines you haven\'t completed by then cost -25 each, so plan your last few placements carefully.',
+  'special-cards':
+    "These green chips are one-time action cards — they don't multiply your score. Tap any chip, then tap Use to activate: Power Swap exchanges any two grid cards, The Doubler turns a card into a 2× double, and Wildcard makes a card's suit flexible. Each is consumed on use.",
 };
 
 // Lower bound on cards-placed before the grid-effect hint can fire.
@@ -168,6 +172,7 @@ const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
   'scoring-info': 'seenScoringInfoHint',
   'line-value': 'seenLineValueHint',
   'low-deck': 'seenLowDeckHint',
+  'special-cards': 'seenSpecialCardsHint',
 };
 
 // Drawn-card area: card fades + scales in on every change so each new draw
@@ -510,8 +515,25 @@ export const GameScreen = ({
     if (!settings.seenJokerHint && state.grid.some(c => c !== null && isJoker(c))) {
       return 'joker';
     }
-    if (!settings.seenBonusHeldHint && state.bonusCards.length >= 1) {
+    if (
+      !settings.seenBonusHeldHint &&
+      state.bonusCards.length >= 1 &&
+      // Skip when every held card is a one-time-use special (Three
+      // Tricks). The hint text describes the yellow / purple tone
+      // signal, which doesn't apply to the green specials.
+      state.bonusCards.some(c => !c.specialKind)
+    ) {
       return 'bonus-held';
+    }
+    // Three Tricks specials get their own onboarding hint that
+    // explains the tap-chip → Use flow and the one-time-consumption
+    // behavior. Fires the first time the player is holding at least
+    // one special card.
+    if (
+      !settings.seenSpecialCardsHint &&
+      state.bonusCards.some(c => !!c.specialKind)
+    ) {
+      return 'special-cards';
     }
     if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
       return 'bonus-cap';
@@ -597,6 +619,11 @@ export const GameScreen = ({
         // Span all three chips together — the lesson IS that the hand
         // is full, so highlighting the whole row reads better than
         // singling out one chip.
+        return measure(bonusStripRef.current);
+      case 'special-cards':
+        // Same framing as bonus-cap — the lesson is about the row as a
+        // whole (three one-time action cards seeded by the challenge),
+        // so highlight the whole strip rather than a single chip.
         return measure(bonusStripRef.current);
       case 'grid-effect': {
         const idx = gridContributingCardIdx();
@@ -859,6 +886,43 @@ export const GameScreen = ({
           );
         }
       }
+    } else if (p.kind === 'awaiting-special-power-swap-source') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'RESOLVE_POWER_SWAP_SOURCE', slot: idx });
+        setSelectedSlot(idx);
+      }
+    } else if (p.kind === 'awaiting-special-power-swap-dest') {
+      if (idx === p.source) {
+        // Tap the source again to deselect — back out to source phase.
+        setSelectedSlot(null);
+        dispatch({ type: 'CANCEL_ACTION' });
+      } else if (p.slots.includes(idx)) {
+        const cardA = state.grid[p.source];
+        const cardB = state.grid[idx];
+        if (cardA && cardB) {
+          haptic('swap');
+          playSound('swap');
+          performAnimated(
+            { kind: 'swap', cardA, slotA: p.source, cardB, slotB: idx },
+            { type: 'RESOLVE_POWER_SWAP', i: p.source, j: idx }
+          );
+          setSelectedSlot(null);
+        }
+      }
+    } else if (p.kind === 'awaiting-special-doubler') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'RESOLVE_DOUBLER', slot: idx });
+      }
+    } else if (p.kind === 'awaiting-special-wildcard') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'RESOLVE_WILDCARD', slot: idx });
+      }
     }
   };
 
@@ -884,6 +948,18 @@ export const GameScreen = ({
       out.add(p.source);
     } else if (p.kind === 'awaiting-target-destroy') {
       for (const t of p.targets) out.add(t);
+    } else if (p.kind === 'awaiting-special-power-swap-source') {
+      for (const s of p.slots) out.add(s);
+    } else if (p.kind === 'awaiting-special-power-swap-dest') {
+      // Source stays highlighted (so the player can see what they
+      // picked) plus every legal destination.
+      out.add(p.source);
+      for (const s of p.slots) out.add(s);
+    } else if (
+      p.kind === 'awaiting-special-doubler' ||
+      p.kind === 'awaiting-special-wildcard'
+    ) {
+      for (const s of p.slots) out.add(s);
     }
     return out;
   }, [state.phase, selectedSlot]);
@@ -1188,7 +1264,11 @@ export const GameScreen = ({
           infoBtnRef={scoreInfoBtnRef}
         />
       </View>
-      {!state.noBonusCards && (
+      {(!state.noBonusCards || state.bonusCards.length > 0) && (
+        // noBonusCards hides the bonus deck (no ♣ draws), but the strip
+        // itself stays visible whenever the player is holding at least
+        // one card — Three Tricks seeds the hand with three one-time
+        // specials even though the regular deck is empty.
         <View ref={bonusStripRef} collapsable={false}>
           <BonusCardStrip
             cards={state.bonusCards}
@@ -1263,6 +1343,19 @@ export const GameScreen = ({
         card={bonusDetailIdx !== null ? state.bonusCards[bonusDetailIdx] ?? null : null}
         currentValue={bonusDetailIdx !== null ? bonusValues[bonusDetailIdx] : undefined}
         onClose={() => setBonusDetailIdx(null)}
+        // Wire the Three Tricks activation flow — the modal's "Use"
+        // button only renders for cards with a specialKind, so this
+        // callback is a no-op for normal bonus cards.
+        onUse={
+          bonusDetailIdx !== null &&
+          state.phase.kind === 'awaiting-action'
+            ? () => {
+                haptic('light');
+                playSound('tap');
+                dispatch({ type: 'ACTIVATE_SPECIAL_CARD', idx: bonusDetailIdx });
+              }
+            : undefined
+        }
       />
       <RemainingDeckModal
         visible={deckPreviewOpen}
@@ -2033,6 +2126,96 @@ const renderBottom = (
               onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
             />
           )}
+        </View>
+      </View>
+    );
+  }
+
+  // Three Tricks special-card flows. The drawn card is preserved through
+  // each of these — the special activation is independent of the suit
+  // perk flow, so after committing the player still has the same drawn
+  // card to place / discard / perk-spend.
+  if (
+    p.kind === 'awaiting-special-power-swap-source' ||
+    p.kind === 'awaiting-special-power-swap-dest'
+  ) {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-power-swap'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Power Swap</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            {p.kind === 'awaiting-special-power-swap-source'
+              ? 'Tap any card on the grid. Then tap a second card to swap with it.'
+              : 'Tap a second card to complete the swap. Tap the first card again to deselect.'}
+          </Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-special-doubler') {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-doubler'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Doubler</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap a card on the grid to turn it into a double. Jokers can't be picked.
+          </Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-special-wildcard') {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-wildcard'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Wildcard</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap a card on the grid to turn it into a wild. Jokers can't be picked.
+          </Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
         </View>
       </View>
     );

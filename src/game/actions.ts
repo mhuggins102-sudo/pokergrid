@@ -13,6 +13,31 @@ import {
   slideTargets,
 } from './grid';
 
+// ---------- Generic grid queries (shared by special-card flows) ----------
+
+// All occupied slot indices. Used by Power Swap (any two cards on the
+// grid) and Doubler / Wildcard (any one card on the grid).
+export const occupiedSlots = (grid: Grid): number[] => {
+  const out: number[] = [];
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    if (grid[i] !== null) out.push(i);
+  }
+  return out;
+};
+
+// Occupied standard-card slots only (jokers excluded). Doubler / Wildcard
+// can't supercharge a joker — jokers carry no rank or suit, so neither
+// the 'double' (per-rank tally) nor the 'wild' (suit-flex) supercharge
+// makes sense on them.
+export const supercharchableSlots = (grid: Grid): number[] => {
+  const out: number[] = [];
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    const c = grid[i];
+    if (c !== null && !isJoker(c)) out.push(i);
+  }
+  return out;
+};
+
 // ---------- ♥ Hop (heart) ----------
 // Swap any two cards that share a row OR share a column. Suit and pip are
 // irrelevant. Joker is a valid participant.

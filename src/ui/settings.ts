@@ -34,6 +34,10 @@ export interface Settings {
   seenScoringInfoHint: boolean;
   seenLineValueHint: boolean;
   seenLowDeckHint: boolean;
+  // Three Tricks challenge: fires the first time the player is holding
+  // a special (one-time action) card, explaining the tap-chip → Use
+  // flow and that the card is consumed on commit.
+  seenSpecialCardsHint: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   seenScoringInfoHint: false,
   seenLineValueHint: false,
   seenLowDeckHint: false,
+  seenSpecialCardsHint: false,
 };
 
 // Every one-time-acknowledgement flag, in one place. Used by Settings →
@@ -74,6 +79,7 @@ export const HINT_KEYS: (keyof Settings)[] = [
   'seenScoringInfoHint',
   'seenLineValueHint',
   'seenLowDeckHint',
+  'seenSpecialCardsHint',
 ];
 
 // Build a patch that sets every hint flag back to false (un-seen).

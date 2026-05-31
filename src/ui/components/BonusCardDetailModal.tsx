@@ -1,7 +1,8 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { BonusCard } from '../../game/bonusCards';
+import { BonusCard, isSpecialCard } from '../../game/bonusCards';
 import { styleFor } from '../bonusCardCategory';
+import { NeonButton } from './NeonButton';
 import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -12,13 +13,18 @@ interface Props {
   // When provided we show it below the description.
   currentValue?: number;
   onClose: () => void;
+  // Three Tricks: when the card is a one-time action, this callback
+  // wires the modal's "Use" button to the activation flow. Omitted in
+  // normal play, since standard bonus cards aren't manually activated.
+  onUse?: () => void;
 }
 
-export const BonusCardDetailModal = ({ visible, card, currentValue, onClose }: Props) => {
+export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onUse }: Props) => {
   const { settings } = useSettings();
   if (!card) return null;
   const cat = styleFor(card);
   const showValue = currentValue !== undefined;
+  const showUse = !!onUse && isSpecialCard(card);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -66,6 +72,19 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose }: P
               >
                 {currentValue! > 0 ? `+${currentValue}` : currentValue === 0 ? '—' : `${currentValue}`}
               </Text>
+            </View>
+          )}
+          {showUse && (
+            <View style={styles.useRow}>
+              <NeonButton
+                label="Use"
+                variant="primary"
+                size="md"
+                onPress={() => {
+                  onUse?.();
+                  onClose();
+                }}
+              />
             </View>
           )}
         </Pressable>
@@ -179,5 +198,9 @@ const styles = StyleSheet.create({
     color: colors.success,
     textShadowColor: colors.success,
     textShadowRadius: 4,
+  },
+  useRow: {
+    marginTop: spacing.lg,
+    alignItems: 'stretch',
   },
 });

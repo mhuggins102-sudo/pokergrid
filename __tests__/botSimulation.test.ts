@@ -331,6 +331,13 @@ const pickAction = (s: GameState): Action => {
       }
       return { type: 'BONUS_REPLACE', oldIdx: bestIdx };
     }
+    case 'awaiting-special-power-swap-source':
+    case 'awaiting-special-power-swap-dest':
+    case 'awaiting-special-doubler':
+    case 'awaiting-special-wildcard':
+      // Three Tricks specials don't appear in the bot's Free Play
+      // simulation. If they ever do, just bail out cleanly.
+      return { type: 'CANCEL_ACTION' };
     case 'game-over':
       throw new Error('pickAction called on game-over state');
   }

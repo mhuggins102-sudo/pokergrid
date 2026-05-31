@@ -74,7 +74,50 @@ export interface BonusCard {
   baseMultValue?: number;
   // Count of power-ups applied. 0 / undefined = original.
   powerLevel?: number;
+  // One-time-use action cards (Three Tricks challenge). When set, the
+  // card has no scoring effect — tapping it activates a grid-targeting
+  // flow and the card is consumed on commit. These live in the regular
+  // bonus-card slots but render with a distinct (green) border to set
+  // them apart from in-game (yellow) and end-game (purple) multipliers.
+  specialKind?: 'power-swap' | 'doubler' | 'wildcard';
 }
+
+// Three "Three Tricks" challenge special cards. Each one is a single-use
+// action triggered by tapping the chip; none of them participate in
+// scoring (no lineEffect / gridEffect). They live in the regular bonus
+// hand slots so the strip layout is unchanged.
+export const POWER_SWAP_CARD: BonusCard = {
+  id: 'special-power-swap',
+  name: 'Power Swap',
+  title: 'Power Swap',
+  mult: 'one-time',
+  description:
+    'Pick any two cards on the grid and swap them. No row / column restriction. Consumed on use.',
+  specialKind: 'power-swap',
+};
+
+export const DOUBLER_CARD: BonusCard = {
+  id: 'special-doubler',
+  name: 'The Doubler',
+  title: 'The Doubler',
+  mult: 'one-time',
+  description:
+    'Pick a card on the grid and turn it into a "double" — it counts as two of the same rank for pair-class hands and adds +1 to per-suit density. Consumed on use.',
+  specialKind: 'doubler',
+};
+
+export const WILDCARD_CARD: BonusCard = {
+  id: 'special-wildcard',
+  name: 'Wildcard',
+  title: 'Wildcard',
+  mult: 'one-time',
+  description:
+    "Pick a card on the grid and turn it into a wild — its suit becomes flexible for flush / straight-flush evaluation. Rank is unchanged. Consumed on use.",
+  specialKind: 'wildcard',
+};
+
+export const isSpecialCard = (c: BonusCard): boolean =>
+  c.specialKind !== undefined;
 
 // Helpers
 const standardCards = (line: LineContext) =>

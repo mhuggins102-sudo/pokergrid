@@ -663,39 +663,44 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       </View>
 
       <View style={styles.btnRow}>
-        {context.mode === 'targets-up' && won ? (
-          // For S/SS the button label switches between "Rewards →" and
-          // "Next →" depending on whether the modal has run; for A it
-          // just reads "Next →" since there are no rewards to pick.
-          // Tap behavior mirrors that — Rewards opens the modal, Next
-          // calls onAdvance with the carry-overs we computed up top.
-          tierRequiresRewards && rewards === null ? (
-            <NeonButton
-              label="Rewards →"
-              variant="primary"
-              size="lg"
-              onPress={() => setRewardsOpen(true)}
-              style={{ flex: 1 }}
-            />
-          ) : (
-            <NeonButton
-              label="Next"
-              variant="primary"
-              size="lg"
-              disabled={!advanceReady}
-              onPress={() =>
-                onAdvance(
-                  allDeckExtras,
-                  allSuperchargedDeckCards,
-                  nextLastKeptBaseId !== null
-                    ? nextLastKeptBaseId
-                    : lastKeptBaseId
-                )
-              }
-              style={{ flex: 1 }}
-            />
-          )
+        {context.mode === 'targets-up' ? (
+          won ? (
+            // For S/SS the button label switches between "Rewards →" and
+            // "Next →" depending on whether the modal has run; for A it
+            // just reads "Next →" since there are no rewards to pick.
+            // Tap behavior mirrors that — Rewards opens the modal, Next
+            // calls onAdvance with the carry-overs we computed up top.
+            tierRequiresRewards && rewards === null ? (
+              <NeonButton
+                label="Rewards →"
+                variant="primary"
+                size="lg"
+                onPress={() => setRewardsOpen(true)}
+                style={{ flex: 1 }}
+              />
+            ) : (
+              <NeonButton
+                label="Next"
+                variant="primary"
+                size="lg"
+                disabled={!advanceReady}
+                onPress={() =>
+                  onAdvance(
+                    allDeckExtras,
+                    allSuperchargedDeckCards,
+                    nextLastKeptBaseId !== null
+                      ? nextLastKeptBaseId
+                      : lastKeptBaseId
+                  )
+                }
+                style={{ flex: 1 }}
+              />
+            )
+          ) : null
         ) : (
+          // Free Play and Challenges keep the Replay button; only the
+          // Targets-Up loss case suppresses it so the player can't retry
+          // a level they just failed.
           <NeonButton
             label="Replay"
             variant="primary"
