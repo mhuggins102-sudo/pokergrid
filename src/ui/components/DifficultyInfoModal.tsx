@@ -59,7 +59,7 @@ export const DifficultyInfoModal = ({ visible, onClose }: Props) => (
           Free-play knobs by difficulty. Targets Up still maps levels to Easy / Medium / Hard automatically; Challenges always run on the Hard ruleset.
         </Text>
         <Text style={styles.intro}>
-          Note: Extreme's 400 target is lower than Medium's 425, but it takes away your tools — no jokers, no discards, no deck peek, no undo — so it's the toughest mode despite the smaller number.
+          Note: Extreme shares Medium's 450 target on paper, but it strips every assist — no jokers, no discards, no deck peek, no undo — so it's the toughest mode despite the matching number.
         </Text>
 
         <ScrollView style={styles.scroll}>

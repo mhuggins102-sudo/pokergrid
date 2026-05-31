@@ -92,36 +92,24 @@ export const challengeWon = (
 // ============================================================================
 // Targets Up — Levels mode.
 //
-// Levels 1–7 use +25 steps starting at 350, climbing through Easy
-// (350 / 375 / 400), Medium (425 / 450 / 475), and finally Hard
-// territory at Level 7 (500). Levels 8+ switch to the +50 cadence
-// (550, 600, 650, ...) — past Hard the rises get steeper.
+// +25 every level, starting at 400. Levels 1–2 sit at Easy's
+// 400 / 425; L3–4 cross into Medium (450 / 475); L5+ enters Hard
+// (500, 525, 550, ...). No step-up cadence change — the climb is
+// linear and the difficulty automatically tracks the Free Play
+// target tiers.
 //
-// On a win, level += 1 and target advances per the step schedule.
+// On a win, level += 1 and target advances by +25.
 // On a loss, the run is over; the final result is the number of
 // consecutive wins (= level - 1).
 // ============================================================================
 
-export const TARGETS_UP_BASE = 350;
-// Step size for the first leg of the ladder (Easy + Medium territory,
-// L1 → L7). +25 keeps the in-difficulty rises gentle.
-export const TARGETS_UP_SMALL_STEP = 25;
-// Step size after Hard's 500 threshold. +50 makes each post-Hard
-// level a real jump.
-export const TARGETS_UP_BIG_STEP = 50;
-// Where the +25 leg ends and the +50 leg begins.
-const TARGETS_UP_BREAK_LEVEL = 7;
-const TARGETS_UP_BREAK_TARGET = 500;
+export const TARGETS_UP_BASE = 400;
+// Constant step size across every level. Keeps the climb honest
+// and aligns each tier of 2 levels with a Free Play difficulty.
+export const TARGETS_UP_STEP = 25;
 
-export const targetForLevel = (level: number): number => {
-  if (level <= TARGETS_UP_BREAK_LEVEL) {
-    return TARGETS_UP_BASE + (level - 1) * TARGETS_UP_SMALL_STEP;
-  }
-  return (
-    TARGETS_UP_BREAK_TARGET +
-    (level - TARGETS_UP_BREAK_LEVEL) * TARGETS_UP_BIG_STEP
-  );
-};
+export const targetForLevel = (level: number): number =>
+  TARGETS_UP_BASE + (level - 1) * TARGETS_UP_STEP;
 
 // Targets Up runs on Easy / Medium / Hard settings depending on the
 // level's target, keyed off the Free Play target schedule so the
@@ -131,11 +119,11 @@ export const targetForLevel = (level: number): number => {
 //   target < Hard's   Free Play target → Medium settings
 //   target ≥ Hard's   Free Play target → Hard settings
 //
-// With the current schedule (Easy 350 / Medium 425 / Hard 500) this
+// With the current schedule (Easy 400 / Medium 450 / Hard 500) this
 // works out to:
-//   L1–3 (350 / 375 / 400) → Easy
-//   L4–6 (425 / 450 / 475) → Medium
-//   L7+  (500 / 550 / …)   → Hard
+//   L1–2 (400 / 425) → Easy
+//   L3–4 (450 / 475) → Medium
+//   L5+  (500 / 525 / …)   → Hard
 //
 // Extreme is never selected — Targets Up doesn't strip tools the
 // way Extreme does even at its hardest levels.

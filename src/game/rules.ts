@@ -6,13 +6,13 @@ export type Difficulty = 'easy' | 'medium' | 'hard' | 'extreme';
 // read from these.
 
 export const TARGET_BY_DIFFICULTY: Record<Difficulty, number> = {
-  easy: 350,
-  medium: 425,
+  easy: 400,
+  medium: 450,
   hard: 500,
-  // Extreme keeps a lower numeric target than Hard but every other knob
-  // is dialed harder — fewer tools, no jokers, no discards. Reaching
-  // 400 becomes meaningfully tougher than Medium's 425.
-  extreme: 400,
+  // Extreme matches Medium's 450 target on the number, but strips every
+  // assist — no jokers, no discards, no deck peek, no undo — so it's the
+  // toughest mode despite sharing Medium's headline number.
+  extreme: 450,
 };
 
 // How many jokers ship in the playing deck. 0 (Extreme) means the deck
