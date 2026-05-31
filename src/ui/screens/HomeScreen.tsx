@@ -192,8 +192,8 @@ export const HomeScreen = ({
             )}
           </View>
           <Text style={styles.modeBody}>
-            Passive goals earned on Hard or Extreme. They tick off automatically when a qualifying
-            run ends.
+            Passive goals that are awarded automatically when achieved during qualifying Free Play
+            runs.
           </Text>
           <Text style={styles.modeCta}>View achievements →</Text>
         </Pressable>

@@ -47,9 +47,7 @@ export const AchievementsScreen = ({ onBack }: Props) => {
       <Text style={styles.intro}>
         Passive goals earned during Free Play. The Easy tier ticks off on
         Easy runs; the Hard / Extreme tier ticks off on Hard or Extreme
-        runs. Medium runs and the other modes don't count. You don't
-        launch them as a mode — they're recorded automatically the next
-        time a qualifying run ends.
+        runs. Medium runs and the other modes don't count.
       </Text>
 
       <Text style={styles.tally}>
