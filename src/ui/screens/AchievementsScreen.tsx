@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ACHIEVEMENTS } from '../../game/achievements';
+import { ACHIEVEMENTS, Achievement } from '../../game/achievements';
 import { NeonButton } from '../components/NeonButton';
 import { useStats } from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -10,7 +10,7 @@ interface Props {
 }
 
 // Achievements list — read-only. The player earns these passively
-// during Hard / Extreme runs; nothing here is tappable to launch a
+// during Free Play runs; nothing here is tappable to launch a
 // dedicated mode (those are Challenges).
 export const AchievementsScreen = ({ onBack }: Props) => {
   const { stats } = useStats();
@@ -19,6 +19,24 @@ export const AchievementsScreen = ({ onBack }: Props) => {
     [stats.achievementsDone]
   );
   const doneCount = ACHIEVEMENTS.filter(a => done.has(a.id)).length;
+  const easyList = ACHIEVEMENTS.filter(a => a.tier === 'easy');
+  const hardList = ACHIEVEMENTS.filter(a => a.tier === 'hard-extreme');
+
+  const renderCard = (a: Achievement) => {
+    const isDone = done.has(a.id);
+    return (
+      <View key={a.id} style={[styles.card, isDone && styles.cardDone]}>
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardName, isDone && styles.cardNameDone]}>
+            {a.name}
+          </Text>
+          {isDone && <Text style={styles.cardBadge}>· DONE</Text>}
+        </View>
+        <Text style={styles.cardDesc}>{a.description}</Text>
+      </View>
+    );
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -27,9 +45,10 @@ export const AchievementsScreen = ({ onBack }: Props) => {
       </View>
 
       <Text style={styles.intro}>
-        Passive goals earned while playing Hard or Extreme. Each one
-        requires a 500+ score plus the listed condition. You don't
-        launch them as a mode — they tick off automatically the next
+        Passive goals earned during Free Play. The Easy tier ticks off on
+        Easy runs; the Hard / Extreme tier ticks off on Hard or Extreme
+        runs. Medium runs and the other modes don't count. You don't
+        launch them as a mode — they're recorded automatically the next
         time a qualifying run ends.
       </Text>
 
@@ -37,30 +56,13 @@ export const AchievementsScreen = ({ onBack }: Props) => {
         {doneCount} / {ACHIEVEMENTS.length} earned
       </Text>
 
-      <View style={styles.list}>
-        {ACHIEVEMENTS.map(a => {
-          const isDone = done.has(a.id);
-          return (
-            <View
-              key={a.id}
-              style={[styles.card, isDone && styles.cardDone]}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={[styles.cardName, isDone && styles.cardNameDone]}>
-                  {a.name}
-                </Text>
-                {isDone && <Text style={styles.cardBadge}>· DONE</Text>}
-              </View>
-              <Text style={styles.cardDesc}>{a.description}</Text>
-            </View>
-          );
-        })}
-      </View>
+      <Text style={[styles.sectionLabel, styles.sectionLabelEasy]}>Easy</Text>
+      <View style={styles.list}>{easyList.map(renderCard)}</View>
 
-      <Text style={styles.footnote}>
-        More achievements coming. Easy / Medium-eligible ones are on the
-        roadmap.
+      <Text style={[styles.sectionLabel, styles.sectionLabelHard]}>
+        Hard / Extreme
       </Text>
+      <View style={styles.list}>{hardList.map(renderCard)}</View>
     </ScrollView>
   );
 };
@@ -98,6 +100,25 @@ const styles = StyleSheet.create({
     textShadowColor: colors.joker,
     textShadowRadius: 3,
     marginBottom: spacing.md,
+  },
+  sectionLabel: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  sectionLabelEasy: {
+    color: colors.success,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
+  },
+  sectionLabelHard: {
+    color: colors.warn,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
   },
   list: { gap: spacing.sm },
   card: {
@@ -144,13 +165,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 12,
     lineHeight: 17,
-  },
-  footnote: {
-    color: colors.textLow,
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: spacing.lg,
   },
 });
