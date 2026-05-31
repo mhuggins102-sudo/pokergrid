@@ -21,9 +21,9 @@ export const VariantsInfoModal = ({ visible, onClose }: Props) => (
         <ScrollView style={styles.scroll}>
           <Text style={styles.variantHeader}>Targets Up</Text>
           <Text style={styles.body}>
-            Meet the target and advance to the next level. Level 1 starts at target 350; each
-            win pushes the bar +25 through Level 7 (target 500), then +50 each level after that.
-            Lose once and the run ends. Final score is the highest level you cleared.
+            Meet the target and advance to the next level. Level 1 starts at target 400 and the bar
+            climbs +25 every level (425, 450, 475, 500, ...). Levels 1–2 run on Easy, 3–4 on Medium,
+            and 5+ on Hard. Lose once and the run ends. Final score is the highest level you cleared.
           </Text>
           <Text style={styles.body}>
             Between levels, if your score greatly exceeds the target you'll have the

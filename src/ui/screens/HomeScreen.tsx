@@ -29,7 +29,7 @@ interface Props {
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 
-// A worded intensity ramp shown under each tile. Extreme's target (400) is
+// A worded intensity ramp shown under each tile. Extreme's target (450) is
 // lower than Hard's (500), so the bare number reads as a step DOWN even though
 // Extreme is the toughest mode — the word fixes the ordering at a glance. The
 // per-difficulty rule details live in the Difficulty Modes info popup.
@@ -158,7 +158,7 @@ export const HomeScreen = ({
               </Text>
             )}
           </View>
-          <Text style={styles.modeBody}>Deck and rule twists. Hit 500 to clear.</Text>
+          <Text style={styles.modeBody}>Beat the target with unique deck and rule twists.</Text>
           <Text style={styles.modeCta}>Pick a challenge →</Text>
         </Pressable>
       </View>

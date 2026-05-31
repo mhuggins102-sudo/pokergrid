@@ -129,19 +129,19 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
 
       <Section label="Difficulty modes">
         <Text style={styles.body}>
-          Free Play offers four modes — <Text style={styles.bodyHi}>Easy</Text> (300),
-          {' '}<Text style={styles.bodyHi}>Medium</Text> (400),
+          Free Play offers four modes — <Text style={styles.bodyHi}>Easy</Text> (400),
+          {' '}<Text style={styles.bodyHi}>Medium</Text> (450),
           {' '}<Text style={styles.bodyHi}>Hard</Text> (500), and
-          {' '}<Text style={styles.bodyHi}>Extreme</Text> (400, no jokers and no discards).
+          {' '}<Text style={styles.bodyHi}>Extreme</Text> (450, no jokers and no discards).
           {' '}Each tunes the number of jokers, undos, starting bonus cards, and
           whether the Discard button is available. Tap the ⓘ next to Start on the home
           screen for the full comparison table.
         </Text>
         <Text style={[styles.body, { marginTop: 6 }]}>
           <Text style={styles.bodyHi}>Targets Up</Text> climbs a ladder of rising score
-          targets and inherits the difficulty matching each level's target (300+ Easy,
-          400+ Medium, 500+ Hard). <Text style={styles.bodyHi}>Challenges</Text> always
-          run on the Hard ruleset.
+          targets (+25 per level, starting at 400) and inherits the difficulty matching
+          each level's target — Levels 1–2 run on Easy, 3–4 on Medium, and 5+ on Hard.
+          {' '}<Text style={styles.bodyHi}>Challenges</Text> always run on the Hard ruleset.
         </Text>
       </Section>
 

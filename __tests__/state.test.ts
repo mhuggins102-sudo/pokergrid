@@ -34,7 +34,7 @@ describe('GameState — initial state', () => {
   test('newGame seeds a complete state', () => {
     const s = newGame('easy', seededRng(1));
     expect(s.difficulty).toBe('easy');
-    expect(s.target).toBe(350);
+    expect(s.target).toBe(400);
     // Center slot is filled first (spiral position 1 = slot 12).
     expect(s.grid[12]).not.toBeNull();
     // Easy and Medium each seed 1 starter bonus card from the shuffled deck.

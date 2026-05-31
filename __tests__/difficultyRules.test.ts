@@ -29,7 +29,7 @@ describe('per-difficulty rules tables', () => {
   });
 
   it('Extreme has the spec values', () => {
-    expect(TARGET_BY_DIFFICULTY.extreme).toBe(400);
+    expect(TARGET_BY_DIFFICULTY.extreme).toBe(450);
     expect(JOKERS_BY_DIFFICULTY.extreme).toBe(0);
     expect(UNDOS_BY_DIFFICULTY.extreme).toBe(0);
     expect(STARTER_BONUS_BY_DIFFICULTY.extreme).toBe(0);
@@ -39,7 +39,7 @@ describe('per-difficulty rules tables', () => {
   });
 
   it('Easy has the spec values', () => {
-    expect(TARGET_BY_DIFFICULTY.easy).toBe(350);
+    expect(TARGET_BY_DIFFICULTY.easy).toBe(400);
     expect(JOKERS_BY_DIFFICULTY.easy).toBe(2);
     expect(UNDOS_BY_DIFFICULTY.easy).toBe(1);
     expect(STARTER_BONUS_BY_DIFFICULTY.easy).toBe(1);
@@ -50,52 +50,44 @@ describe('per-difficulty rules tables', () => {
 });
 
 describe('Targets Up — targetForLevel schedule', () => {
-  // L1-7 use +25 steps starting at 350; L8+ switches to +50 from 500.
-  // Aligns the ladder with the Free Play tiers: L1-3 cover Easy 350-400,
-  // L4-6 cover Medium 425-475, L7+ enters Hard 500+.
+  // +25 every level, starting at 400. Aligns with the Free Play tiers:
+  // L1–2 cover Easy 400–425, L3–4 cover Medium 450–475, L5+ Hard 500+.
   it('L1 starts at the base target', () => {
     const { targetForLevel } = require('../src/game/challenges');
-    expect(targetForLevel(1)).toBe(350);
+    expect(targetForLevel(1)).toBe(400);
   });
-  it('+25 steps through L7', () => {
+  it('+25 steps every level', () => {
     const { targetForLevel } = require('../src/game/challenges');
-    expect(targetForLevel(2)).toBe(375);
-    expect(targetForLevel(3)).toBe(400);
-    expect(targetForLevel(4)).toBe(425);
-    expect(targetForLevel(5)).toBe(450);
-    expect(targetForLevel(6)).toBe(475);
-    expect(targetForLevel(7)).toBe(500);
-  });
-  it('+50 steps starting at L8', () => {
-    const { targetForLevel } = require('../src/game/challenges');
-    expect(targetForLevel(8)).toBe(550);
-    expect(targetForLevel(9)).toBe(600);
-    expect(targetForLevel(10)).toBe(650);
+    expect(targetForLevel(2)).toBe(425);
+    expect(targetForLevel(3)).toBe(450);
+    expect(targetForLevel(4)).toBe(475);
+    expect(targetForLevel(5)).toBe(500);
+    expect(targetForLevel(6)).toBe(525);
+    expect(targetForLevel(7)).toBe(550);
+    expect(targetForLevel(10)).toBe(625);
   });
 });
 
 describe('Targets Up — difficultyForLevel mapping', () => {
   // Pins the Free-Play-target-keyed mapping so any future change to
   // TARGET_BY_DIFFICULTY auto-validates the ladder ↔ difficulty
-  // alignment. With Easy 350 / Medium 425 / Hard 500:
-  //   L1–3 (targets 350 / 375 / 400) → Easy
-  //   L4–6 (targets 425 / 450 / 475) → Medium
-  //   L7+  (targets 500 / 550 / …)   → Hard
-  it('L1–3 (targets < 425) → easy', () => {
+  // alignment. With Easy 400 / Medium 450 / Hard 500:
+  //   L1–2 (targets 400 / 425) → Easy
+  //   L3–4 (targets 450 / 475) → Medium
+  //   L5+  (targets 500 / 525 / …) → Hard
+  it('L1–2 (targets < 450) → easy', () => {
     const { difficultyForLevel } = require('../src/game/challenges');
     expect(difficultyForLevel(1)).toBe('easy');
     expect(difficultyForLevel(2)).toBe('easy');
-    expect(difficultyForLevel(3)).toBe('easy');
   });
-  it('L4–6 (targets 425–475) → medium', () => {
+  it('L3–4 (targets 450–475) → medium', () => {
     const { difficultyForLevel } = require('../src/game/challenges');
+    expect(difficultyForLevel(3)).toBe('medium');
     expect(difficultyForLevel(4)).toBe('medium');
-    expect(difficultyForLevel(5)).toBe('medium');
-    expect(difficultyForLevel(6)).toBe('medium');
   });
-  it('L7+ (targets ≥ 500) → hard', () => {
+  it('L5+ (targets ≥ 500) → hard', () => {
     const { difficultyForLevel } = require('../src/game/challenges');
-    expect(difficultyForLevel(7)).toBe('hard');
+    expect(difficultyForLevel(5)).toBe('hard');
     expect(difficultyForLevel(8)).toBe('hard');
     expect(difficultyForLevel(20)).toBe('hard');
   });
