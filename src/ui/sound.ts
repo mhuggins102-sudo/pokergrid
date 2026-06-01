@@ -35,8 +35,8 @@ export type SoundKey =
 // require() pulls the .wav files through Metro as static assets. The exact
 // shape of the returned value differs per platform (a number on native, a
 // URL-ish object on web), but expo-audio accepts both via createAudioPlayer.
-// Keys without a bundled WAV (whoosh / boing / shuffle for now) are
-// web-only — the native build silently no-ops them via playNative below.
+// Stays Partial so future synth-only sounds can be added without a WAV;
+// every key with an entry is played from the bundled clip on native.
 const ASSETS: Partial<Record<SoundKey, number>> = {
   tap: require('../../assets/sounds/tap.wav'),
   draw: require('../../assets/sounds/draw.wav'),
@@ -48,6 +48,11 @@ const ASSETS: Partial<Record<SoundKey, number>> = {
   joker: require('../../assets/sounds/joker.wav'),
   win: require('../../assets/sounds/win.wav'),
   lose: require('../../assets/sounds/lose.wav'),
+  whoosh: require('../../assets/sounds/whoosh.wav'),
+  boing: require('../../assets/sounds/boing.wav'),
+  shuffle: require('../../assets/sounds/shuffle.wav'),
+  thud: require('../../assets/sounds/thud.wav'),
+  sparkle: require('../../assets/sounds/sparkle.wav'),
 };
 
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
