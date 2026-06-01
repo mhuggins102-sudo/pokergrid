@@ -12,6 +12,7 @@ import { Card, isJoker, Supercharge } from '../../game/cards';
 import { Grid } from '../../game/grid';
 import { styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { useSettings } from '../settings';
+import { useSound } from '../sound';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 import { GridView } from './GridView';
 import { NeonButton } from './NeonButton';
@@ -184,6 +185,7 @@ export const RewardsFlow = ({
   onComplete,
   onCancel,
 }: Props) => {
+  const playSound = useSound();
   // Pre-power every held bonus card so the chips show what the
   // player would actually get (×1.2 of the current multValue, or
   // a Patience +5 bump). powerUpBonusCard is the same helper the
@@ -242,8 +244,13 @@ export const RewardsFlow = ({
     if (gridLocked) return;
     const target = grid[slot];
     if (!target || isJoker(target)) return;
+    const rolled: Supercharge = Math.random() < 0.5 ? 'wild' : 'double';
     setGridSlot(slot);
-    setGridSc(Math.random() < 0.5 ? 'wild' : 'double');
+    setGridSc(rolled);
+    // Match the sound the Three Tricks specials play when they apply
+    // the same supercharge, so the audio cue for "wild" and "double"
+    // is consistent across both modes.
+    playSound(rolled === 'wild' ? 'sparkle' : 'thud');
   };
 
   const handleBonusPick = (i: number) => {

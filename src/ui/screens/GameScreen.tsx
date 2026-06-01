@@ -1019,7 +1019,7 @@ export const GameScreen = ({
     } else if (p.kind === 'awaiting-special-wildcard') {
       if (p.slots.includes(idx)) {
         haptic('light');
-        playSound('tap');
+        playSound('sparkle');
         dispatch({ type: 'RESOLVE_WILDCARD', slot: idx });
       }
     } else if (p.kind === 'awaiting-special-mega-destroy') {
@@ -2154,7 +2154,18 @@ const renderBottom = (
   dispatch: (a: Action) => void,
   haptic: (k: import('../haptics').HapticKind) => void,
   playSound: (
-    k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus' | 'whoosh' | 'boing' | 'shuffle'
+    k:
+      | 'tap'
+      | 'place'
+      | 'swap'
+      | 'slide'
+      | 'destroy'
+      | 'bonus'
+      | 'whoosh'
+      | 'boing'
+      | 'shuffle'
+      | 'thud'
+      | 'sparkle'
   ) => void,
   suitOK: boolean,
   drawnKey: string,

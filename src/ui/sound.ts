@@ -27,7 +27,8 @@ export type SoundKey =
   | 'whoosh'   // Slip & Slide (distinct from regular slide)
   | 'boing'    // Jump, Jump (cartoon bounce)
   | 'shuffle'  // Shuffle pre-reveal sweep
-  | 'thud';    // The Doubler (mallet hit on the picked card)
+  | 'thud'     // The Doubler (mallet hit on the picked card)
+  | 'sparkle'; // Wildcard (magical twinkle)
 
 // ---------- Native (expo-audio + bundled WAVs) ----------
 
@@ -247,6 +248,18 @@ const playWeb = (k: SoundKey) => {
       playNoise(0.10, { vol: 0.20, hz: 220 });
       return playNotes([
         { freq: 120, endFreq: 60, dur: 0.16, type: 'sine', vol: 0.28 },
+      ]);
+    case 'sparkle':
+      // Wildcard — magical twinkle. Ascending tetrad of bright sine
+      // pulses with a sliver of high-octave shimmer on top, evoking
+      // the same "this card became special" feel as the joker
+      // arpeggio but compressed into a single beat.
+      return playNotes([
+        { freq: 1320, dur: 0.10, type: 'sine', vol: 0.14 },
+        { freq: 1760, dur: 0.10, delay: 0.06, type: 'sine', vol: 0.14 },
+        { freq: 2093, dur: 0.10, delay: 0.12, type: 'sine', vol: 0.14 },
+        { freq: 2640, dur: 0.18, delay: 0.18, type: 'sine', vol: 0.12 },
+        { freq: 3520, dur: 0.14, delay: 0.18, type: 'triangle', vol: 0.06 },
       ]);
   }
 };
