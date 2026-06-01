@@ -259,12 +259,50 @@ describe('Three Tricks challenge', () => {
     expect(s).toBe(before);
   });
 
-  it('Side Slide: a row of 3 cards slides down one row', () => {
+  it('Side Slide: pick a 3-card row sub-chain and slide it down', () => {
     let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
-    // Build a row of 3 adjacent cards in row 0, with the row below empty.
+    // Build a row of 4 adjacent cards in row 0 so we can demonstrate
+    // picking just 3 of them. Clear the auto-placed center first.
     const grid = s.grid.slice();
-    // Wipe the auto-placed center card so it doesn't sit in the chain's
-    // landing area on row 1.
+    grid[12] = null;
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
+    grid[2] = C('Q', 'D');
+    grid[3] = C('J', 'S');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    expect(s.phase.kind).toBe('awaiting-special-side-slide-pick');
+
+    // Build the chain interactively — pick 0, then 1 (locks orientation
+    // to row), then 2. Skip slot 3 even though it's adjacent.
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 0 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 1 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 2 });
+    if (s.phase.kind !== 'awaiting-special-side-slide-pick') {
+      throw new Error('Expected pick phase');
+    }
+    expect(s.phase.selected).toEqual([0, 1, 2]);
+
+    s = step(s, { type: 'SIDE_SLIDE_DONE_PICKING' });
+    expect(s.phase.kind).toBe('awaiting-special-side-slide-dest');
+
+    s = step(s, { type: 'RESOLVE_SIDE_SLIDE', direction: 'down', distance: 1 });
+    expect(s.phase.kind).toBe('awaiting-action');
+    // Only the picked 3 cards moved; slot 3 stayed put.
+    expect(s.grid[0]).toBeNull();
+    expect(s.grid[1]).toBeNull();
+    expect(s.grid[2]).toBeNull();
+    expect(s.grid[3]).toEqual(C('J', 'S'));
+    expect(s.grid[5]).toEqual(C('A', 'H'));
+    expect(s.grid[6]).toEqual(C('K', 'C'));
+    expect(s.grid[7]).toEqual(C('Q', 'D'));
+    expect(s.bonusCards[0].used).toBe(true);
+  });
+
+  it('Side Slide: tapping an endpoint removes it from the chain', () => {
+    let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
     grid[12] = null;
     grid[0] = C('A', 'H');
     grid[1] = C('K', 'C');
@@ -272,52 +310,47 @@ describe('Three Tricks challenge', () => {
     s = { ...s, grid };
 
     s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
-    expect(s.phase.kind).toBe('awaiting-special-side-slide-source');
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 0 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 1 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 2 });
+    if (s.phase.kind !== 'awaiting-special-side-slide-pick') throw new Error();
+    expect(s.phase.selected).toEqual([0, 1, 2]);
 
-    s = step(s, { type: 'SIDE_SLIDE_SELECT_SOURCE', slot: 1 });
-    expect(s.phase.kind).toBe('awaiting-special-side-slide-dest');
+    // Drop the right endpoint.
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 2 });
+    if (s.phase.kind !== 'awaiting-special-side-slide-pick') throw new Error();
+    expect(s.phase.selected).toEqual([0, 1]);
 
-    // Slide the whole chain down by 1 (perpendicular to the row).
-    s = step(s, { type: 'RESOLVE_SIDE_SLIDE', from: 1, direction: 'down', distance: 1 });
-    expect(s.phase.kind).toBe('awaiting-action');
-    expect(s.grid[0]).toBeNull();
-    expect(s.grid[1]).toBeNull();
-    expect(s.grid[2]).toBeNull();
-    expect(s.grid[5]).toEqual(C('A', 'H'));
-    expect(s.grid[6]).toEqual(C('K', 'C'));
-    expect(s.grid[7]).toEqual(C('Q', 'D'));
-    expect(s.bonusCards[0].used).toBe(true);
+    // Dropping the middle card would break contiguity — should no-op.
+    const beforeMidDrop = s;
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 0 });
+    // (single endpoint of a 2-chain — that's fine, it leaves [1]).
+    if (s.phase.kind !== 'awaiting-special-side-slide-pick') throw new Error();
+    expect(s.phase.selected).toEqual([1]);
+    // Restore. Now try removing the middle of [0, 1, 2]: build it
+    // back up first.
+    s = beforeMidDrop;
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 2 });
+    // Now selected is [0, 1, 2]. Dropping slot 1 (middle) breaks
+    // contiguity → reducer rejects.
+    const beforeBadDrop = s;
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 1 });
+    expect(s).toBe(beforeBadDrop);
   });
 
-  it('Side Slide: a column of 2 cards slides right one column', () => {
-    let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
-    const grid = s.grid.slice();
-    grid[12] = null; // clear the auto-placed center
-    // Column at C0, rows 0..1.
-    grid[0] = C('A', 'H');
-    grid[5] = C('K', 'C');
-    s = { ...s, grid };
-
-    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
-    s = step(s, { type: 'SIDE_SLIDE_SELECT_SOURCE', slot: 0 });
-    s = step(s, { type: 'RESOLVE_SIDE_SLIDE', from: 0, direction: 'right', distance: 1 });
-
-    expect(s.grid[0]).toBeNull();
-    expect(s.grid[5]).toBeNull();
-    expect(s.grid[1]).toEqual(C('A', 'H'));
-    expect(s.grid[6]).toEqual(C('K', 'C'));
-  });
-
-  it('Side Slide rejects a single isolated card (chain length < 2)', () => {
+  it('Side Slide: SIDE_SLIDE_DONE_PICKING is a no-op with < 2 picked', () => {
     let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
     const grid = s.grid.slice();
     grid[12] = null;
-    grid[0] = C('A', 'H'); // only this one card, isolated.
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
     s = { ...s, grid };
 
-    const before = s;
     s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
-    // No valid side-slide sources → state unchanged.
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 0 });
+    // Only 1 picked.
+    const before = s;
+    s = step(s, { type: 'SIDE_SLIDE_DONE_PICKING' });
     expect(s).toBe(before);
   });
 });

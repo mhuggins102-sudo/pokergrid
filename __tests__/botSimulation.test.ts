@@ -336,7 +336,7 @@ const pickAction = (s: GameState): Action => {
     case 'awaiting-special-doubler':
     case 'awaiting-special-wildcard':
     case 'awaiting-special-mega-destroy':
-    case 'awaiting-special-side-slide-source':
+    case 'awaiting-special-side-slide-pick':
     case 'awaiting-special-side-slide-dest':
     case 'awaiting-bonus-slot-choice':
       // Three Tricks / Mixed Bag specialty phases don't appear in

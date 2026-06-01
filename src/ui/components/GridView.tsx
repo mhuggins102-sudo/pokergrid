@@ -31,6 +31,10 @@ interface Props {
   // slots the player has tapped but not yet confirmed. Rendered as
   // a red outline on top of the cell.
   dangerSlots?: Set<number>;
+  // Multi-select "picked" overlay — Side Slide uses this to mark
+  // cards the player has added to the chain. Rendered as a green
+  // outline to distinguish from destruction (danger) selections.
+  pickedSlots?: Set<number>;
   onSlotPress?: (idx: number) => void;
   onLinePress?: (kind: LineKind, index: number) => void;
   // Render with smaller cells + sm cards. Used by ResultScreen to keep the
@@ -86,6 +90,7 @@ export const GridView = ({
   nextSlotHint,
   ghostSlots,
   dangerSlots,
+  pickedSlots,
   onSlotPress,
   onLinePress,
   compact,
@@ -135,6 +140,7 @@ export const GridView = ({
 
             const isGhost = ghostSlots?.has(idx) ?? false;
             const isDanger = dangerSlots?.has(idx) ?? false;
+            const isPicked = pickedSlots?.has(idx) ?? false;
             return (
               <Pressable
                 key={idx}
@@ -176,6 +182,18 @@ export const GridView = ({
                       pointerEvents="none"
                       style={[
                         styles.dangerOverlay,
+                        {
+                          width: compact ? cardSize.sm : cardSize.md,
+                          height: compact ? cardSize.sm : cardSize.md,
+                        },
+                      ]}
+                    />
+                  )}
+                  {isPicked && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.pickedOverlay,
                         {
                           width: compact ? cardSize.sm : cardSize.md,
                           height: compact ? cardSize.sm : cardSize.md,
@@ -270,5 +288,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: 'rgba(255, 100, 100, 0.18)',
     ...glow(colors.danger, 8, 0.7),
+  },
+  // Side Slide chain pick: "you've added this to the moving group"
+  // tint. Green so the chain reads as "selected for movement", not
+  // "marked for destruction" like the Mega Destroy variant.
+  pickedOverlay: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.success,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(92, 255, 154, 0.15)',
+    ...glow(colors.success, 8, 0.7),
   },
 });

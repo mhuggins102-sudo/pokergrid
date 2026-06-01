@@ -62,68 +62,51 @@ export const executeMegaDestroy = (
 
 // ---------- Side Slide (special: ★ one-time perpendicular slide) ----------
 
-// Contiguous run of occupied cells in the row that contains `from`.
-// Returns the full chain in column-ascending order including `from`.
-const rowChainAt = (grid: Grid, from: number): number[] => {
-  if (grid[from] === null) return [];
-  const r = Math.floor(from / GRID_SIZE);
-  const c0 = from % GRID_SIZE;
-  const out = [from];
-  for (let c = c0 - 1; c >= 0; c--) {
-    const idx = r * GRID_SIZE + c;
-    if (grid[idx] === null) break;
-    out.unshift(idx);
-  }
-  for (let c = c0 + 1; c < GRID_SIZE; c++) {
-    const idx = r * GRID_SIZE + c;
-    if (grid[idx] === null) break;
-    out.push(idx);
-  }
-  return out;
+// Side Slide is interactive: the player picks a starting card, then taps
+// adjacent occupied cards to extend the picked chain (orientation locks
+// at the second pick), then chooses a perpendicular landing. The chain
+// must be 2+ cells, contiguous, in a single row or column.
+
+// Orientation of a multi-slot chain (all slots same row → 'row';
+// all slots same col → 'col'; otherwise null).
+export type ChainOrientation = 'row' | 'col';
+export const chainOrientation = (
+  chain: readonly number[]
+): ChainOrientation | null => {
+  if (chain.length < 2) return null;
+  const firstRow = Math.floor(chain[0] / GRID_SIZE);
+  const firstCol = chain[0] % GRID_SIZE;
+  const allSameRow = chain.every(s => Math.floor(s / GRID_SIZE) === firstRow);
+  if (allSameRow) return 'row';
+  const allSameCol = chain.every(s => s % GRID_SIZE === firstCol);
+  if (allSameCol) return 'col';
+  return null;
 };
 
-// Contiguous run of occupied cells in the column that contains `from`.
-const colChainAt = (grid: Grid, from: number): number[] => {
-  if (grid[from] === null) return [];
-  const r0 = Math.floor(from / GRID_SIZE);
-  const c = from % GRID_SIZE;
-  const out = [from];
-  for (let r = r0 - 1; r >= 0; r--) {
-    const idx = r * GRID_SIZE + c;
-    if (grid[idx] === null) break;
-    out.unshift(idx);
+// True iff the chain's slots are contiguous in their orientation
+// (no gaps between successive line positions).
+const isContiguousChain = (chain: readonly number[]): boolean => {
+  if (chain.length < 2) return chain.length === 1;
+  const orient = chainOrientation(chain);
+  if (!orient) return false;
+  const positions = chain
+    .map(s => (orient === 'row' ? s % GRID_SIZE : Math.floor(s / GRID_SIZE)))
+    .sort((a, b) => a - b);
+  for (let i = 1; i < positions.length; i++) {
+    if (positions[i] !== positions[i - 1] + 1) return false;
   }
-  for (let r = r0 + 1; r < GRID_SIZE; r++) {
-    const idx = r * GRID_SIZE + c;
-    if (grid[idx] === null) break;
-    out.push(idx);
-  }
-  return out;
-};
-
-// The chain that moves when a side-slide is committed in `direction`.
-// up/down moves the row-chain (perpendicular to the slide); left/right
-// moves the col-chain. Returns the chain only if its length is at least
-// 2 — Side Slide is the "group" version of slide and a single card
-// would just be a regular slide.
-export const sideSlideChain = (
-  grid: Grid,
-  from: number,
-  direction: Direction
-): number[] => {
-  const chain =
-    direction === 'up' || direction === 'down'
-      ? rowChainAt(grid, from)
-      : colChainAt(grid, from);
-  return chain.length >= 2 ? chain : [];
+  return true;
 };
 
 // How many empty cells lie ahead of `from` in `direction`, before the
-// grid edge or another occupied cell.
+// grid edge or another occupied cell. Cells in `ignore` are treated as
+// empty — used by the multi-card chain check below so the chain's own
+// cells don't block its own movement.
 const emptyCellsForward = (
   grid: Grid,
   from: number,
-  direction: Direction
+  direction: Direction,
+  ignore?: ReadonlySet<number>
 ): number => {
   const r = Math.floor(from / GRID_SIZE);
   const c = from % GRID_SIZE;
@@ -135,65 +118,135 @@ const emptyCellsForward = (
     const c2 = c + dc * (n + 1);
     if (r2 < 0 || r2 >= GRID_SIZE || c2 < 0 || c2 >= GRID_SIZE) break;
     const idx = r2 * GRID_SIZE + c2;
-    if (grid[idx] !== null) break;
+    if (grid[idx] !== null && !(ignore?.has(idx))) break;
     n++;
   }
   return n;
 };
 
-// Per-direction maximum distance for a side slide from `from`. Every
+// Per-direction maximum distance the entire chain can shift. Every
 // chain member needs the same amount of free space ahead of it, so
-// the effective max is the min over the chain.
-const sideSlideMaxDistance = (
+// the effective max is the min over the chain. The chain's own
+// cells are treated as empty (a chain moving up/down past itself is
+// fine, but the chain orientation rules out that scenario anyway).
+const chainSideSlideMaxDistance = (
   grid: Grid,
-  from: number,
+  chain: readonly number[],
   direction: Direction
 ): number => {
-  const chain = sideSlideChain(grid, from, direction);
-  if (chain.length === 0) return 0;
+  if (chain.length < 2) return 0;
+  const ignore = new Set(chain);
   let max = Infinity;
   for (const slot of chain) {
-    const d = emptyCellsForward(grid, slot, direction);
+    const d = emptyCellsForward(grid, slot, direction, ignore);
     if (d < max) max = d;
     if (max === 0) return 0;
   }
   return max === Infinity ? 0 : max;
 };
 
-// Slots from which Side Slide can fire: there's a row-chain ≥ 2 with
-// space above OR below, or a col-chain ≥ 2 with space left OR right.
+// Slots from which Side Slide can fire: any occupied cell. The player
+// builds the sub-chain from there by tapping adjacent occupied cells.
+// We don't require a 2+ chain at this stage because the player picks
+// the chain interactively in the picking phase.
 export const validSideSlideSources = (grid: Grid): number[] => {
   const out: number[] = [];
   for (let i = 0; i < GRID_SLOTS; i++) {
-    if (grid[i] === null) continue;
-    if (
-      sideSlideMaxDistance(grid, i, 'up') > 0 ||
-      sideSlideMaxDistance(grid, i, 'down') > 0 ||
-      sideSlideMaxDistance(grid, i, 'left') > 0 ||
-      sideSlideMaxDistance(grid, i, 'right') > 0
-    ) {
-      out.push(i);
-    }
+    if (grid[i] !== null) out.push(i);
   }
   return out;
 };
 
+// Given a card already in the picked chain, which neighbors could the
+// player add next? Once the chain has 2+ cards the orientation is
+// locked; before then any orthogonal occupied neighbor is fair game.
+// Returns the set of slot indices that would extend the chain.
+export const sideSlideChainExtensions = (
+  grid: Grid,
+  selected: readonly number[]
+): number[] => {
+  if (selected.length === 0) {
+    // No selection yet — every occupied cell is a candidate. (The UI
+    // typically calls validSideSlideSources here instead, but allow
+    // for parity.)
+    return validSideSlideSources(grid);
+  }
+  const out = new Set<number>();
+  if (selected.length === 1) {
+    const s = selected[0];
+    const r = Math.floor(s / GRID_SIZE);
+    const c = s % GRID_SIZE;
+    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const r2 = r + dr;
+      const c2 = c + dc;
+      if (r2 < 0 || r2 >= GRID_SIZE || c2 < 0 || c2 >= GRID_SIZE) continue;
+      const idx = r2 * GRID_SIZE + c2;
+      if (grid[idx] !== null && !selected.includes(idx)) out.add(idx);
+    }
+    return [...out];
+  }
+  // 2+ cards: orientation locked. Only the two endpoints can be
+  // extended.
+  const orient = chainOrientation(selected);
+  if (!orient) return [];
+  const positions = selected
+    .map(s => (orient === 'row' ? s % GRID_SIZE : Math.floor(s / GRID_SIZE)));
+  const minPos = Math.min(...positions);
+  const maxPos = Math.max(...positions);
+  const fixed = orient === 'row'
+    ? Math.floor(selected[0] / GRID_SIZE)
+    : selected[0] % GRID_SIZE;
+  const candidate = (pos: number): number =>
+    orient === 'row' ? fixed * GRID_SIZE + pos : pos * GRID_SIZE + fixed;
+  for (const pos of [minPos - 1, maxPos + 1]) {
+    if (pos < 0 || pos >= GRID_SIZE) continue;
+    const idx = candidate(pos);
+    if (grid[idx] !== null && !selected.includes(idx)) out.add(idx);
+  }
+  return [...out];
+};
+
+// True iff removing `slot` from `selected` would leave a contiguous
+// chain (or zero / one cells, which trivially is). Only endpoints
+// pass.
+export const canDeselectSideSlideSlot = (
+  selected: readonly number[],
+  slot: number
+): boolean => {
+  if (!selected.includes(slot)) return false;
+  if (selected.length <= 1) return true;
+  const remaining = selected.filter(s => s !== slot);
+  return isContiguousChain(remaining);
+};
+
 export interface SideSlideMove {
-  from: number;
   direction: Direction;
   distance: number;
-  // Slot the source card lands in — used by the GameScreen to render
-  // the dest highlights.
+  // Slot the canonical "leader" of the chain (lowest-index member)
+  // lands in. Used by the GameScreen to render the dest highlight.
   leadingDest: number;
+  // The leader slot the leadingDest is calculated from.
+  from: number;
 }
 
-export const sideSlideDestinationsFrom = (
+// Valid perpendicular slide moves for a picked chain. Chain must be
+// 2+ contiguous cells in a row or column.
+export const sideSlideDestinationsForChain = (
   grid: Grid,
-  from: number
+  chain: readonly number[]
 ): SideSlideMove[] => {
+  if (chain.length < 2) return [];
+  const orient = chainOrientation(chain);
+  if (!orient) return [];
+  // Use the lowest-index chain member as the "leader" so leadingDest
+  // is deterministic and matches the player's mental model (the chain
+  // moves as a unit).
+  const from = Math.min(...chain);
+  const directions: Direction[] =
+    orient === 'row' ? ['up', 'down'] : ['left', 'right'];
   const out: SideSlideMove[] = [];
-  for (const d of ['up', 'down', 'left', 'right'] as Direction[]) {
-    const max = sideSlideMaxDistance(grid, from, d);
+  for (const d of directions) {
+    const max = chainSideSlideMaxDistance(grid, chain, d);
     if (max === 0) continue;
     const step =
       d === 'up' ? -GRID_SIZE
@@ -208,13 +261,13 @@ export const sideSlideDestinationsFrom = (
 
 export const executeSideSlide = (
   grid: Grid,
-  from: number,
+  chain: readonly number[],
   direction: Direction,
   distance: number
 ): Grid => {
-  const chain = sideSlideChain(grid, from, direction);
-  if (chain.length === 0) throw new Error('Side Slide: no chain at source');
-  if (distance < 1 || distance > sideSlideMaxDistance(grid, from, direction)) {
+  if (chain.length < 2) throw new Error('Side Slide: chain must have 2+ cards');
+  if (!isContiguousChain(chain)) throw new Error('Side Slide: chain not contiguous');
+  if (distance < 1 || distance > chainSideSlideMaxDistance(grid, chain, direction)) {
     throw new Error(`Side Slide: distance ${distance} out of range`);
   }
   const step =
@@ -222,8 +275,8 @@ export const executeSideSlide = (
     : direction === 'down' ? GRID_SIZE
     : direction === 'left' ? -1 : 1;
   const next = grid.slice();
-  // Clear all chain positions before writing — otherwise neighbors in
-  // the chain would overwrite each other when the step is small.
+  // Clear all chain positions before writing — neighbors in the chain
+  // would otherwise overwrite each other when the step is small.
   for (const idx of chain) next[idx] = null;
   for (const idx of chain) next[idx + step * distance] = grid[idx];
   return next;

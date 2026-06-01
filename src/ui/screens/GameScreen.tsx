@@ -13,6 +13,7 @@ import {
   canDrawBonus,
   canHop,
   canSlide,
+  sideSlideChainExtensions,
   slideDestinationsFrom,
   suitActionAvailable,
 } from '../../game/actions';
@@ -940,13 +941,13 @@ export const GameScreen = ({
         playSound('tap');
         dispatch({ type: 'TOGGLE_MEGA_DESTROY_TARGET', slot: idx });
       }
-    } else if (p.kind === 'awaiting-special-side-slide-source') {
-      if (p.sources.includes(idx)) {
-        haptic('light');
-        playSound('tap');
-        dispatch({ type: 'SIDE_SLIDE_SELECT_SOURCE', slot: idx });
-        setSelectedSlot(idx);
-      }
+    } else if (p.kind === 'awaiting-special-side-slide-pick') {
+      // Toggling is the action — extend the chain or remove an
+      // endpoint. The reducer enforces all the legality rules
+      // (orientation lock, contiguity), so just dispatch.
+      haptic('light');
+      playSound('tap');
+      dispatch({ type: 'TOGGLE_SIDE_SLIDE_PICK', slot: idx });
     } else if (p.kind === 'awaiting-special-side-slide-dest') {
       const valid = p.moves.find(m => m.leadingDest === idx);
       if (valid) {
@@ -954,7 +955,6 @@ export const GameScreen = ({
         playSound('slide');
         dispatch({
           type: 'RESOLVE_SIDE_SLIDE',
-          from: valid.from,
           direction: valid.direction,
           distance: valid.distance,
         });
@@ -1002,14 +1002,20 @@ export const GameScreen = ({
       // additionally renders `selected` via the `selected` set below to
       // distinguish picked-but-not-confirmed slots.
       for (const s of p.slots) out.add(s);
-    } else if (p.kind === 'awaiting-special-side-slide-source') {
-      for (const s of p.sources) out.add(s);
+    } else if (p.kind === 'awaiting-special-side-slide-pick') {
+      // Highlight every legal next move: each picked slot (so the
+      // player can tap to remove an endpoint) plus every legal
+      // extension. dangerSlots below renders the picked chain in
+      // green so the two states are visually distinct.
+      const extensions = sideSlideChainExtensions(state.grid, p.selected);
+      for (const s of p.selected) out.add(s);
+      for (const s of extensions) out.add(s);
     } else if (p.kind === 'awaiting-special-side-slide-dest') {
       for (const m of p.moves) out.add(m.leadingDest);
-      out.add(p.source);
+      for (const s of p.chain) out.add(s);
     }
     return out;
-  }, [state.phase, selectedSlot]);
+  }, [state.phase, selectedSlot, state.grid]);
 
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
@@ -1359,6 +1365,13 @@ export const GameScreen = ({
               dangerSlots={
                 state.phase.kind === 'awaiting-special-mega-destroy'
                   ? new Set(state.phase.selected)
+                  : undefined
+              }
+              pickedSlots={
+                state.phase.kind === 'awaiting-special-side-slide-pick'
+                  ? new Set(state.phase.selected)
+                  : state.phase.kind === 'awaiting-special-side-slide-dest'
+                  ? new Set(state.phase.chain)
                   : undefined
               }
               onSlotPress={handleSlotPress}
@@ -2332,10 +2345,8 @@ const renderBottom = (
     );
   }
 
-  if (
-    p.kind === 'awaiting-special-side-slide-source' ||
-    p.kind === 'awaiting-special-side-slide-dest'
-  ) {
+  if (p.kind === 'awaiting-special-side-slide-pick') {
+    const n = p.selected.length;
     return (
       <View style={styles.actionRow}>
         <DrawnArea
@@ -2349,12 +2360,52 @@ const renderBottom = (
         </DrawnArea>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>
-            {p.kind === 'awaiting-special-side-slide-source'
-              ? 'Tap a card in a row or column of 2+ adjacent cards. Then tap a perpendicular landing.'
-              : 'Tap a glowing landing to slide the group perpendicular to its line.'}
+            {n === 0
+              ? 'Tap a card to start the group. Then add adjacent cards along a row or column.'
+              : n === 1
+              ? 'Pick an adjacent card to set the direction. Tap the first card again to deselect.'
+              : `${n} cards picked. Add another adjacent card, tap an endpoint to drop it, or hit Slide.`}
           </Text>
           <NeonButton
-            label={p.kind === 'awaiting-special-side-slide-dest' ? 'Pick a different card' : 'Cancel'}
+            label="Slide"
+            variant="primary"
+            size="sm"
+            disabled={n < 2}
+            onPress={() => {
+              haptic('light');
+              playSound('tap');
+              dispatch({ type: 'SIDE_SLIDE_DONE_PICKING' });
+            }}
+          />
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-special-side-slide-dest') {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-side-slide'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Side Slide</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap a glowing landing to slide the group perpendicular to its line.
+          </Text>
+          <NeonButton
+            label="Pick different cards"
             variant="secondary"
             size="sm"
             onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
