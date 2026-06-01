@@ -3,8 +3,10 @@ import { seededRng } from '../src/game/deck';
 import {
   BonusCard,
   DOUBLER_CARD,
+  JUMP_JUMP_CARD,
   MEGA_DESTROY_CARD,
   POWER_SWAP_CARD,
+  SHUFFLE_CARD,
   SIDE_SLIDE_CARD,
   WILDCARD_CARD,
 } from '../src/game/bonusCards';
@@ -287,7 +289,7 @@ describe('Three Tricks challenge', () => {
     s = step(s, { type: 'SIDE_SLIDE_DONE_PICKING' });
     expect(s.phase.kind).toBe('awaiting-special-side-slide-dest');
 
-    s = step(s, { type: 'RESOLVE_SIDE_SLIDE', direction: 'down', distance: 1 });
+    s = step(s, { type: 'RESOLVE_SIDE_SLIDE', path: ['down'] });
     expect(s.phase.kind).toBe('awaiting-action');
     // Only the picked 3 cards moved; slot 3 stayed put.
     expect(s.grid[0]).toBeNull();
@@ -298,6 +300,29 @@ describe('Three Tricks challenge', () => {
     expect(s.grid[6]).toEqual(C('K', 'C'));
     expect(s.grid[7]).toEqual(C('Q', 'D'));
     expect(s.bonusCards[0].used).toBe(true);
+  });
+
+  it('Slip & Slide: a row chain takes a multi-direction path (down + right)', () => {
+    let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    // 2-card row chain at slots 0..1. Rest of grid is empty so the
+    // chain can wander.
+    const grid = s.grid.slice();
+    grid[12] = null;
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 0 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 1 });
+    s = step(s, { type: 'SIDE_SLIDE_DONE_PICKING' });
+    if (s.phase.kind !== 'awaiting-special-side-slide-dest') throw new Error();
+    // 'down', 'right' is a 2-step L-path; original [0,1] → [5,6] → [6,7].
+    s = step(s, { type: 'RESOLVE_SIDE_SLIDE', path: ['down', 'right'] });
+    expect(s.grid[0]).toBeNull();
+    expect(s.grid[1]).toBeNull();
+    expect(s.grid[6]).toEqual(C('A', 'H'));
+    expect(s.grid[7]).toEqual(C('K', 'C'));
   });
 
   it('Side Slide: tapping an endpoint removes it from the chain', () => {
@@ -351,6 +376,101 @@ describe('Three Tricks challenge', () => {
     // Only 1 picked.
     const before = s;
     s = step(s, { type: 'SIDE_SLIDE_DONE_PICKING' });
+    expect(s).toBe(before);
+  });
+
+  it('Jump, Jump: moves a picked card to an empty slot and marks itself used', () => {
+    let s = threeTricks([JUMP_JUMP_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[12] = null;
+    grid[0] = C('A', 'H');
+    // Slot 24 starts empty.
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    expect(s.phase.kind).toBe('awaiting-special-jump-source');
+
+    s = step(s, { type: 'RESOLVE_JUMP_SOURCE', slot: 0 });
+    expect(s.phase.kind).toBe('awaiting-special-jump-dest');
+
+    s = step(s, { type: 'RESOLVE_JUMP', source: 0, dest: 24 });
+    expect(s.phase.kind).toBe('awaiting-action');
+    expect(s.grid[0]).toBeNull();
+    expect(s.grid[24]).toEqual(C('A', 'H'));
+    expect(s.bonusCards[0].used).toBe(true);
+  });
+
+  it('Jump, Jump: refuses an occupied destination', () => {
+    let s = threeTricks([JUMP_JUMP_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'RESOLVE_JUMP_SOURCE', slot: 0 });
+    const before = s;
+    // Slot 1 is occupied — should be rejected.
+    s = step(s, { type: 'RESOLVE_JUMP', source: 0, dest: 1 });
+    expect(s).toBe(before);
+  });
+
+  it('Shuffle: permutes 5 picked cards in place and marks itself used', () => {
+    let s = threeTricks([SHUFFLE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    // 5 distinct cards in slots 0..4. (Slot 12 already auto-placed,
+    // we don't touch it.)
+    grid[0] = C('A', 'H');
+    grid[1] = C('2', 'C');
+    grid[2] = C('3', 'D');
+    grid[3] = C('4', 'S');
+    grid[4] = C('5', 'H');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    expect(s.phase.kind).toBe('awaiting-special-shuffle');
+
+    for (const slot of [0, 1, 2, 3, 4]) {
+      s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot });
+    }
+    if (s.phase.kind !== 'awaiting-special-shuffle') throw new Error();
+    expect(s.phase.selected.length).toBe(5);
+
+    // Cap at 5 — try a 6th. Should no-op even though slot 12 is occupied.
+    const before6 = s;
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 12 });
+    expect(s).toBe(before6);
+
+    s = step(s, { type: 'RESOLVE_SHUFFLE' });
+    expect(s.phase.kind).toBe('awaiting-action');
+    // All 5 slots still occupied; the multiset of cards there is the
+    // same as before, just (possibly) in a different order.
+    const after = [s.grid[0], s.grid[1], s.grid[2], s.grid[3], s.grid[4]];
+    expect(after.every(c => c !== null)).toBe(true);
+    const cardKeys = (a: typeof after) =>
+      a.map(c => (c!.kind === 'standard' ? `${c!.rank}${c!.suit}` : 'J')).sort();
+    expect(cardKeys(after)).toEqual(cardKeys([
+      C('A', 'H'), C('2', 'C'), C('3', 'D'), C('4', 'S'), C('5', 'H'),
+    ]));
+    expect(s.bonusCards[0].used).toBe(true);
+  });
+
+  it('Shuffle: refuses to commit with fewer than 5 picked', () => {
+    let s = threeTricks([SHUFFLE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
+    grid[2] = C('Q', 'D');
+    grid[3] = C('J', 'S');
+    grid[4] = C('5', 'H');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 0 });
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 1 });
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 2 });
+    const before = s;
+    s = step(s, { type: 'RESOLVE_SHUFFLE' });
     expect(s).toBe(before);
   });
 });

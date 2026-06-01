@@ -36,13 +36,17 @@ import {
   canHop,
   canSlide,
   destroyableSlots,
+  emptySlots,
   executeDestroy,
   executeHop,
+  executeJump,
   executeMegaDestroy,
+  executeShuffle,
   executeSideSlide,
   executeSlide,
   MEGA_DESTROY_MAX,
   occupiedSlots,
+  SHUFFLE_PICK_COUNT,
   sideSlideChainExtensions,
   sideSlideDestinationsForChain,
   SideSlideMove,
@@ -156,6 +160,30 @@ export type Phase =
       moves: SideSlideMove[];
       returnTo: TargetReturnTo;
     }
+  // Jump, Jump: pick any occupied card, then pick any empty slot.
+  | {
+      kind: 'awaiting-special-jump-source';
+      cardIdx: number;
+      sources: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-special-jump-dest';
+      cardIdx: number;
+      source: number;
+      dests: number[];
+      returnTo: TargetReturnTo;
+    }
+  // Shuffle: multi-select exactly SHUFFLE_PICK_COUNT cards (Confirm
+  // is disabled until the cap is reached). Picked slots toggle off
+  // before commit so the player can adjust.
+  | {
+      kind: 'awaiting-special-shuffle';
+      cardIdx: number;
+      slots: number[];
+      selected: number[];
+      returnTo: TargetReturnTo;
+    }
   | { kind: 'game-over' };
 
 export interface GameState {
@@ -245,7 +273,11 @@ export type Action =
   | { type: 'RESOLVE_MEGA_DESTROY' }
   | { type: 'TOGGLE_SIDE_SLIDE_PICK'; slot: number }
   | { type: 'SIDE_SLIDE_DONE_PICKING' }
-  | { type: 'RESOLVE_SIDE_SLIDE'; direction: Direction; distance: number }
+  | { type: 'RESOLVE_SIDE_SLIDE'; path: Direction[] }
+  | { type: 'RESOLVE_JUMP_SOURCE'; slot: number }
+  | { type: 'RESOLVE_JUMP'; source: number; dest: number }
+  | { type: 'TOGGLE_SHUFFLE_TARGET'; slot: number }
+  | { type: 'RESOLVE_SHUFFLE' }
   | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -709,6 +741,37 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
         },
       };
     }
+    case 'jump': {
+      // Need at least one occupied card AND one empty slot.
+      const sources = occupiedSlots(s.grid);
+      const empties = emptySlots(s.grid);
+      if (sources.length === 0 || empties.length === 0) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-jump-source',
+          cardIdx: idx,
+          sources,
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+    case 'shuffle': {
+      const slots = occupiedSlots(s.grid);
+      // Need at least 5 cards on the grid to pick from. Less than
+      // that and the action can't fire.
+      if (slots.length < SHUFFLE_PICK_COUNT) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-shuffle',
+          cardIdx: idx,
+          slots,
+          selected: [],
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
   }
   return s;
 };
@@ -854,20 +917,81 @@ const handleSideSlideDonePicking = (s: GameState): GameState => {
 
 const handleResolveSideSlide = (
   s: GameState,
-  direction: Direction,
-  distance: number
+  path: Direction[]
 ): GameState => {
   if (s.phase.kind !== 'awaiting-special-side-slide-dest') return s;
   const phase = s.phase;
-  const valid = phase.moves.find(
-    m => m.direction === direction && m.distance === distance
-  );
+  // Match by path identity (joined string). Stale clicks against a
+  // path that no longer exists in the move table are rejected.
+  const key = path.join(',');
+  const valid = phase.moves.find(m => m.path.join(',') === key);
   if (!valid) return s;
-  const grid = executeSideSlide(s.grid, phase.chain, direction, distance);
+  const grid = executeSideSlide(s.grid, phase.chain, path);
   const newHand = consumeSpecial(s, phase.cardIdx);
   return log(
     { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
-    `Side Slide ${direction} × ${distance}`
+    `Slip & Slide ${path.join('-')}`
+  );
+};
+
+const handleResolveJumpSource = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-jump-source') return s;
+  if (!s.phase.sources.includes(slot)) return s;
+  return {
+    ...s,
+    phase: {
+      kind: 'awaiting-special-jump-dest',
+      cardIdx: s.phase.cardIdx,
+      source: slot,
+      dests: emptySlots(s.grid),
+      returnTo: s.phase.returnTo,
+    },
+  };
+};
+
+const handleResolveJump = (
+  s: GameState,
+  source: number,
+  dest: number
+): GameState => {
+  if (s.phase.kind !== 'awaiting-special-jump-dest') return s;
+  if (s.phase.source !== source) return s;
+  if (!s.phase.dests.includes(dest)) return s;
+  const grid = executeJump(s.grid, source, dest);
+  const newHand = consumeSpecial(s, s.phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Jump ${source}→${dest}`
+  );
+};
+
+const handleToggleShuffleTarget = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-shuffle') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  const phase = s.phase;
+  const already = phase.selected.indexOf(slot);
+  let selected: number[];
+  if (already >= 0) {
+    selected = phase.selected.filter(i => i !== slot);
+  } else {
+    if (phase.selected.length >= SHUFFLE_PICK_COUNT) return s;
+    selected = [...phase.selected, slot];
+  }
+  return { ...s, phase: { ...phase, selected } };
+};
+
+const handleResolveShuffle = (
+  s: GameState,
+  rng: () => number
+): GameState => {
+  if (s.phase.kind !== 'awaiting-special-shuffle') return s;
+  const phase = s.phase;
+  if (phase.selected.length !== SHUFFLE_PICK_COUNT) return s;
+  const grid = executeShuffle(s.grid, phase.selected, rng);
+  const newHand = consumeSpecial(s, phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Shuffle on ${phase.selected.length} slots`
   );
 };
 
@@ -1084,6 +1208,18 @@ const handleCancelAction = (s: GameState): GameState => {
           returnTo: s.phase.returnTo,
         },
       };
+    case 'awaiting-special-jump-dest':
+      // Back to source selection so the player can re-pick which
+      // card to move.
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-jump-source',
+          cardIdx: s.phase.cardIdx,
+          sources: occupiedSlots(s.grid),
+          returnTo: s.phase.returnTo,
+        },
+      };
     case 'awaiting-target-hop':
     case 'awaiting-target-slide-source':
     case 'awaiting-target-destroy':
@@ -1094,6 +1230,8 @@ const handleCancelAction = (s: GameState): GameState => {
     case 'awaiting-special-wildcard':
     case 'awaiting-special-mega-destroy':
     case 'awaiting-special-side-slide-pick':
+    case 'awaiting-special-jump-source':
+    case 'awaiting-special-shuffle':
       return { ...s, phase: { kind: s.phase.returnTo } };
   }
 };
@@ -1117,6 +1255,8 @@ const SNAP_ACTIONS = new Set<Action['type']>([
   'RESOLVE_WILDCARD',
   'RESOLVE_MEGA_DESTROY',
   'RESOLVE_SIDE_SLIDE',
+  'RESOLVE_JUMP',
+  'RESOLVE_SHUFFLE',
 ]);
 
 const handleUndo = (s: GameState): GameState => {
@@ -1205,7 +1345,19 @@ export const step = (
       next = handleSideSlideDonePicking(state);
       break;
     case 'RESOLVE_SIDE_SLIDE':
-      next = handleResolveSideSlide(state, action.direction, action.distance);
+      next = handleResolveSideSlide(state, action.path);
+      break;
+    case 'RESOLVE_JUMP_SOURCE':
+      next = handleResolveJumpSource(state, action.slot);
+      break;
+    case 'RESOLVE_JUMP':
+      next = handleResolveJump(state, action.source, action.dest);
+      break;
+    case 'TOGGLE_SHUFFLE_TARGET':
+      next = handleToggleShuffleTarget(state, action.slot);
+      break;
+    case 'RESOLVE_SHUFFLE':
+      next = handleResolveShuffle(state, rng);
       break;
   }
   if (next === state) return state;

@@ -338,6 +338,9 @@ const pickAction = (s: GameState): Action => {
     case 'awaiting-special-mega-destroy':
     case 'awaiting-special-side-slide-pick':
     case 'awaiting-special-side-slide-dest':
+    case 'awaiting-special-jump-source':
+    case 'awaiting-special-jump-dest':
+    case 'awaiting-special-shuffle':
     case 'awaiting-bonus-slot-choice':
       // Three Tricks / Mixed Bag specialty phases don't appear in
       // the bot's Free Play simulation. If they ever do, just bail

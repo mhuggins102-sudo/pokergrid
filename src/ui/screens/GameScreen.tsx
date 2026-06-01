@@ -160,6 +160,11 @@ const GRID_EFFECT_MIN_TURNS = 5;
 // it.
 const HINT_REVEAL_DELAY_MS = 700;
 
+// Delay between each card "dropping" back into place during the
+// Shuffle reveal. 180ms makes the staggered reveal feel snappy
+// but still legible.
+const SHUFFLE_REVEAL_INTERVAL_MS = 180;
+
 const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
   joker: 'seenJokerHint',
   'bonus-cap': 'seenBonusCapHint',
@@ -262,6 +267,14 @@ export const GameScreen = ({
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<Set<number> | null>(null);
+  // Shuffle reveal sequence — `slots` is the order to reveal, `revealed`
+  // counts how many have been un-hidden so far. While active, the
+  // un-revealed tail is fed into hiddenSlots so the player sees each
+  // card drop into place one at a time after the shuffle commits.
+  const [shuffleReveal, setShuffleReveal] = useState<{
+    slots: number[];
+    revealed: number;
+  } | null>(null);
   const [activeHint, setActiveHint] = useState<HintId | null>(null);
   // Anchor rect (in screen coords) for the currently active hint. Null
   // while measurement is in flight or when the hint has no anchor —
@@ -424,6 +437,27 @@ export const GameScreen = ({
     if (animTimer.current) clearTimeout(animTimer.current);
     animTimer.current = setTimeout(() => setAnim(null), ANIM_DURATION['joker-place']);
   }, [state.grid, settings.reduceMotion, playSound, haptic]);
+
+  // Shuffle reveal stepper — once the shuffleReveal state is set
+  // (immediately after the player confirms a Shuffle commit), reveal
+  // the affected slots one at a time. Cancel-safe via the timer
+  // cleanup; reduce-motion skips the staggered reveal entirely.
+  useEffect(() => {
+    if (!shuffleReveal) return;
+    if (settings.reduceMotion) {
+      // Reveal everything instantly when motion is reduced.
+      setShuffleReveal(null);
+      return;
+    }
+    if (shuffleReveal.revealed >= shuffleReveal.slots.length) {
+      setShuffleReveal(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      setShuffleReveal(r => (r ? { ...r, revealed: r.revealed + 1 } : null));
+    }, SHUFFLE_REVEAL_INTERVAL_MS);
+    return () => clearTimeout(t);
+  }, [shuffleReveal, settings.reduceMotion]);
 
   const liveReport = useMemo(
     () =>
@@ -953,12 +987,32 @@ export const GameScreen = ({
       if (valid) {
         haptic('slide');
         playSound('slide');
-        dispatch({
-          type: 'RESOLVE_SIDE_SLIDE',
-          direction: valid.direction,
-          distance: valid.distance,
-        });
+        dispatch({ type: 'RESOLVE_SIDE_SLIDE', path: valid.path });
         setSelectedSlot(null);
+      }
+    } else if (p.kind === 'awaiting-special-jump-source') {
+      if (p.sources.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'RESOLVE_JUMP_SOURCE', slot: idx });
+        setSelectedSlot(idx);
+      }
+    } else if (p.kind === 'awaiting-special-jump-dest') {
+      if (idx === p.source) {
+        // Tap source again to deselect — bounce back to source phase.
+        setSelectedSlot(null);
+        dispatch({ type: 'CANCEL_ACTION' });
+      } else if (p.dests.includes(idx)) {
+        haptic('swap');
+        playSound('swap');
+        dispatch({ type: 'RESOLVE_JUMP', source: p.source, dest: idx });
+        setSelectedSlot(null);
+      }
+    } else if (p.kind === 'awaiting-special-shuffle') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'TOGGLE_SHUFFLE_TARGET', slot: idx });
       }
     }
   };
@@ -1013,6 +1067,18 @@ export const GameScreen = ({
     } else if (p.kind === 'awaiting-special-side-slide-dest') {
       for (const m of p.moves) out.add(m.leadingDest);
       for (const s of p.chain) out.add(s);
+    } else if (p.kind === 'awaiting-special-jump-source') {
+      for (const s of p.sources) out.add(s);
+    } else if (p.kind === 'awaiting-special-jump-dest') {
+      // Source stays lit so the player can tap to deselect; every
+      // empty slot is a valid landing.
+      out.add(p.source);
+      for (const s of p.dests) out.add(s);
+    } else if (p.kind === 'awaiting-special-shuffle') {
+      // Highlight every legal target (any occupied slot); pickedSlots
+      // below tints the currently-chosen 5 in green so the player can
+      // see their pending set.
+      for (const s of p.slots) out.add(s);
     }
     return out;
   }, [state.phase, selectedSlot, state.grid]);
@@ -1358,7 +1424,18 @@ export const GameScreen = ({
             <GridView
               grid={state.grid}
               highlight={highlightedSlots}
-              hiddenSlots={hiddenSlotsFor(anim)}
+              hiddenSlots={
+                // Shuffle: any slot whose card hasn't been "revealed"
+                // yet by the reveal sequence is hidden so the cards
+                // appear to drop in one at a time. Union with any
+                // anim-driven hides (joker-place, slide, etc).
+                shuffleReveal
+                  ? new Set([
+                      ...Array.from(hiddenSlotsFor(anim)),
+                      ...shuffleReveal.slots.slice(shuffleReveal.revealed),
+                    ])
+                  : hiddenSlotsFor(anim)
+              }
               selected={selectedSlot}
               nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
               ghostSlots={dragGhost ?? undefined}
@@ -1372,6 +1449,8 @@ export const GameScreen = ({
                   ? new Set(state.phase.selected)
                   : state.phase.kind === 'awaiting-special-side-slide-dest'
                   ? new Set(state.phase.chain)
+                  : state.phase.kind === 'awaiting-special-shuffle'
+                  ? new Set(state.phase.selected)
                   : undefined
               }
               onSlotPress={handleSlotPress}
@@ -1398,7 +1477,8 @@ export const GameScreen = ({
           deckPeekAllowed ? () => setDeckPreviewOpen(true) : undefined,
           perkButtonRef,
           deckCountRef,
-          drawnIsWild ? () => setWildPerkOpen(true) : undefined
+          drawnIsWild ? () => setWildPerkOpen(true) : undefined,
+          (slots: number[]) => setShuffleReveal({ slots, revealed: 0 })
         )}
       </View>
 
@@ -2015,7 +2095,11 @@ const renderBottom = (
   // perk directly. Used when the drawn card is wild-supercharged —
   // the player picks which of H/S/D/C the perk should resolve as,
   // rather than being locked to the card's original suit.
-  onOpenWildPerk?: () => void
+  onOpenWildPerk?: () => void,
+  // Called when the Shuffle "Confirm" button fires so the parent can
+  // kick off the staggered reveal animation before the grid catches
+  // up with the post-shuffle state.
+  onShuffleConfirm?: (slots: number[]) => void
 ) => {
   const p = state.phase;
   const disabled = animating;
@@ -2355,7 +2439,7 @@ const renderBottom = (
           perkCount={state.perkSpent.length}
           onDeckPress={onDeckPress}
         >
-          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Side Slide</Text>
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Slip & Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
         <View style={styles.btnCol}>
@@ -2397,15 +2481,91 @@ const renderBottom = (
           perkCount={state.perkSpent.length}
           onDeckPress={onDeckPress}
         >
-          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Side Slide</Text>
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Slip & Slide</Text>
           <CardTile card={state.drawn} size="lg" />
         </DrawnArea>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>
-            Tap a glowing landing to slide the group perpendicular to its line.
+            Tap any glowing landing. The group can take a multi-direction path
+            (e.g. up + left) — reachable cells are all lit.
           </Text>
           <NeonButton
             label="Pick different cards"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (
+    p.kind === 'awaiting-special-jump-source' ||
+    p.kind === 'awaiting-special-jump-dest'
+  ) {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-jump'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Jump, Jump</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            {p.kind === 'awaiting-special-jump-source'
+              ? 'Tap the card you want to move. Then tap any empty slot.'
+              : 'Tap an empty slot to drop the picked card there. Tap the picked card again to undo.'}
+          </Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-special-shuffle') {
+    const n = p.selected.length;
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-shuffle'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Shuffle</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Pick 5 cards to shuffle. {n} / 5 selected. Tap a card again to drop it.
+          </Text>
+          <NeonButton
+            label={n === 5 ? 'Shuffle' : `${5 - n} more`}
+            variant="primary"
+            size="sm"
+            disabled={n !== 5}
+            onPress={() => {
+              haptic('bonus');
+              playSound('bonus');
+              // Snapshot the picked slots so the parent's reveal
+              // sequence has the order to walk through (the phase
+              // clears once the reducer commits).
+              onShuffleConfirm?.(p.selected.slice());
+              dispatch({ type: 'RESOLVE_SHUFFLE' });
+            }}
+          />
+          <NeonButton
+            label="Cancel"
             variant="secondary"
             size="sm"
             onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
