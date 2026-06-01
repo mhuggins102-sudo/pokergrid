@@ -30,6 +30,7 @@ export { STARTER_BONUS_BY_DIFFICULTY };
 export const canPreviewDeck = (difficulty: Difficulty): boolean =>
   CAN_PREVIEW_DECK_BY_DIFFICULTY[difficulty];
 import {
+  canDeselectSideSlideSlot,
   canDrawBonus,
   canDestroy,
   canHop,
@@ -42,8 +43,9 @@ import {
   executeSlide,
   MEGA_DESTROY_MAX,
   occupiedSlots,
+  sideSlideChainExtensions,
+  sideSlideDestinationsForChain,
   SideSlideMove,
-  sideSlideDestinationsFrom,
   SlideMove,
   slideDestinationsFrom,
   supercharchableSlots,
@@ -135,19 +137,22 @@ export type Phase =
       selected: number[];
       returnTo: TargetReturnTo;
     }
-  // Side Slide reuses the source / dest split from regular ♠ Slide:
-  // pick a card whose row OR column chain has 2+ members, then pick
-  // a perpendicular landing position.
+  // Side Slide is a two-step pick → dest flow modeled on ♠ Slide,
+  // but the player builds the chain interactively. Pick starts with
+  // the first tapped card; each subsequent tap either extends the
+  // chain at one of its endpoints (orientation locks once 2+ cards
+  // are picked) or removes an endpoint. Once the chain is 2+ cards
+  // long the player commits to the dest phase to choose a landing.
   | {
-      kind: 'awaiting-special-side-slide-source';
+      kind: 'awaiting-special-side-slide-pick';
       cardIdx: number;
-      sources: number[];
+      selected: number[];
       returnTo: TargetReturnTo;
     }
   | {
       kind: 'awaiting-special-side-slide-dest';
       cardIdx: number;
-      source: number;
+      chain: number[];
       moves: SideSlideMove[];
       returnTo: TargetReturnTo;
     }
@@ -238,8 +243,9 @@ export type Action =
   | { type: 'RESOLVE_WILDCARD'; slot: number }
   | { type: 'TOGGLE_MEGA_DESTROY_TARGET'; slot: number }
   | { type: 'RESOLVE_MEGA_DESTROY' }
-  | { type: 'SIDE_SLIDE_SELECT_SOURCE'; slot: number }
-  | { type: 'RESOLVE_SIDE_SLIDE'; from: number; direction: Direction; distance: number }
+  | { type: 'TOGGLE_SIDE_SLIDE_PICK'; slot: number }
+  | { type: 'SIDE_SLIDE_DONE_PICKING' }
+  | { type: 'RESOLVE_SIDE_SLIDE'; direction: Direction; distance: number }
   | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -696,9 +702,9 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
       return {
         ...s,
         phase: {
-          kind: 'awaiting-special-side-slide-source',
+          kind: 'awaiting-special-side-slide-pick',
           cardIdx: idx,
-          sources,
+          selected: [],
           returnTo: 'awaiting-action',
         },
       };
@@ -802,17 +808,44 @@ const handleResolveMegaDestroy = (s: GameState): GameState => {
   );
 };
 
-const handleSideSlideSelectSource = (s: GameState, slot: number): GameState => {
-  if (s.phase.kind !== 'awaiting-special-side-slide-source') return s;
-  if (!s.phase.sources.includes(slot)) return s;
-  const moves = sideSlideDestinationsFrom(s.grid, slot);
+const handleToggleSideSlidePick = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-side-slide-pick') return s;
+  const phase = s.phase;
+  // Toggle off: only allowed when the slot is an endpoint of the
+  // current chain (so removing it keeps the rest contiguous).
+  if (phase.selected.includes(slot)) {
+    if (!canDeselectSideSlideSlot(phase.selected, slot)) return s;
+    return {
+      ...s,
+      phase: { ...phase, selected: phase.selected.filter(x => x !== slot) },
+    };
+  }
+  // Toggle on: must be a legal extension of the current chain.
+  const extensions = sideSlideChainExtensions(s.grid, phase.selected);
+  if (!extensions.includes(slot)) {
+    // First pick of the run: extensions returns every occupied slot,
+    // so this still allows the very first tap.
+    if (phase.selected.length > 0) return s;
+    if (s.grid[slot] === null) return s;
+  }
+  return {
+    ...s,
+    phase: { ...phase, selected: [...phase.selected, slot] },
+  };
+};
+
+const handleSideSlideDonePicking = (s: GameState): GameState => {
+  if (s.phase.kind !== 'awaiting-special-side-slide-pick') return s;
+  const chain = s.phase.selected;
+  if (chain.length < 2) return s;
+  const moves = sideSlideDestinationsForChain(s.grid, chain);
   if (moves.length === 0) return s;
   return {
     ...s,
     phase: {
       kind: 'awaiting-special-side-slide-dest',
       cardIdx: s.phase.cardIdx,
-      source: slot,
+      chain: [...chain],
       moves,
       returnTo: s.phase.returnTo,
     },
@@ -821,17 +854,16 @@ const handleSideSlideSelectSource = (s: GameState, slot: number): GameState => {
 
 const handleResolveSideSlide = (
   s: GameState,
-  from: number,
   direction: Direction,
   distance: number
 ): GameState => {
   if (s.phase.kind !== 'awaiting-special-side-slide-dest') return s;
   const phase = s.phase;
   const valid = phase.moves.find(
-    m => m.from === from && m.direction === direction && m.distance === distance
+    m => m.direction === direction && m.distance === distance
   );
   if (!valid) return s;
-  const grid = executeSideSlide(s.grid, from, direction, distance);
+  const grid = executeSideSlide(s.grid, phase.chain, direction, distance);
   const newHand = consumeSpecial(s, phase.cardIdx);
   return log(
     { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
@@ -1040,13 +1072,15 @@ const handleCancelAction = (s: GameState): GameState => {
         },
       };
     case 'awaiting-special-side-slide-dest':
-      // Back to source selection within the same side-slide flow.
+      // Back to chain-pick within the same side-slide flow — preserve
+      // the picked chain so the player can adjust it without
+      // re-tapping from scratch.
       return {
         ...s,
         phase: {
-          kind: 'awaiting-special-side-slide-source',
+          kind: 'awaiting-special-side-slide-pick',
           cardIdx: s.phase.cardIdx,
-          sources: validSideSlideSources(s.grid),
+          selected: [...s.phase.chain],
           returnTo: s.phase.returnTo,
         },
       };
@@ -1059,7 +1093,7 @@ const handleCancelAction = (s: GameState): GameState => {
     case 'awaiting-special-doubler':
     case 'awaiting-special-wildcard':
     case 'awaiting-special-mega-destroy':
-    case 'awaiting-special-side-slide-source':
+    case 'awaiting-special-side-slide-pick':
       return { ...s, phase: { kind: s.phase.returnTo } };
   }
 };
@@ -1164,11 +1198,14 @@ export const step = (
     case 'RESOLVE_MEGA_DESTROY':
       next = handleResolveMegaDestroy(state);
       break;
-    case 'SIDE_SLIDE_SELECT_SOURCE':
-      next = handleSideSlideSelectSource(state, action.slot);
+    case 'TOGGLE_SIDE_SLIDE_PICK':
+      next = handleToggleSideSlidePick(state, action.slot);
+      break;
+    case 'SIDE_SLIDE_DONE_PICKING':
+      next = handleSideSlideDonePicking(state);
       break;
     case 'RESOLVE_SIDE_SLIDE':
-      next = handleResolveSideSlide(state, action.from, action.direction, action.distance);
+      next = handleResolveSideSlide(state, action.direction, action.distance);
       break;
   }
   if (next === state) return state;
