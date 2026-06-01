@@ -80,7 +80,12 @@ export interface BonusCard {
   // regular bonus-card slots but render with a distinct (green) border
   // to set them apart from in-game (yellow) and end-game (purple)
   // multipliers.
-  specialKind?: 'power-swap' | 'doubler' | 'wildcard';
+  specialKind?:
+    | 'power-swap'
+    | 'doubler'
+    | 'wildcard'
+    | 'mega-destroy'
+    | 'side-slide';
   // True after a one-time-use card has been activated. The card stays
   // in the hand (occupying its slot) but is rendered dimmed and no
   // longer accepts activation. Keeping the spent card around — rather
@@ -88,6 +93,11 @@ export interface BonusCard {
   // can also be consumed and the spent slot still blocks ♣ from
   // drawing a fresh card into that position.
   used?: boolean;
+  // Marks an "empty" placeholder card used by the Mixed Bag challenge
+  // to keep slot positions stable while a slot is still unfilled. A
+  // placeholder has no effects, can't be activated, and renders as a
+  // dimmed "draw to fill" prompt in the matching category tone.
+  placeholderKind?: 'special' | 'in-game' | 'end-game';
 }
 
 // Three "Three Tricks" challenge special cards. Each one is a single-use
@@ -124,8 +134,81 @@ export const WILDCARD_CARD: BonusCard = {
   specialKind: 'wildcard',
 };
 
+export const MEGA_DESTROY_CARD: BonusCard = {
+  id: 'special-mega-destroy',
+  name: 'Mega Destroy',
+  title: 'Mega Destroy',
+  mult: 'one-time',
+  description:
+    'Destroy up to 5 cards on the grid in one shot. Tap each card you want to remove, then confirm. Consumed on use.',
+  specialKind: 'mega-destroy',
+};
+
+export const SIDE_SLIDE_CARD: BonusCard = {
+  id: 'special-side-slide',
+  name: 'Side Slide',
+  title: 'Side Slide',
+  mult: 'one-time',
+  description:
+    'Take a row or column of 2+ adjacent cards and slide them perpendicular to their line — a horizontal run shifts up or down, a vertical run shifts left or right. Consumed on use.',
+  specialKind: 'side-slide',
+};
+
+// Pool of every one-time action card. Used by the Three Tricks challenge
+// (samples 3 at random) and by any future variant that wants to roll
+// against the special deck.
+export const SPECIAL_DECK_POOL: BonusCard[] = [
+  POWER_SWAP_CARD,
+  DOUBLER_CARD,
+  WILDCARD_CARD,
+  MEGA_DESTROY_CARD,
+  SIDE_SLIDE_CARD,
+];
+
 export const isSpecialCard = (c: BonusCard): boolean =>
   c.specialKind !== undefined;
+
+// Slot category — used by the Mixed Bag challenge to lock each of the
+// three bonus hand slots to a different family. The label below maps a
+// SlotKind to the chip tone (green / yellow / purple) the player sees.
+export type SlotKind = 'special' | 'in-game' | 'end-game';
+
+// Does this card belong in a slot of the given kind?
+//   'special'  → one-time action cards (green chips).
+//   'in-game'  → per-line scoring cards (yellow chips).
+//   'end-game' → grid / deck-management cards (purple chips).
+export const cardMatchesSlot = (
+  card: BonusCard,
+  kind: SlotKind
+): boolean => {
+  if (isSpecialCard(card)) return kind === 'special';
+  if (card.lineEffect) return kind === 'in-game';
+  if (card.gridEffect) return kind === 'end-game';
+  return false;
+};
+
+// Placeholder card shown in an empty categorized slot. Holds no effects;
+// the BonusCardStrip detects it via `placeholderKind` and renders a
+// dimmed "draw to fill" prompt in the matching tone. Players never see
+// these in non-categorized modes.
+export const slotPlaceholder = (kind: SlotKind): BonusCard => ({
+  id: `placeholder-${kind}`,
+  name: '(empty)',
+  title:
+    kind === 'special' ? 'Green slot'
+    : kind === 'in-game' ? 'Yellow slot'
+    : 'Purple slot',
+  mult: 'empty',
+  description: `Empty slot. Draw a ♣ Bonus and pick this slot to fill it with a ${
+    kind === 'special' ? 'one-time action'
+    : kind === 'in-game' ? 'per-line scoring'
+    : 'grid / deck-management'
+  } card.`,
+  placeholderKind: kind,
+});
+
+export const isPlaceholder = (c: BonusCard): boolean =>
+  c.placeholderKind !== undefined;
 
 // Helpers
 const standardCards = (line: LineContext) =>

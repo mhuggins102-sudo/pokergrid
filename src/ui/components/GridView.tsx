@@ -27,6 +27,10 @@ interface Props {
   // the existing slot content so the player sees the landing in real
   // time without committing yet.
   ghostSlots?: Set<number>;
+  // Multi-select danger overlay — Mega Destroy uses this to mark
+  // slots the player has tapped but not yet confirmed. Rendered as
+  // a red outline on top of the cell.
+  dangerSlots?: Set<number>;
   onSlotPress?: (idx: number) => void;
   onLinePress?: (kind: LineKind, index: number) => void;
   // Render with smaller cells + sm cards. Used by ResultScreen to keep the
@@ -81,6 +85,7 @@ export const GridView = ({
   selected,
   nextSlotHint,
   ghostSlots,
+  dangerSlots,
   onSlotPress,
   onLinePress,
   compact,
@@ -129,6 +134,7 @@ export const GridView = ({
             const positionNum = SPIRAL_POSITION[idx];
 
             const isGhost = ghostSlots?.has(idx) ?? false;
+            const isDanger = dangerSlots?.has(idx) ?? false;
             return (
               <Pressable
                 key={idx}
@@ -158,6 +164,18 @@ export const GridView = ({
                       pointerEvents="none"
                       style={[
                         styles.dragGhost,
+                        {
+                          width: compact ? cardSize.sm : cardSize.md,
+                          height: compact ? cardSize.sm : cardSize.md,
+                        },
+                      ]}
+                    />
+                  )}
+                  {isDanger && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.dangerOverlay,
                         {
                           width: compact ? cardSize.sm : cardSize.md,
                           height: compact ? cardSize.sm : cardSize.md,
@@ -241,5 +259,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: 'rgba(92, 255, 154, 0.10)',
     ...glow(colors.success, 8, 0.65),
+  },
+  // Mega Destroy: "picked but not yet committed" tint — same shape as
+  // dragGhost but rendered in danger red so the player can see at a
+  // glance which cards will be destroyed when they Confirm.
+  dangerOverlay: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.danger,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255, 100, 100, 0.18)',
+    ...glow(colors.danger, 8, 0.7),
   },
 });

@@ -518,24 +518,35 @@ export const GameScreen = ({
     if (
       !settings.seenBonusHeldHint &&
       state.bonusCards.length >= 1 &&
-      // Skip when every held card is a one-time-use special (Three
-      // Tricks). The hint text describes the yellow / purple tone
-      // signal, which doesn't apply to the green specials.
-      state.bonusCards.some(c => !c.specialKind)
+      // Only count real, non-special, non-placeholder cards. The hint
+      // explains the yellow / purple tone signal and how the chip
+      // multiplies score — neither concept applies to a green special
+      // (Three Tricks) or a Mixed Bag placeholder.
+      state.bonusCards.some(c => !c.specialKind && !c.placeholderKind)
     ) {
       return 'bonus-held';
     }
     // Three Tricks specials get their own onboarding hint that
     // explains the tap-chip → Use flow and the one-time-consumption
     // behavior. Fires the first time the player is holding at least
-    // one special card.
+    // one ACTIVATABLE special (placeholders don't count — they're
+    // category markers, not playable cards).
     if (
       !settings.seenSpecialCardsHint &&
-      state.bonusCards.some(c => !!c.specialKind)
+      state.bonusCards.some(c => !!c.specialKind && !c.placeholderKind)
     ) {
       return 'special-cards';
     }
-    if (!settings.seenBonusCapHint && state.bonusCards.length >= BONUS_HAND_LIMIT) {
+    // Mixed Bag puts placeholders in every slot from turn 1, so the
+    // bonus-cap "your hand is full" framing doesn't apply — the
+    // categorized draw replaces directly into a slot rather than
+    // forcing the player to choose which card to evict. Skip the hint
+    // when the seemingly-full hand is just placeholders.
+    if (
+      !settings.seenBonusCapHint &&
+      state.bonusCards.length >= BONUS_HAND_LIMIT &&
+      state.bonusCards.every(c => !c.placeholderKind)
+    ) {
       return 'bonus-cap';
     }
     if (!settings.seenFirstScoringLineHint &&
@@ -923,6 +934,32 @@ export const GameScreen = ({
         playSound('tap');
         dispatch({ type: 'RESOLVE_WILDCARD', slot: idx });
       }
+    } else if (p.kind === 'awaiting-special-mega-destroy') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'TOGGLE_MEGA_DESTROY_TARGET', slot: idx });
+      }
+    } else if (p.kind === 'awaiting-special-side-slide-source') {
+      if (p.sources.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'SIDE_SLIDE_SELECT_SOURCE', slot: idx });
+        setSelectedSlot(idx);
+      }
+    } else if (p.kind === 'awaiting-special-side-slide-dest') {
+      const valid = p.moves.find(m => m.leadingDest === idx);
+      if (valid) {
+        haptic('slide');
+        playSound('slide');
+        dispatch({
+          type: 'RESOLVE_SIDE_SLIDE',
+          from: valid.from,
+          direction: valid.direction,
+          distance: valid.distance,
+        });
+        setSelectedSlot(null);
+      }
     }
   };
 
@@ -960,6 +997,16 @@ export const GameScreen = ({
       p.kind === 'awaiting-special-wildcard'
     ) {
       for (const s of p.slots) out.add(s);
+    } else if (p.kind === 'awaiting-special-mega-destroy') {
+      // Highlight every legal target (any occupied slot). The grid view
+      // additionally renders `selected` via the `selected` set below to
+      // distinguish picked-but-not-confirmed slots.
+      for (const s of p.slots) out.add(s);
+    } else if (p.kind === 'awaiting-special-side-slide-source') {
+      for (const s of p.sources) out.add(s);
+    } else if (p.kind === 'awaiting-special-side-slide-dest') {
+      for (const m of p.moves) out.add(m.leadingDest);
+      out.add(p.source);
     }
     return out;
   }, [state.phase, selectedSlot]);
@@ -1273,7 +1320,27 @@ export const GameScreen = ({
           <BonusCardStrip
             cards={state.bonusCards}
             values={bonusValues}
-            onCardPress={i => setBonusDetailIdx(i)}
+            selectedIdx={
+              // Mixed Bag draw flow: while the ♣ is showing 2 cards
+              // for the chosen slot, glow that slot so the player
+              // sees where the kept card will land.
+              state.phase.kind === 'bonus-card-resolving' &&
+              state.phase.targetSlot !== undefined
+                ? state.phase.targetSlot
+                : null
+            }
+            onCardPress={i => {
+              // Mixed Bag slot-choice phase: tapping a chip picks
+              // that slot to draw for. Otherwise, fall through to
+              // the standard detail modal.
+              if (state.phase.kind === 'awaiting-bonus-slot-choice') {
+                haptic('light');
+                playSound('tap');
+                dispatch({ type: 'BONUS_PICK_SLOT', slot: i });
+                return;
+              }
+              setBonusDetailIdx(i);
+            }}
             cardRefs={bonusCardRefs}
           />
         </View>
@@ -1289,6 +1356,11 @@ export const GameScreen = ({
               selected={selectedSlot}
               nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
               ghostSlots={dragGhost ?? undefined}
+              dangerSlots={
+                state.phase.kind === 'awaiting-special-mega-destroy'
+                  ? new Set(state.phase.selected)
+                  : undefined
+              }
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
               cellRefs={gridCellRefs}
@@ -2221,8 +2293,112 @@ const renderBottom = (
     );
   }
 
+  if (p.kind === 'awaiting-special-mega-destroy') {
+    const n = p.selected.length;
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-mega-destroy'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Mega Destroy</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap up to 5 cards to destroy. {n} selected. Tap again to unselect.
+          </Text>
+          <NeonButton
+            label={n === 0 ? 'Confirm' : `Destroy ${n}`}
+            variant="primary"
+            size="sm"
+            disabled={n === 0}
+            onPress={() => {
+              haptic('destroy');
+              playSound('destroy');
+              dispatch({ type: 'RESOLVE_MEGA_DESTROY' });
+            }}
+          />
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (
+    p.kind === 'awaiting-special-side-slide-source' ||
+    p.kind === 'awaiting-special-side-slide-dest'
+  ) {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-side-slide'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Side Slide</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            {p.kind === 'awaiting-special-side-slide-source'
+              ? 'Tap a card in a row or column of 2+ adjacent cards. Then tap a perpendicular landing.'
+              : 'Tap a glowing landing to slide the group perpendicular to its line.'}
+          </Text>
+          <NeonButton
+            label={p.kind === 'awaiting-special-side-slide-dest' ? 'Pick a different card' : 'Cancel'}
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-bonus-slot-choice') {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-slot-choice'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.suitC }]}>♣ Bonus</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Tap a bonus slot above to draw for it — the deck will be filtered to that
+            slot's category (green / yellow / purple).
+          </Text>
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
   if (p.kind === 'bonus-card-resolving') {
-    const atMax = state.bonusCards.length >= BONUS_HAND_LIMIT;
+    // Mixed Bag categorized-slot draw: targetSlot is pre-chosen so
+    // BONUS_KEEP places directly into that slot (replacing whatever
+    // was there) without going through the BONUS_SELECT_NEW → REPLACE
+    // hop the standard at-cap flow uses.
+    const categorized = p.targetSlot !== undefined;
+    const atMax = !categorized && state.bonusCards.length >= BONUS_HAND_LIMIT;
     // Spotlight is exclusive — it can't share the hand with any other bonus
     // card (see enforceSpotlight in state.ts). The eviction happens silently
     // on keep/swap, so warn before the player commits and loses cards by
@@ -2232,17 +2408,23 @@ const renderBottom = (
     //  - you already hold Spotlight and a drawn card ISN'T → keeping that one
     //    drops your Spotlight.
     const holdsSpotlight = state.bonusCards.some(c => c.id === SPOTLIGHT_ID);
-    const holdsOthers = state.bonusCards.some(c => c.id !== SPOTLIGHT_ID);
+    const holdsOthers = state.bonusCards.some(
+      c => c.id !== SPOTLIGHT_ID && !c.placeholderKind
+    );
     const drawnHasSpotlight = p.drawn.some(c => c.id === SPOTLIGHT_ID);
     const drawnHasOther = p.drawn.some(c => c.id !== SPOTLIGHT_ID);
     // Line 1 of the warning is always the same "Spotlight is exclusive!"
     // hook. Line 2 explains the specific consequence for the current
     // hand/draw combination. Both render in the same warn-tinted box
     // below so the warning reads as one block, not two separate notes.
+    // Mixed Bag never surfaces a Spotlight warning — Spotlight is a
+    // grid-effect (purple) card; the categorized draw is filtered to
+    // a single category at a time, so Spotlight only appears in the
+    // purple-slot draw, never alongside green/yellow cards.
     const spotlightWarning =
-      drawnHasSpotlight && holdsOthers
+      !categorized && drawnHasSpotlight && holdsOthers
         ? 'Keeping it discards every other bonus card you hold.'
-        : holdsSpotlight && drawnHasOther
+        : !categorized && holdsSpotlight && drawnHasOther
         ? 'Keeping a different card discards your Spotlight.'
         : null;
     return (
@@ -2251,7 +2433,9 @@ const renderBottom = (
           ♣ Bonus
         </Text>
         <Text style={styles.hint}>
-          {atMax
+          {categorized
+            ? 'Pick one card to drop into the slot you chose. The other goes back to the deck.'
+            : atMax
             ? 'You\'re at 3 bonus cards. Pick one to swap in — the card you replace is gone for good.'
             : 'Pick one of the drawn bonus cards to keep, or decline.'}
         </Text>
@@ -2269,10 +2453,11 @@ const renderBottom = (
             // pointless when the answer is "all of them" — Spotlight
             // evicts every other held card on pickup. Dispatch
             // BONUS_KEEP directly; the reducer's cap check has a
-            // matching Spotlight bypass.
+            // matching Spotlight bypass. Mixed Bag always uses
+            // BONUS_KEEP (targetSlot drives the slot placement).
             const isSpotlight = b.id === SPOTLIGHT_ID;
             const action: Action =
-              atMax && !isSpotlight
+              !categorized && atMax && !isSpotlight
                 ? { type: 'BONUS_SELECT_NEW', idx: i }
                 : { type: 'BONUS_KEEP', idx: i };
             return (
@@ -2301,10 +2486,12 @@ const renderBottom = (
             );
           })}
         </View>
-        {!state.randomPerks && (!atMax || state.bonusDeclineAllowed) && (
+        {!state.randomPerks && !categorized && (!atMax || state.bonusDeclineAllowed) && (
           // Short Circuit hides "Decline both" entirely — the random
           // perk roll committed the player to taking a bonus card,
           // so the only out is to keep one (or, at cap, swap one).
+          // Mixed Bag also hides it: the player committed when they
+          // picked the slot, and Hard rules disable decline anyway.
           <NeonButton
             label="Decline both"
             variant="secondary"

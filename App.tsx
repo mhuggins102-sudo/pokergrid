@@ -5,10 +5,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   BonusCard,
-  DOUBLER_CARD,
-  POWER_SWAP_CARD,
-  WILDCARD_CARD,
+  SlotKind,
+  SPECIAL_DECK_POOL,
 } from './src/game/bonusCards';
+import { shuffle } from './src/game/deck';
 import { Card } from './src/game/cards';
 import {
   ChallengeId,
@@ -380,12 +380,19 @@ const contextNoBonusCards = (ctx: PlayContext): boolean =>
   ctx.mode === 'challenge' &&
   (ctx.id === 'poker-purist' || ctx.id === 'three-tricks');
 
-// Three Tricks: seed the bonus hand with the three one-time action
-// cards. newGame uses these instead of the normal starter draw when
-// noBonusCards is true.
+// Three Tricks: seed the bonus hand with three random one-time action
+// cards sampled (no replacement) from SPECIAL_DECK_POOL. newGame uses
+// these instead of the normal starter draw when noBonusCards is true.
 const contextInitialBonusCards = (ctx: PlayContext): BonusCard[] => {
   if (ctx.mode !== 'challenge' || ctx.id !== 'three-tricks') return [];
-  return [POWER_SWAP_CARD, DOUBLER_CARD, WILDCARD_CARD];
+  return shuffle(SPECIAL_DECK_POOL, Math.random).slice(0, 3);
+};
+
+// Mixed Bag: lock the 3 bonus slots to categories — slot 0 green
+// (specials), slot 1 yellow (in-game scoring), slot 2 purple (end-game).
+const contextSlotCategories = (ctx: PlayContext): SlotKind[] | undefined => {
+  if (ctx.mode !== 'challenge' || ctx.id !== 'mixed-bag') return undefined;
+  return ['special', 'in-game', 'end-game'];
 };
 
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
@@ -410,7 +417,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     contextNoDiscards(context),
     contextRandomPerks(context),
     contextNoBonusCards(context),
-    contextInitialBonusCards(context)
+    contextInitialBonusCards(context),
+    contextSlotCategories(context)
   );
   if (state.phase.kind === 'game-over') {
     return (

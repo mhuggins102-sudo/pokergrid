@@ -38,6 +38,197 @@ export const supercharchableSlots = (grid: Grid): number[] => {
   return out;
 };
 
+// ---------- Mega Destroy (special: ★ one-time multi-target) ----------
+
+// Maximum number of cards Mega Destroy can take out in one shot.
+export const MEGA_DESTROY_MAX = 5;
+
+// Remove every slot in `slots` from the grid, returning the new grid
+// and the cards that were taken out (caller pushes them into discards).
+export const executeMegaDestroy = (
+  grid: Grid,
+  slots: readonly number[]
+): { grid: Grid; removed: Card[] } => {
+  const next = grid.slice();
+  const removed: Card[] = [];
+  for (const slot of slots) {
+    const c = next[slot];
+    if (!c) throw new Error(`Mega Destroy: slot ${slot} is empty`);
+    removed.push(c);
+    next[slot] = null;
+  }
+  return { grid: next, removed };
+};
+
+// ---------- Side Slide (special: ★ one-time perpendicular slide) ----------
+
+// Contiguous run of occupied cells in the row that contains `from`.
+// Returns the full chain in column-ascending order including `from`.
+const rowChainAt = (grid: Grid, from: number): number[] => {
+  if (grid[from] === null) return [];
+  const r = Math.floor(from / GRID_SIZE);
+  const c0 = from % GRID_SIZE;
+  const out = [from];
+  for (let c = c0 - 1; c >= 0; c--) {
+    const idx = r * GRID_SIZE + c;
+    if (grid[idx] === null) break;
+    out.unshift(idx);
+  }
+  for (let c = c0 + 1; c < GRID_SIZE; c++) {
+    const idx = r * GRID_SIZE + c;
+    if (grid[idx] === null) break;
+    out.push(idx);
+  }
+  return out;
+};
+
+// Contiguous run of occupied cells in the column that contains `from`.
+const colChainAt = (grid: Grid, from: number): number[] => {
+  if (grid[from] === null) return [];
+  const r0 = Math.floor(from / GRID_SIZE);
+  const c = from % GRID_SIZE;
+  const out = [from];
+  for (let r = r0 - 1; r >= 0; r--) {
+    const idx = r * GRID_SIZE + c;
+    if (grid[idx] === null) break;
+    out.unshift(idx);
+  }
+  for (let r = r0 + 1; r < GRID_SIZE; r++) {
+    const idx = r * GRID_SIZE + c;
+    if (grid[idx] === null) break;
+    out.push(idx);
+  }
+  return out;
+};
+
+// The chain that moves when a side-slide is committed in `direction`.
+// up/down moves the row-chain (perpendicular to the slide); left/right
+// moves the col-chain. Returns the chain only if its length is at least
+// 2 — Side Slide is the "group" version of slide and a single card
+// would just be a regular slide.
+export const sideSlideChain = (
+  grid: Grid,
+  from: number,
+  direction: Direction
+): number[] => {
+  const chain =
+    direction === 'up' || direction === 'down'
+      ? rowChainAt(grid, from)
+      : colChainAt(grid, from);
+  return chain.length >= 2 ? chain : [];
+};
+
+// How many empty cells lie ahead of `from` in `direction`, before the
+// grid edge or another occupied cell.
+const emptyCellsForward = (
+  grid: Grid,
+  from: number,
+  direction: Direction
+): number => {
+  const r = Math.floor(from / GRID_SIZE);
+  const c = from % GRID_SIZE;
+  const dr = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
+  const dc = direction === 'left' ? -1 : direction === 'right' ? 1 : 0;
+  let n = 0;
+  while (true) {
+    const r2 = r + dr * (n + 1);
+    const c2 = c + dc * (n + 1);
+    if (r2 < 0 || r2 >= GRID_SIZE || c2 < 0 || c2 >= GRID_SIZE) break;
+    const idx = r2 * GRID_SIZE + c2;
+    if (grid[idx] !== null) break;
+    n++;
+  }
+  return n;
+};
+
+// Per-direction maximum distance for a side slide from `from`. Every
+// chain member needs the same amount of free space ahead of it, so
+// the effective max is the min over the chain.
+const sideSlideMaxDistance = (
+  grid: Grid,
+  from: number,
+  direction: Direction
+): number => {
+  const chain = sideSlideChain(grid, from, direction);
+  if (chain.length === 0) return 0;
+  let max = Infinity;
+  for (const slot of chain) {
+    const d = emptyCellsForward(grid, slot, direction);
+    if (d < max) max = d;
+    if (max === 0) return 0;
+  }
+  return max === Infinity ? 0 : max;
+};
+
+// Slots from which Side Slide can fire: there's a row-chain ≥ 2 with
+// space above OR below, or a col-chain ≥ 2 with space left OR right.
+export const validSideSlideSources = (grid: Grid): number[] => {
+  const out: number[] = [];
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    if (grid[i] === null) continue;
+    if (
+      sideSlideMaxDistance(grid, i, 'up') > 0 ||
+      sideSlideMaxDistance(grid, i, 'down') > 0 ||
+      sideSlideMaxDistance(grid, i, 'left') > 0 ||
+      sideSlideMaxDistance(grid, i, 'right') > 0
+    ) {
+      out.push(i);
+    }
+  }
+  return out;
+};
+
+export interface SideSlideMove {
+  from: number;
+  direction: Direction;
+  distance: number;
+  // Slot the source card lands in — used by the GameScreen to render
+  // the dest highlights.
+  leadingDest: number;
+}
+
+export const sideSlideDestinationsFrom = (
+  grid: Grid,
+  from: number
+): SideSlideMove[] => {
+  const out: SideSlideMove[] = [];
+  for (const d of ['up', 'down', 'left', 'right'] as Direction[]) {
+    const max = sideSlideMaxDistance(grid, from, d);
+    if (max === 0) continue;
+    const step =
+      d === 'up' ? -GRID_SIZE
+      : d === 'down' ? GRID_SIZE
+      : d === 'left' ? -1 : 1;
+    for (let dist = 1; dist <= max; dist++) {
+      out.push({ from, direction: d, distance: dist, leadingDest: from + step * dist });
+    }
+  }
+  return out;
+};
+
+export const executeSideSlide = (
+  grid: Grid,
+  from: number,
+  direction: Direction,
+  distance: number
+): Grid => {
+  const chain = sideSlideChain(grid, from, direction);
+  if (chain.length === 0) throw new Error('Side Slide: no chain at source');
+  if (distance < 1 || distance > sideSlideMaxDistance(grid, from, direction)) {
+    throw new Error(`Side Slide: distance ${distance} out of range`);
+  }
+  const step =
+    direction === 'up' ? -GRID_SIZE
+    : direction === 'down' ? GRID_SIZE
+    : direction === 'left' ? -1 : 1;
+  const next = grid.slice();
+  // Clear all chain positions before writing — otherwise neighbors in
+  // the chain would overwrite each other when the step is small.
+  for (const idx of chain) next[idx] = null;
+  for (const idx of chain) next[idx + step * distance] = grid[idx];
+  return next;
+};
+
 // ---------- ♥ Hop (heart) ----------
 // Swap any two cards that share a row OR share a column. Suit and pip are
 // irrelevant. Joker is a valid participant.

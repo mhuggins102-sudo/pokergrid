@@ -21,7 +21,8 @@ export type ChallengeId =
   | 'no-discards'
   | 'short-circuit'
   | 'poker-purist'
-  | 'three-tricks';
+  | 'three-tricks'
+  | 'mixed-bag';
 
 export interface Challenge {
   id: ChallengeId;
@@ -78,11 +79,20 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'three-tricks',
     name: 'Three Tricks',
-    goal: 'Score 500+ with no bonus-card deck. You start holding three one-time action cards: Power Swap (swap any two grid cards), The Doubler (turn a card into a "double"), and Wildcard (turn a card into a wild). Each is consumed on use.',
+    goal: 'Score 500+ with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
     scoreTarget: 500,
     // Enforced at newGame: noBonusCards strips the regular bonus deck,
-    // and initialBonusCards seeds the hand with the three specials.
+    // and initialBonusCards seeds the hand with three random specials.
     // App.tsx wires the seeding via contextInitialBonusCards.
+    conditionMet: () => true,
+  },
+  {
+    id: 'mixed-bag',
+    name: 'Mixed Bag',
+    goal: 'Score 500+ with bonus slots locked to categories — slot 1 holds a green (one-time) card, slot 2 holds a yellow (per-line) card, slot 3 holds a purple (end-game) card. ♣ asks which slot to draw for, then shows 2 category-matching cards to pick from.',
+    scoreTarget: 500,
+    // Enforced at newGame via slotCategories — placeholders seed the
+    // three slots in category order, and ♣ filters draws to match.
     conditionMet: () => true,
   },
 ];

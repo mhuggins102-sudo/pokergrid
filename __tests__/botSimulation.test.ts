@@ -335,8 +335,13 @@ const pickAction = (s: GameState): Action => {
     case 'awaiting-special-power-swap-dest':
     case 'awaiting-special-doubler':
     case 'awaiting-special-wildcard':
-      // Three Tricks specials don't appear in the bot's Free Play
-      // simulation. If they ever do, just bail out cleanly.
+    case 'awaiting-special-mega-destroy':
+    case 'awaiting-special-side-slide-source':
+    case 'awaiting-special-side-slide-dest':
+    case 'awaiting-bonus-slot-choice':
+      // Three Tricks / Mixed Bag specialty phases don't appear in
+      // the bot's Free Play simulation. If they ever do, just bail
+      // out cleanly.
       return { type: 'CANCEL_ACTION' };
     case 'game-over':
       throw new Error('pickAction called on game-over state');
