@@ -44,7 +44,7 @@ describe('Three Tricks challenge', () => {
     expect(s.noBonusCards).toBe(true);
   });
 
-  it('Doubler converts a chosen standard card to a "double" and consumes itself', () => {
+  it('Doubler converts a chosen standard card to a "double" and marks itself used', () => {
     let s = threeTricks();
     // Place a known card at slot 13 so we can target it. The center
     // slot was auto-placed during newGame; we overwrite for a clean
@@ -65,14 +65,12 @@ describe('Three Tricks challenge', () => {
       suit: 'H',
       supercharge: 'double',
     });
-    // Doubler is removed; Power Swap + Wildcard remain.
-    expect(s.bonusCards.map(c => c.specialKind)).toEqual([
-      'power-swap',
-      'wildcard',
-    ]);
+    // Hand still has all 3 cards — Doubler is now flagged `used`.
+    expect(s.bonusCards).toHaveLength(3);
+    expect(s.bonusCards.map(c => c.used ?? false)).toEqual([false, true, false]);
   });
 
-  it('Wildcard converts a chosen card to a "wild" and consumes itself', () => {
+  it('Wildcard converts a chosen card to a "wild" and marks itself used', () => {
     let s = threeTricks();
     const grid = s.grid.slice();
     grid[13] = C('K', 'C');
@@ -89,13 +87,11 @@ describe('Three Tricks challenge', () => {
       suit: 'C',
       supercharge: 'wild',
     });
-    expect(s.bonusCards.map(c => c.specialKind)).toEqual([
-      'power-swap',
-      'doubler',
-    ]);
+    expect(s.bonusCards).toHaveLength(3);
+    expect(s.bonusCards.map(c => c.used ?? false)).toEqual([false, false, true]);
   });
 
-  it('Power Swap swaps two unrestricted grid cards and consumes itself', () => {
+  it('Power Swap swaps two unrestricted grid cards and marks itself used', () => {
     let s = threeTricks();
     // Two cards in disjoint rows AND columns — would be illegal under
     // the normal ♥ Hop swap. Power Swap should allow it.
@@ -114,10 +110,23 @@ describe('Three Tricks challenge', () => {
     expect(s.phase.kind).toBe('awaiting-action');
     expect(s.grid[0]).toEqual(C('5', 'S'));
     expect(s.grid[24]).toEqual(C('A', 'H'));
-    expect(s.bonusCards.map(c => c.specialKind)).toEqual([
-      'doubler',
-      'wildcard',
-    ]);
+    expect(s.bonusCards).toHaveLength(3);
+    expect(s.bonusCards.map(c => c.used ?? false)).toEqual([true, false, false]);
+  });
+
+  it('a used special card refuses to re-activate', () => {
+    let s = threeTricks();
+    const grid = s.grid.slice();
+    grid[13] = C('7', 'H');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 1 });
+    s = step(s, { type: 'RESOLVE_DOUBLER', slot: 13 });
+    // Now try to re-activate the spent Doubler. The reducer should
+    // bail and leave the state untouched.
+    const before = s;
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 1 });
+    expect(s).toBe(before);
   });
 
   it('Doubler / Wildcard refuse to target a joker', () => {
@@ -161,7 +170,8 @@ describe('Three Tricks challenge', () => {
     const beforeWildcard = s;
     s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 2 });
     s = step(s, { type: 'RESOLVE_WILDCARD', slot: 13 });
-    expect(s.bonusCards).toHaveLength(2);
+    expect(s.bonusCards).toHaveLength(3);
+    expect(s.bonusCards[2].used).toBe(true);
     expect(s.grid[13]).toEqual({
       kind: 'standard',
       rank: '7',
@@ -169,9 +179,10 @@ describe('Three Tricks challenge', () => {
       supercharge: 'wild',
     });
 
-    // Undo restores the consumed card AND the un-supercharged grid.
+    // Undo restores the un-used flag AND the un-supercharged grid.
     s = step(s, { type: 'UNDO' });
     expect(s.bonusCards).toHaveLength(3);
+    expect(s.bonusCards[2].used ?? false).toBe(false);
     expect(s.grid[13]).toEqual(beforeWildcard.grid[13]);
   });
 });

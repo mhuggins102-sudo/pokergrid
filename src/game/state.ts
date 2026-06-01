@@ -532,10 +532,15 @@ const handleResolveDestroy = (s: GameState, slot: number): GameState => {
 
 // ---------- special card handlers (Three Tricks challenge) ----------
 
-// Remove the special card at `cardIdx` from the bonus hand. Used by every
-// special-card resolver on commit so the card is consumed.
+// Mark the special card at `cardIdx` as spent. The card stays in the
+// bonus hand so its slot stays occupied (preserves the chip layout and,
+// for future modes, blocks ♣ from drawing a fresh card into that
+// position). The chip rendering dims used cards and the Use button
+// disappears from the detail modal.
 const consumeSpecial = (s: GameState, cardIdx: number): BonusCard[] => {
-  return s.bonusCards.filter((_, i) => i !== cardIdx);
+  return s.bonusCards.map((c, i) =>
+    i === cardIdx ? { ...c, used: true } : c
+  );
 };
 
 const handleActivateSpecial = (s: GameState, idx: number): GameState => {
@@ -543,6 +548,10 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
   if (idx < 0 || idx >= s.bonusCards.length) return s;
   const card = s.bonusCards[idx];
   if (!isSpecialCard(card)) return s;
+  // A spent card can't be re-activated. The UI hides the Use button
+  // for used cards but the reducer enforces it too in case anything
+  // else tries to fire one.
+  if (card.used) return s;
   switch (card.specialKind) {
     case 'power-swap': {
       const slots = occupiedSlots(s.grid);

@@ -10,6 +10,25 @@ interface Props {
   onStart: (id: ChallengeId) => void;
 }
 
+// At any time, the first two NOT-YET-BEATEN challenges in CHALLENGES
+// order are unlocked; everything past them is locked until one of the
+// unbeaten unlocked challenges is cleared. Beaten challenges remain
+// playable. With N beaten in the top tier, the next N locked entries
+// become available — so the "unlocked-but-unbeaten" count stays at 2.
+const UNLOCKED_UNBEATEN_WINDOW = 2;
+
+const isChallengeUnlocked = (
+  idx: number,
+  doneIds: readonly string[]
+): boolean => {
+  if (doneIds.includes(CHALLENGES[idx].id)) return true;
+  let unbeatenBefore = 0;
+  for (let i = 0; i < idx; i++) {
+    if (!doneIds.includes(CHALLENGES[i].id)) unbeatenBefore += 1;
+  }
+  return unbeatenBefore < UNLOCKED_UNBEATEN_WINDOW;
+};
+
 export const ChallengesScreen = ({ onBack, onStart }: Props) => {
   const { stats } = useStats();
   // Only count IDs that still exist in CHALLENGES — stats.challengesDone
@@ -25,13 +44,38 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
         <NeonButton label="Back" variant="ghost" size="sm" onPress={onBack} />
       </View>
 
+      <Text style={styles.intro}>
+        Each challenge runs on the Hard ruleset, with unique deck and
+        rules twists. Beat its target score to mark as complete and
+        unlock the next challenge in the list.
+      </Text>
+
       <Text style={styles.tally}>
         {doneCount} / {CHALLENGES.length} cleared
       </Text>
 
       <View style={styles.list}>
-        {CHALLENGES.map(c => {
+        {CHALLENGES.map((c, idx) => {
           const done = stats.challengesDone.includes(c.id);
+          const unlocked = isChallengeUnlocked(idx, stats.challengesDone);
+          if (!unlocked) {
+            return (
+              <View key={c.id} style={[styles.card, styles.cardLocked]}>
+                <View style={styles.cardHeader}>
+                  <Text style={[styles.cardTitle, styles.cardTitleLocked]}>
+                    {c.name}
+                  </Text>
+                  <Text style={styles.cardLockIcon}>🔒</Text>
+                </View>
+                <Text style={[styles.cardGoal, styles.cardGoalLocked]}>
+                  {c.goal}
+                </Text>
+                <Text style={[styles.cardCta, styles.cardCtaLocked]}>
+                  Locked
+                </Text>
+              </View>
+            );
+          }
           return (
             <Pressable
               key={c.id}
@@ -75,6 +119,16 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
   },
+  // Short paragraph under the title explaining the Hard ruleset +
+  // sequential unlock rule. Same body styling as the Achievements
+  // intro for consistency.
+  intro: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: spacing.md,
+  },
   // Mirrors the Achievements tally — tinted with the "done" success
   // green so it reads as a progress marker, not a header.
   tally: {
@@ -99,6 +153,35 @@ const styles = StyleSheet.create({
   cardDone: {
     borderColor: colors.success,
     ...glow(colors.success, 8, 0.3),
+  },
+  // Locked tile — still readable (the player can see the goal), but
+  // muted: no glow, gray outline, dimmer text. Not pressable: the
+  // wrapper is a View, not a Pressable.
+  cardLocked: {
+    borderColor: colors.outline,
+    opacity: 0.55,
+    // Override the warn glow that the base .card style sets so the
+    // locked tile doesn't pulse.
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  cardTitleLocked: {
+    color: colors.textLow,
+    textShadowColor: 'transparent',
+    textShadowRadius: 0,
+  },
+  cardGoalLocked: {
+    color: colors.textLow,
+  },
+  cardCtaLocked: {
+    color: colors.textLow,
+    textShadowColor: 'transparent',
+    textShadowRadius: 0,
+  },
+  cardLockIcon: {
+    marginLeft: 'auto',
+    color: colors.textLow,
+    fontSize: 14,
   },
   cardHeader: {
     flexDirection: 'row',

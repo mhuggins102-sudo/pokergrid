@@ -24,7 +24,10 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
   if (!card) return null;
   const cat = styleFor(card);
   const showValue = currentValue !== undefined;
-  const showUse = !!onUse && isSpecialCard(card);
+  const showUse = !!onUse && isSpecialCard(card) && !card.used;
+  // Already-used specials surface a small "Already used" note in place
+  // of the Use button so the player understands why the action is gone.
+  const showUsedNote = isSpecialCard(card) && !!card.used;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -86,6 +89,9 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
                 }}
               />
             </View>
+          )}
+          {showUsedNote && (
+            <Text style={styles.usedNote}>Already used.</Text>
           )}
         </Pressable>
       </Pressable>
@@ -202,5 +208,15 @@ const styles = StyleSheet.create({
   useRow: {
     marginTop: spacing.lg,
     alignItems: 'stretch',
+  },
+  usedNote: {
+    marginTop: spacing.lg,
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 });
