@@ -85,7 +85,9 @@ export interface BonusCard {
     | 'doubler'
     | 'wildcard'
     | 'mega-destroy'
-    | 'side-slide';
+    | 'side-slide'
+    | 'jump'
+    | 'shuffle';
   // True after a one-time-use card has been activated. The card stays
   // in the hand (occupying its slot) but is rendered dimmed and no
   // longer accepts activation. Keeping the spent card around — rather
@@ -144,14 +146,39 @@ export const MEGA_DESTROY_CARD: BonusCard = {
   specialKind: 'mega-destroy',
 };
 
+// Slip & Slide (was Side Slide). The id keeps the original
+// `special-side-slide` value so existing save data still resolves it.
+// The display title is the new name; mechanics now allow a multi-step
+// path in any combination of cardinal directions, not just one
+// perpendicular slide.
 export const SIDE_SLIDE_CARD: BonusCard = {
   id: 'special-side-slide',
-  name: 'Side Slide',
-  title: 'Side Slide',
+  name: 'Slip & Slide',
+  title: 'Slip & Slide',
   mult: 'one-time',
   description:
-    'Take a row or column of 2+ adjacent cards and slide them perpendicular to their line — a horizontal run shifts up or down, a vertical run shifts left or right. Consumed on use.',
+    'Pick a row or column of 2+ adjacent cards, then move them as a unit along a path of single-cell hops. The path can change direction (e.g. 2 up + 1 left) as long as each step is legal. Consumed on use.',
   specialKind: 'side-slide',
+};
+
+export const JUMP_JUMP_CARD: BonusCard = {
+  id: 'special-jump-jump',
+  name: 'Jump, Jump',
+  title: 'Jump, Jump',
+  mult: 'one-time',
+  description:
+    'Pick a card on the grid, then tap any empty slot to move the card there. Consumed on use.',
+  specialKind: 'jump',
+};
+
+export const SHUFFLE_CARD: BonusCard = {
+  id: 'special-shuffle',
+  name: 'Shuffle',
+  title: 'Shuffle',
+  mult: 'one-time',
+  description:
+    'Pick 5 cards on the grid. The cards are pulled, shuffled, and dropped back into the same 5 slots — a card may end up where it started. Consumed on use.',
+  specialKind: 'shuffle',
 };
 
 // Pool of every one-time action card. Used by the Three Tricks challenge
@@ -163,6 +190,8 @@ export const SPECIAL_DECK_POOL: BonusCard[] = [
   WILDCARD_CARD,
   MEGA_DESTROY_CARD,
   SIDE_SLIDE_CARD,
+  JUMP_JUMP_CARD,
+  SHUFFLE_CARD,
 ];
 
 export const isSpecialCard = (c: BonusCard): boolean =>

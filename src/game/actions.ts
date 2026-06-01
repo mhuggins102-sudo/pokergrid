@@ -60,6 +60,64 @@ export const executeMegaDestroy = (
   return { grid: next, removed };
 };
 
+// ---------- Jump, Jump (special: ★ one-time relocate) ----------
+
+// Empty grid slots — Jump, Jump can move a picked card to any empty
+// position regardless of distance.
+export const emptySlots = (grid: Grid): number[] => {
+  const out: number[] = [];
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    if (grid[i] === null) out.push(i);
+  }
+  return out;
+};
+
+export const executeJump = (
+  grid: Grid,
+  source: number,
+  dest: number
+): Grid => {
+  const card = grid[source];
+  if (!card) throw new Error('Jump: source slot is empty');
+  if (grid[dest] !== null) throw new Error('Jump: dest slot is occupied');
+  const next = grid.slice();
+  next[source] = null;
+  next[dest] = card;
+  return next;
+};
+
+// ---------- Shuffle (special: ★ one-time multi-target permute) ----------
+
+// Number of grid slots Shuffle pulls in one shot.
+export const SHUFFLE_PICK_COUNT = 5;
+
+// Permute the cards at `slots` and write them back to the same set of
+// slots. Uses the provided RNG so the call is deterministic in tests.
+// A card may land back where it started (uniform random permutation
+// includes the identity).
+export const executeShuffle = (
+  grid: Grid,
+  slots: readonly number[],
+  rng: () => number = Math.random
+): Grid => {
+  if (slots.length === 0) throw new Error('Shuffle: no slots');
+  const cards = slots.map(s => grid[s]);
+  if (cards.some(c => c === null)) {
+    throw new Error('Shuffle: every picked slot must be occupied');
+  }
+  // Fisher–Yates on a copy of the picked cards.
+  const shuffled = cards.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const next = grid.slice();
+  for (let i = 0; i < slots.length; i++) {
+    next[slots[i]] = shuffled[i];
+  }
+  return next;
+};
+
 // ---------- Side Slide (special: ★ one-time perpendicular slide) ----------
 
 // Side Slide is interactive: the player picks a starting card, then taps
@@ -96,53 +154,6 @@ const isContiguousChain = (chain: readonly number[]): boolean => {
     if (positions[i] !== positions[i - 1] + 1) return false;
   }
   return true;
-};
-
-// How many empty cells lie ahead of `from` in `direction`, before the
-// grid edge or another occupied cell. Cells in `ignore` are treated as
-// empty — used by the multi-card chain check below so the chain's own
-// cells don't block its own movement.
-const emptyCellsForward = (
-  grid: Grid,
-  from: number,
-  direction: Direction,
-  ignore?: ReadonlySet<number>
-): number => {
-  const r = Math.floor(from / GRID_SIZE);
-  const c = from % GRID_SIZE;
-  const dr = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
-  const dc = direction === 'left' ? -1 : direction === 'right' ? 1 : 0;
-  let n = 0;
-  while (true) {
-    const r2 = r + dr * (n + 1);
-    const c2 = c + dc * (n + 1);
-    if (r2 < 0 || r2 >= GRID_SIZE || c2 < 0 || c2 >= GRID_SIZE) break;
-    const idx = r2 * GRID_SIZE + c2;
-    if (grid[idx] !== null && !(ignore?.has(idx))) break;
-    n++;
-  }
-  return n;
-};
-
-// Per-direction maximum distance the entire chain can shift. Every
-// chain member needs the same amount of free space ahead of it, so
-// the effective max is the min over the chain. The chain's own
-// cells are treated as empty (a chain moving up/down past itself is
-// fine, but the chain orientation rules out that scenario anyway).
-const chainSideSlideMaxDistance = (
-  grid: Grid,
-  chain: readonly number[],
-  direction: Direction
-): number => {
-  if (chain.length < 2) return 0;
-  const ignore = new Set(chain);
-  let max = Infinity;
-  for (const slot of chain) {
-    const d = emptyCellsForward(grid, slot, direction, ignore);
-    if (d < max) max = d;
-    if (max === 0) return 0;
-  }
-  return max === Infinity ? 0 : max;
 };
 
 // Slots from which Side Slide can fire: any occupied cell. The player
@@ -220,41 +231,103 @@ export const canDeselectSideSlideSlot = (
 };
 
 export interface SideSlideMove {
-  direction: Direction;
-  distance: number;
-  // Slot the canonical "leader" of the chain (lowest-index member)
-  // lands in. Used by the GameScreen to render the dest highlight.
+  // Step-by-step path the chain takes from its current position to
+  // leadingDest. Each entry is one 1-cell shift. Multi-direction paths
+  // (e.g. ['up', 'up', 'left']) are valid as long as every individual
+  // step is legal in unison.
+  path: Direction[];
+  // Position the canonical "leader" (lowest-index original chain
+  // member) lands in after the full path executes.
   leadingDest: number;
   // The leader slot the leadingDest is calculated from.
   from: number;
 }
 
-// Valid perpendicular slide moves for a picked chain. Chain must be
-// 2+ contiguous cells in a row or column.
+const stepOf = (d: Direction): number =>
+  d === 'up' ? -GRID_SIZE
+  : d === 'down' ? GRID_SIZE
+  : d === 'left' ? -1
+  : 1;
+
+// Apply a single-cell shift to every chain member. Returns the new
+// chain positions, or null if any member would go out of bounds (or
+// off-row for left/right).
+const shiftChain = (
+  chain: readonly number[],
+  direction: Direction
+): number[] | null => {
+  const step = stepOf(direction);
+  const next: number[] = [];
+  for (const slot of chain) {
+    const newSlot = slot + step;
+    if (newSlot < 0 || newSlot >= GRID_SLOTS) return null;
+    if (direction === 'left' || direction === 'right') {
+      const oldRow = Math.floor(slot / GRID_SIZE);
+      const newRow = Math.floor(newSlot / GRID_SIZE);
+      if (oldRow !== newRow) return null;
+    }
+    next.push(newSlot);
+  }
+  return next;
+};
+
+// A single-cell chain shift is legal iff every destination slot is
+// either empty or occupied by another chain member (since chain
+// members vacate together).
+const canShift = (
+  grid: Grid,
+  chain: readonly number[],
+  newChain: readonly number[]
+): boolean => {
+  const oldSet = new Set(chain);
+  for (const slot of newChain) {
+    if (grid[slot] !== null && !oldSet.has(slot)) return false;
+  }
+  return true;
+};
+
+// Every chain position reachable from `chain` via a series of legal
+// single-cell shifts in any of the 4 cardinal directions, with a
+// shortest path recorded. The starting chain is excluded from results
+// (no-op moves don't make sense). Used by Slip & Slide to drive both
+// the dest highlights and the commit path.
 export const sideSlideDestinationsForChain = (
   grid: Grid,
   chain: readonly number[]
 ): SideSlideMove[] => {
   if (chain.length < 2) return [];
-  const orient = chainOrientation(chain);
-  if (!orient) return [];
-  // Use the lowest-index chain member as the "leader" so leadingDest
-  // is deterministic and matches the player's mental model (the chain
-  // moves as a unit).
+  if (!chainOrientation(chain)) return [];
   const from = Math.min(...chain);
-  const directions: Direction[] =
-    orient === 'row' ? ['up', 'down'] : ['left', 'right'];
-  const out: SideSlideMove[] = [];
-  for (const d of directions) {
-    const max = chainSideSlideMaxDistance(grid, chain, d);
-    if (max === 0) continue;
-    const step =
-      d === 'up' ? -GRID_SIZE
-      : d === 'down' ? GRID_SIZE
-      : d === 'left' ? -1 : 1;
-    for (let dist = 1; dist <= max; dist++) {
-      out.push({ from, direction: d, distance: dist, leadingDest: from + step * dist });
+  // BFS keyed on the sorted chain positions so equivalent
+  // configurations dedupe.
+  const keyOf = (c: readonly number[]) =>
+    c.slice().sort((a, b) => a - b).join(',');
+  const startKey = keyOf(chain);
+  const visited = new Map<string, { chainCfg: number[]; path: Direction[] }>();
+  visited.set(startKey, { chainCfg: chain.slice(), path: [] });
+  const queue: { chainCfg: number[]; path: Direction[] }[] = [
+    { chainCfg: chain.slice(), path: [] },
+  ];
+  while (queue.length > 0) {
+    const { chainCfg, path } = queue.shift()!;
+    for (const d of ['up', 'down', 'left', 'right'] as Direction[]) {
+      const next = shiftChain(chainCfg, d);
+      if (!next) continue;
+      if (!canShift(grid, chainCfg, next)) continue;
+      const k = keyOf(next);
+      if (visited.has(k)) continue;
+      const newPath = [...path, d];
+      visited.set(k, { chainCfg: next, path: newPath });
+      queue.push({ chainCfg: next, path: newPath });
     }
+  }
+  const out: SideSlideMove[] = [];
+  for (const [k, { path }] of visited) {
+    if (k === startKey) continue;
+    // The leader's net displacement = sum of step offsets along the path.
+    let leadingDest = from;
+    for (const d of path) leadingDest += stepOf(d);
+    out.push({ from, path, leadingDest });
   }
   return out;
 };
@@ -262,23 +335,27 @@ export const sideSlideDestinationsForChain = (
 export const executeSideSlide = (
   grid: Grid,
   chain: readonly number[],
-  direction: Direction,
-  distance: number
+  path: readonly Direction[]
 ): Grid => {
   if (chain.length < 2) throw new Error('Side Slide: chain must have 2+ cards');
   if (!isContiguousChain(chain)) throw new Error('Side Slide: chain not contiguous');
-  if (distance < 1 || distance > chainSideSlideMaxDistance(grid, chain, direction)) {
-    throw new Error(`Side Slide: distance ${distance} out of range`);
+  if (path.length === 0) throw new Error('Side Slide: empty path');
+  // Re-validate the path step by step — protects against stale moves
+  // that were enumerated against a different grid state.
+  let current = chain.slice();
+  for (const d of path) {
+    const next = shiftChain(current, d);
+    if (!next || !canShift(grid, current, next)) {
+      throw new Error('Side Slide: illegal step in path');
+    }
+    current = next;
   }
-  const step =
-    direction === 'up' ? -GRID_SIZE
-    : direction === 'down' ? GRID_SIZE
-    : direction === 'left' ? -1 : 1;
+  const finalChain = current;
+  // Apply the final position to the grid: clear originals first to
+  // avoid in-line overwrites between members.
   const next = grid.slice();
-  // Clear all chain positions before writing — neighbors in the chain
-  // would otherwise overwrite each other when the step is small.
   for (const idx of chain) next[idx] = null;
-  for (const idx of chain) next[idx + step * distance] = grid[idx];
+  for (let i = 0; i < chain.length; i++) next[finalChain[i]] = grid[chain[i]];
   return next;
 };
 
