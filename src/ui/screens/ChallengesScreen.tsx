@@ -159,14 +159,18 @@ const styles = StyleSheet.create({
   // wrapper is a View, not a Pressable.
   cardLocked: {
     borderColor: colors.outline,
-    opacity: 0.55,
+    opacity: 0.7,
     // Override the warn glow that the base .card style sets so the
     // locked tile doesn't pulse.
     shadowOpacity: 0,
     elevation: 0,
   },
   cardTitleLocked: {
-    color: colors.textLow,
+    // Brighter than textLow so the title reads cleanly through the
+    // 0.7 card opacity — full warn glow looks too lit-up for a
+    // locked tile, but going all the way to gray-on-gray blurred the
+    // title. textMid + no shadow is the sweet spot.
+    color: colors.textMid,
     textShadowColor: 'transparent',
     textShadowRadius: 0,
   },
