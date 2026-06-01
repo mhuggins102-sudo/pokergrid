@@ -46,7 +46,7 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
 
       <Text style={styles.intro}>
         Each challenge runs on the Hard ruleset, with unique deck and
-        rules twists. Beat its target score to mark as complete and
+        rule twists. Beat its target score to mark as complete and
         unlock the next challenge in the list.
       </Text>
 
