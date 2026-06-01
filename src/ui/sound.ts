@@ -23,14 +23,21 @@ export type SoundKey =
   | 'bonus'
   | 'joker'
   | 'win'
-  | 'lose';
+  | 'lose'
+  | 'whoosh'   // Slip & Slide (distinct from regular slide)
+  | 'boing'    // Jump, Jump (cartoon bounce)
+  | 'shuffle'  // Shuffle pre-reveal sweep
+  | 'thud'     // The Doubler (mallet hit on the picked card)
+  | 'sparkle'; // Wildcard (magical twinkle)
 
 // ---------- Native (expo-audio + bundled WAVs) ----------
 
 // require() pulls the .wav files through Metro as static assets. The exact
 // shape of the returned value differs per platform (a number on native, a
 // URL-ish object on web), but expo-audio accepts both via createAudioPlayer.
-const ASSETS: Record<SoundKey, number> = {
+// Keys without a bundled WAV (whoosh / boing / shuffle for now) are
+// web-only — the native build silently no-ops them via playNative below.
+const ASSETS: Partial<Record<SoundKey, number>> = {
   tap: require('../../assets/sounds/tap.wav'),
   draw: require('../../assets/sounds/draw.wav'),
   place: require('../../assets/sounds/place.wav'),
@@ -46,10 +53,14 @@ const ASSETS: Record<SoundKey, number> = {
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
 
 const playNative = (k: SoundKey) => {
+  const asset = ASSETS[k];
+  // Web-only synth sound on a native build → silent. WAVs can be
+  // added to assets/sounds/ later to enable them on native.
+  if (asset === undefined) return;
   try {
     let p = nativePlayers[k];
     if (!p) {
-      p = createAudioPlayer(ASSETS[k]);
+      p = createAudioPlayer(asset);
       nativePlayers[k] = p;
     } else {
       // expo-audio doesn't auto-rewind; reset before replay so spammed taps
@@ -205,6 +216,50 @@ const playWeb = (k: SoundKey) => {
         { freq: 440, dur: 0.18, type: 'triangle' },
         { freq: 330, dur: 0.18, delay: 0.18, type: 'triangle' },
         { freq: 196, dur: 0.42, delay: 0.36, type: 'sawtooth', vol: 0.16 },
+      ]);
+    case 'whoosh':
+      // Slip & Slide — longer noise sweep than the regular slide so
+      // the ear distinguishes them. Pitch dives at the start, drifts
+      // up again at the end for a "swooping past" effect.
+      playNoise(0.32, { vol: 0.18, hz: 1600 });
+      return playNotes([
+        { freq: 240, endFreq: 90, dur: 0.18, type: 'sawtooth', vol: 0.10 },
+        { freq: 110, endFreq: 480, dur: 0.20, delay: 0.14, type: 'sawtooth', vol: 0.10 },
+      ]);
+    case 'boing':
+      // Jump, Jump — classic cartoon bounce. Quick pitch dive into a
+      // bobbing sine wobble so it reads as "spring-loaded".
+      return playNotes([
+        { freq: 880, endFreq: 220, dur: 0.18, type: 'sine', vol: 0.20 },
+        { freq: 330, endFreq: 480, dur: 0.10, delay: 0.18, type: 'sine', vol: 0.15 },
+        { freq: 440, endFreq: 280, dur: 0.10, delay: 0.28, type: 'sine', vol: 0.10 },
+      ]);
+    case 'shuffle':
+      // Shuffle — a short burst of filtered noise twice in quick
+      // succession to evoke a riffle. The two staggered bursts read
+      // as "cards crossing".
+      playNoise(0.20, { vol: 0.22, hz: 1200 });
+      setTimeout(() => playNoise(0.18, { vol: 0.18, hz: 1500 }), 140);
+      return;
+    case 'thud':
+      // The Doubler — short, low mallet hit. Quick low-frequency
+      // sine punch backed by a touch of filtered noise for the
+      // "impact" thump.
+      playNoise(0.10, { vol: 0.20, hz: 220 });
+      return playNotes([
+        { freq: 120, endFreq: 60, dur: 0.16, type: 'sine', vol: 0.28 },
+      ]);
+    case 'sparkle':
+      // Wildcard — magical twinkle. Ascending tetrad of bright sine
+      // pulses with a sliver of high-octave shimmer on top, evoking
+      // the same "this card became special" feel as the joker
+      // arpeggio but compressed into a single beat.
+      return playNotes([
+        { freq: 1320, dur: 0.10, type: 'sine', vol: 0.14 },
+        { freq: 1760, dur: 0.10, delay: 0.06, type: 'sine', vol: 0.14 },
+        { freq: 2093, dur: 0.10, delay: 0.12, type: 'sine', vol: 0.14 },
+        { freq: 2640, dur: 0.18, delay: 0.18, type: 'sine', vol: 0.12 },
+        { freq: 3520, dur: 0.14, delay: 0.18, type: 'triangle', vol: 0.06 },
       ]);
   }
 };
