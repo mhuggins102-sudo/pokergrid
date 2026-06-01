@@ -6,7 +6,12 @@ import {
   BonusCard,
   BONUS_DECK_POOL,
   BONUS_HAND_LIMIT,
+  cardMatchesSlot,
+  isPlaceholder,
   isSpecialCard,
+  SlotKind,
+  slotPlaceholder,
+  SPECIAL_DECK_POOL,
   SPOTLIGHT_ID,
 } from './bonusCards';
 import {
@@ -32,12 +37,18 @@ import {
   destroyableSlots,
   executeDestroy,
   executeHop,
+  executeMegaDestroy,
+  executeSideSlide,
   executeSlide,
+  MEGA_DESTROY_MAX,
   occupiedSlots,
+  SideSlideMove,
+  sideSlideDestinationsFrom,
   SlideMove,
   slideDestinationsFrom,
   supercharchableSlots,
   validHopSwaps,
+  validSideSlideSources,
   validSlideSources,
 } from './actions';
 import { Direction } from './grid';
@@ -62,6 +73,19 @@ export type Phase =
   | {
       kind: 'bonus-card-resolving';
       drawn: BonusCard[]; // 1 or 2 cards
+      // Categorized-slots (Mixed Bag) only: the slot the kept card
+      // goes into. When set, BONUS_KEEP replaces bonusCards[targetSlot]
+      // wholesale instead of pushing onto the end of the array.
+      targetSlot?: number;
+      returnTo: TargetReturnTo;
+    }
+  // Mixed Bag: ♣ first asks which slot to draw for. The player taps
+  // a chip in the bonus strip (slot index 0/1/2). After picking, the
+  // reducer draws from the bonus deck filtered to that slot's
+  // category and transitions to bonus-card-resolving with
+  // targetSlot set.
+  | {
+      kind: 'awaiting-bonus-slot-choice';
       returnTo: TargetReturnTo;
     }
   | {
@@ -98,6 +122,33 @@ export type Phase =
       kind: 'awaiting-special-wildcard';
       cardIdx: number;
       slots: number[];
+      returnTo: TargetReturnTo;
+    }
+  // Mega Destroy is a multi-target phase: the player taps up to
+  // MEGA_DESTROY_MAX cards in any order, toggles them in `selected`,
+  // then confirms. The Confirm action is dispatched once the player
+  // has at least one slot picked.
+  | {
+      kind: 'awaiting-special-mega-destroy';
+      cardIdx: number;
+      slots: number[];
+      selected: number[];
+      returnTo: TargetReturnTo;
+    }
+  // Side Slide reuses the source / dest split from regular ♠ Slide:
+  // pick a card whose row OR column chain has 2+ members, then pick
+  // a perpendicular landing position.
+  | {
+      kind: 'awaiting-special-side-slide-source';
+      cardIdx: number;
+      sources: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-special-side-slide-dest';
+      cardIdx: number;
+      source: number;
+      moves: SideSlideMove[];
       returnTo: TargetReturnTo;
     }
   | { kind: 'game-over' };
@@ -156,6 +207,11 @@ export interface GameState {
   // and the UI hides the bonus card strip entirely. Scoring becomes
   // pure row + column poker math with no multiplier meta-layer.
   noBonusCards: boolean;
+  // Mixed Bag challenge: lock each of the 3 hand slots to a category.
+  // When set, bonusCards always has exactly 3 entries (length-fixed),
+  // empty slots hold a placeholder card matching the slot's kind, and
+  // ♣ draws are filtered to the slot's category. Undefined otherwise.
+  slotCategories?: SlotKind[];
 }
 
 export type Action =
@@ -170,6 +226,8 @@ export type Action =
   | { type: 'BONUS_SELECT_NEW'; idx: number }
   | { type: 'BONUS_REPLACE'; oldIdx: number }
   | { type: 'BONUS_DECLINE' }
+  // Mixed Bag: pick a slot to draw for after ♣ fires.
+  | { type: 'BONUS_PICK_SLOT'; slot: number }
   | { type: 'CANCEL_ACTION' }
   // Three Tricks: activate a held special card. The current draw is NOT
   // spent — these are independent of the suit-perk flow.
@@ -178,6 +236,10 @@ export type Action =
   | { type: 'RESOLVE_POWER_SWAP'; i: number; j: number }
   | { type: 'RESOLVE_DOUBLER'; slot: number }
   | { type: 'RESOLVE_WILDCARD'; slot: number }
+  | { type: 'TOGGLE_MEGA_DESTROY_TARGET'; slot: number }
+  | { type: 'RESOLVE_MEGA_DESTROY' }
+  | { type: 'SIDE_SLIDE_SELECT_SOURCE'; slot: number }
+  | { type: 'RESOLVE_SIDE_SLIDE'; from: number; direction: Direction; distance: number }
   | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -247,7 +309,13 @@ export const newGame = (
   // player starts with these specific cards (the three one-time
   // specials) and the bonus deck stays empty, so the ♣ perk can't
   // draw anything.
-  initialBonusCards: BonusCard[] = []
+  initialBonusCards: BonusCard[] = [],
+  // Mixed Bag challenge: positionally-categorized slots. Slot N is
+  // locked to slotCategories[N]'s category (placeholder card seeded
+  // at start). ♣ draws are filtered by slot category. The bonus deck
+  // is built from BONUS_DECK_POOL + SPECIAL_DECK_POOL so the green
+  // slot has something to draw.
+  slotCategories?: SlotKind[]
 ): GameState => {
   // Joker count is determined by difficulty (Easy ships 2 jokers, Hard
   // ships 1, Extreme ships 0). Targets-Up infers difficulty from level
@@ -300,13 +368,17 @@ export const newGame = (
   // draw, no shuffled deck, no carry-overs. Hand and deck both stay
   // empty for the entire run. Three Tricks rides on top of this:
   // noBonusCards stays true (no draw deck, no ♣) but the assembled
-  // hand is seeded with the three special action cards.
+  // hand is seeded with the three special action cards. Mixed Bag
+  // (slotCategories) seeds positional placeholders so the slot
+  // layout is fixed from turn 1.
   const starterCount = noBonusCards ? 0 : STARTER_BONUS_BY_DIFFICULTY[difficulty];
   // Player's hand starts with the kept carry-overs first, then the
   // difficulty-based free starter on top (capped at BONUS_HAND_LIMIT just
   // in case future power-ups push the carry to 3 cards on hard).
   const starterDraw = noBonusCards ? [] : shuffledBonus.slice(0, starterCount);
-  const assembledHand = noBonusCards
+  const assembledHand = slotCategories
+    ? slotCategories.map(kind => slotPlaceholder(kind))
+    : noBonusCards
     ? initialBonusCards.slice(0, BONUS_HAND_LIMIT)
     : [...keptBonusCards, ...starterDraw].slice(0, BONUS_HAND_LIMIT);
   // Apply Spotlight's exclusivity rule if the starter draw or a
@@ -324,9 +396,13 @@ export const newGame = (
   // Bonus deck = standard pool minus the drawn starter + powered carry-overs
   // from earlier levels. Shuffled together so the powered cards can resurface
   // at any time. Poker Purist leaves it empty so ♣ never has anything to draw.
+  // Mixed Bag mixes the regular pool with the special deck so the green
+  // slot has cards to draw — they're filtered by slot kind at draw time.
   const remainingPool = shuffledBonus.slice(starterCount);
   const bonusDeck = noBonusCards
     ? []
+    : slotCategories
+    ? shuffle([...remainingPool, ...deckExtras, ...SPECIAL_DECK_POOL], rng)
     : shuffle([...remainingPool, ...deckExtras], rng);
   const [first, ...rest] = deck;
   const grid = placeAtSpiralNext(emptyGrid(), first);
@@ -353,6 +429,7 @@ export const newGame = (
     bonusDeclineAllowed: BONUS_DECLINE_AT_CAP_BY_DIFFICULTY[difficulty],
     randomPerks,
     noBonusCards,
+    slotCategories,
   };
   return drawNext(initial);
 };
@@ -466,6 +543,20 @@ const handleBeginSuitAction = (
       if (!canDrawBonus(s.bonusDeck.length)) return s;
       // No Swap challenge: ♣ is unavailable at the cap (would force a swap).
       if (s.noSwap && s.bonusCards.length >= BONUS_HAND_LIMIT) return s;
+      // Mixed Bag: ♣ first asks which slot to draw for. The deck is
+      // filtered to that slot's category once the player picks (see
+      // handleBonusPickSlot). Skip this branch if no slot category
+      // has any drawable cards left.
+      if (s.slotCategories) {
+        const anySlotDrawable = s.slotCategories.some(kind =>
+          s.bonusDeck.some(c => cardMatchesSlot(c, kind))
+        );
+        if (!anySlotDrawable) return s;
+        return {
+          ...s,
+          phase: { kind: 'awaiting-bonus-slot-choice', returnTo: 'awaiting-action' },
+        };
+      }
       // Draw up to 2 from the top of the bonus deck.
       const drawCount = Math.min(2, s.bonusDeck.length);
       const drawn = s.bonusDeck.slice(0, drawCount);
@@ -585,6 +676,33 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
         },
       };
     }
+    case 'mega-destroy': {
+      const slots = occupiedSlots(s.grid);
+      if (slots.length === 0) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-mega-destroy',
+          cardIdx: idx,
+          slots,
+          selected: [],
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+    case 'side-slide': {
+      const sources = validSideSlideSources(s.grid);
+      if (sources.length === 0) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-side-slide-source',
+          cardIdx: idx,
+          sources,
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
   }
   return s;
 };
@@ -651,6 +769,76 @@ const handleResolveWildcard = (s: GameState, slot: number): GameState => {
   );
 };
 
+const handleToggleMegaDestroyTarget = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-mega-destroy') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  const phase = s.phase;
+  const already = phase.selected.indexOf(slot);
+  let selected: number[];
+  if (already >= 0) {
+    selected = phase.selected.filter(i => i !== slot);
+  } else {
+    if (phase.selected.length >= MEGA_DESTROY_MAX) return s;
+    selected = [...phase.selected, slot];
+  }
+  return { ...s, phase: { ...phase, selected } };
+};
+
+const handleResolveMegaDestroy = (s: GameState): GameState => {
+  if (s.phase.kind !== 'awaiting-special-mega-destroy') return s;
+  const phase = s.phase;
+  if (phase.selected.length === 0) return s;
+  const { grid, removed } = executeMegaDestroy(s.grid, phase.selected);
+  const newHand = consumeSpecial(s, phase.cardIdx);
+  return log(
+    {
+      ...s,
+      grid,
+      discards: [...s.discards, ...removed],
+      bonusCards: newHand,
+      phase: { kind: 'awaiting-action' },
+    },
+    `Mega Destroy on ${phase.selected.length} slot${phase.selected.length === 1 ? '' : 's'}`
+  );
+};
+
+const handleSideSlideSelectSource = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-side-slide-source') return s;
+  if (!s.phase.sources.includes(slot)) return s;
+  const moves = sideSlideDestinationsFrom(s.grid, slot);
+  if (moves.length === 0) return s;
+  return {
+    ...s,
+    phase: {
+      kind: 'awaiting-special-side-slide-dest',
+      cardIdx: s.phase.cardIdx,
+      source: slot,
+      moves,
+      returnTo: s.phase.returnTo,
+    },
+  };
+};
+
+const handleResolveSideSlide = (
+  s: GameState,
+  from: number,
+  direction: Direction,
+  distance: number
+): GameState => {
+  if (s.phase.kind !== 'awaiting-special-side-slide-dest') return s;
+  const phase = s.phase;
+  const valid = phase.moves.find(
+    m => m.from === from && m.direction === direction && m.distance === distance
+  );
+  if (!valid) return s;
+  const grid = executeSideSlide(s.grid, from, direction, distance);
+  const newHand = consumeSpecial(s, phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Side Slide ${direction} × ${distance}`
+  );
+};
+
 // ---------- bonus card handlers ----------
 
 // Send `drawn` cards back to bottom of bonus deck (in the given order), then
@@ -699,7 +887,27 @@ const enforceSpotlight = (
 const handleBonusKeep = (s: GameState, idx: number): GameState => {
   if (s.phase.kind !== 'bonus-card-resolving') return s;
   if (idx < 0 || idx >= s.phase.drawn.length) return s;
-  const kept = s.phase.drawn[idx];
+  const phase = s.phase;
+  const kept = phase.drawn[idx];
+  // Mixed Bag categorized-slot path: place the kept card at the
+  // pre-chosen slot. Any prior occupant (placeholder OR a real card)
+  // gets replaced — the player committed to that slot when they
+  // picked it after ♣.
+  if (phase.targetSlot !== undefined) {
+    const newHand = s.bonusCards.slice();
+    // If the previous occupant was a real bonus card (not a
+    // placeholder), this is a forced swap — flag for the No Swap
+    // achievement check the same way BONUS_REPLACE does.
+    const prior = newHand[phase.targetSlot];
+    const swappedReal = prior !== undefined && !isPlaceholder(prior);
+    newHand[phase.targetSlot] = kept;
+    const returning = phase.drawn.filter((_, i) => i !== idx);
+    return finishBonusFlow(
+      swappedReal ? { ...s, swappedBonus: true } : s,
+      returning,
+      newHand
+    );
+  }
   // Spotlight bypasses the cap check: it evicts every other held card
   // on pickup via enforceSpotlight, so the bonus-card-replacing
   // "which one to swap out?" step is meaningless — the held cards all
@@ -712,9 +920,35 @@ const handleBonusKeep = (s: GameState, idx: number): GameState => {
   ) {
     return s;
   }
-  const returning = s.phase.drawn.filter((_, i) => i !== idx);
+  const returning = phase.drawn.filter((_, i) => i !== idx);
   const newHand = enforceSpotlight([...s.bonusCards, kept], kept);
   return finishBonusFlow(s, returning, newHand);
+};
+
+const handleBonusPickSlot = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-bonus-slot-choice') return s;
+  if (!s.slotCategories) return s;
+  if (slot < 0 || slot >= s.slotCategories.length) return s;
+  const kind = s.slotCategories[slot];
+  // Filter the deck to cards that fit this slot's category. Draw up
+  // to 2 from the top of the filtered subset; the remaining (in
+  // original order) becomes the new bonus deck.
+  const eligible = s.bonusDeck.filter(c => cardMatchesSlot(c, kind));
+  if (eligible.length === 0) return s;
+  const drawCount = Math.min(2, eligible.length);
+  const drawnSet = new Set(eligible.slice(0, drawCount));
+  const drawn = eligible.slice(0, drawCount);
+  const remainingDeck = s.bonusDeck.filter(c => !drawnSet.has(c));
+  return {
+    ...s,
+    bonusDeck: remainingDeck,
+    phase: {
+      kind: 'bonus-card-resolving',
+      drawn,
+      targetSlot: slot,
+      returnTo: 'awaiting-action',
+    },
+  };
 };
 
 const handleBonusSelectNew = (s: GameState, idx: number): GameState => {
@@ -805,13 +1039,27 @@ const handleCancelAction = (s: GameState): GameState => {
           returnTo: s.phase.returnTo,
         },
       };
+    case 'awaiting-special-side-slide-dest':
+      // Back to source selection within the same side-slide flow.
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-side-slide-source',
+          cardIdx: s.phase.cardIdx,
+          sources: validSideSlideSources(s.grid),
+          returnTo: s.phase.returnTo,
+        },
+      };
     case 'awaiting-target-hop':
     case 'awaiting-target-slide-source':
     case 'awaiting-target-destroy':
     case 'bonus-card-resolving':
+    case 'awaiting-bonus-slot-choice':
     case 'awaiting-special-power-swap-source':
     case 'awaiting-special-doubler':
     case 'awaiting-special-wildcard':
+    case 'awaiting-special-mega-destroy':
+    case 'awaiting-special-side-slide-source':
       return { ...s, phase: { kind: s.phase.returnTo } };
   }
 };
@@ -833,6 +1081,8 @@ const SNAP_ACTIONS = new Set<Action['type']>([
   'RESOLVE_POWER_SWAP',
   'RESOLVE_DOUBLER',
   'RESOLVE_WILDCARD',
+  'RESOLVE_MEGA_DESTROY',
+  'RESOLVE_SIDE_SLIDE',
 ]);
 
 const handleUndo = (s: GameState): GameState => {
@@ -887,6 +1137,9 @@ export const step = (
     case 'BONUS_DECLINE':
       next = handleBonusDecline(state);
       break;
+    case 'BONUS_PICK_SLOT':
+      next = handleBonusPickSlot(state, action.slot);
+      break;
     case 'CANCEL_ACTION':
       next = handleCancelAction(state);
       break;
@@ -904,6 +1157,18 @@ export const step = (
       break;
     case 'RESOLVE_WILDCARD':
       next = handleResolveWildcard(state, action.slot);
+      break;
+    case 'TOGGLE_MEGA_DESTROY_TARGET':
+      next = handleToggleMegaDestroyTarget(state, action.slot);
+      break;
+    case 'RESOLVE_MEGA_DESTROY':
+      next = handleResolveMegaDestroy(state);
+      break;
+    case 'SIDE_SLIDE_SELECT_SOURCE':
+      next = handleSideSlideSelectSource(state, action.slot);
+      break;
+    case 'RESOLVE_SIDE_SLIDE':
+      next = handleResolveSideSlide(state, action.from, action.direction, action.distance);
       break;
   }
   if (next === state) return state;

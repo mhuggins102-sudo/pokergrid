@@ -93,14 +93,20 @@ const BonusChip = ({ card, value, isSelected, onPress }: ChipProps) => {
   // visibly fade so the player knows the action is gone. Skip the
   // category glow as well so the spent chip reads as inert.
   const isUsed = !!card.used;
+  // Mixed Bag placeholders look like an "open slot" hint — same
+  // category tone (border, title color) so the player can see which
+  // family fills which slot, but dashed + dimmed so they don't read
+  // as a real held card.
+  const isPlaceholderChip = !!card.placeholderKind;
   return (
     <Pressable
       style={[
         styles.chip,
         { borderColor: cat.borderColor },
-        !isUsed && glow(cat.borderColor, 6, 0.35),
+        !isUsed && !isPlaceholderChip && glow(cat.borderColor, 6, 0.35),
         isSelected && styles.selected,
         isUsed && styles.usedChip,
+        isPlaceholderChip && styles.placeholderChip,
       ]}
       onPress={onPress}
     >
@@ -245,6 +251,14 @@ const styles = StyleSheet.create({
   usedChip: {
     opacity: 0.35,
     backgroundColor: 'transparent',
+  },
+  // Mixed Bag placeholder — same border tone as the slot's category
+  // but dashed and dimmer to read as "draw here" rather than "you
+  // have a card".
+  placeholderChip: {
+    opacity: 0.6,
+    backgroundColor: 'transparent',
+    borderStyle: 'dashed',
   },
   chipTextWrap: {
     alignItems: 'center',

@@ -58,6 +58,14 @@ const DECK_MANAGEMENT_IDS = new Set([
 ]);
 
 export const categoryOf = (card: BonusCard): BonusCategory => {
+  // Mixed Bag placeholders mirror their slot's category so the
+  // chip tone tells the player at a glance which kind of card the
+  // slot expects.
+  if (card.placeholderKind) {
+    return card.placeholderKind === 'special' ? 'special'
+      : card.placeholderKind === 'in-game' ? 'conditional'
+      : 'grid';
+  }
   // One-time action cards (Three Tricks) — bypass the id-prefix dispatch
   // since they declare their nature via specialKind directly.
   if (card.specialKind) return 'special';
