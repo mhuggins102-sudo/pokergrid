@@ -76,10 +76,18 @@ export interface BonusCard {
   powerLevel?: number;
   // One-time-use action cards (Three Tricks challenge). When set, the
   // card has no scoring effect — tapping it activates a grid-targeting
-  // flow and the card is consumed on commit. These live in the regular
-  // bonus-card slots but render with a distinct (green) border to set
-  // them apart from in-game (yellow) and end-game (purple) multipliers.
+  // flow and the card is marked `used` on commit. These live in the
+  // regular bonus-card slots but render with a distinct (green) border
+  // to set them apart from in-game (yellow) and end-game (purple)
+  // multipliers.
   specialKind?: 'power-swap' | 'doubler' | 'wildcard';
+  // True after a one-time-use card has been activated. The card stays
+  // in the hand (occupying its slot) but is rendered dimmed and no
+  // longer accepts activation. Keeping the spent card around — rather
+  // than dropping it — sets up future modes where regular bonus cards
+  // can also be consumed and the spent slot still blocks ♣ from
+  // drawing a fresh card into that position.
+  used?: boolean;
 }
 
 // Three "Three Tricks" challenge special cards. Each one is a single-use

@@ -89,13 +89,18 @@ const BonusChip = ({ card, value, isSelected, onPress }: ChipProps) => {
     backgroundColor: cat.flashColor,
   }));
 
+  // Spent one-time cards (Three Tricks) stay in their slot but
+  // visibly fade so the player knows the action is gone. Skip the
+  // category glow as well so the spent chip reads as inert.
+  const isUsed = !!card.used;
   return (
     <Pressable
       style={[
         styles.chip,
         { borderColor: cat.borderColor },
-        glow(cat.borderColor, 6, 0.35),
+        !isUsed && glow(cat.borderColor, 6, 0.35),
         isSelected && styles.selected,
+        isUsed && styles.usedChip,
       ]}
       onPress={onPress}
     >
@@ -113,7 +118,7 @@ const BonusChip = ({ card, value, isSelected, onPress }: ChipProps) => {
           {card.title}
         </Text>
         <Text style={styles.mult} numberOfLines={1} adjustsFontSizeToFit>
-          {card.mult}
+          {isUsed ? 'used' : card.mult}
         </Text>
       </View>
       <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashStyle]} />
@@ -233,6 +238,13 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     borderWidth: 2,
     ...glow(colors.accent, 10, 0.7),
+  },
+  // Spent one-time chip — keep the layout intact (the slot is still
+  // "occupied" so ♣ won't reuse it) but fade the chip down so the
+  // player reads it as inert at a glance.
+  usedChip: {
+    opacity: 0.35,
+    backgroundColor: 'transparent',
   },
   chipTextWrap: {
     alignItems: 'center',
