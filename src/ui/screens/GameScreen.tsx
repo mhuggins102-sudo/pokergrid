@@ -35,6 +35,7 @@ import {
   AnimationLayer,
   AnimSpec,
   hiddenSlotsFor,
+  SLIP_SLIDE_STEP_MS,
 } from '../components/AnimationLayer';
 import { categoryOf, styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
@@ -161,9 +162,16 @@ const GRID_EFFECT_MIN_TURNS = 5;
 const HINT_REVEAL_DELAY_MS = 700;
 
 // Delay between each card "dropping" back into place during the
-// Shuffle reveal. 180ms makes the staggered reveal feel snappy
-// but still legible.
-const SHUFFLE_REVEAL_INTERVAL_MS = 180;
+// Shuffle reveal. 270ms gives the staggered reveal a relaxed pace
+// that lines up with the shuffle sound's afterglow.
+const SHUFFLE_REVEAL_INTERVAL_MS = 270;
+// Pre-reveal beat: every shuffled slot stays hidden while the
+// 'shuffle' sound plays so the player hears the cards being shuffled
+// before they drop into place.
+const SHUFFLE_PAUSE_MS = 700;
+// Delay between each card's destroy beat during Mega Destroy. Matches
+// the Shuffle reveal cadence so the two effects feel sibling.
+const MEGA_DESTROY_STAGGER_MS = 270;
 
 const HINT_SETTING_KEY: Record<HintId, keyof import('../settings').Settings> = {
   joker: 'seenJokerHint',
@@ -267,13 +275,16 @@ export const GameScreen = ({
   const [anim, setAnim] = useState<AnimSpec | null>(null);
   const [undoWarnOpen, setUndoWarnOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<Set<number> | null>(null);
-  // Shuffle reveal sequence — `slots` is the order to reveal, `revealed`
-  // counts how many have been un-hidden so far. While active, the
-  // un-revealed tail is fed into hiddenSlots so the player sees each
-  // card drop into place one at a time after the shuffle commits.
+  // Shuffle reveal sequence — `slots` is the order to drop into,
+  // `revealed` counts how many have been un-hidden, and `paused` is
+  // true during the pre-reveal beat where the shuffle sound plays and
+  // every slot stays hidden. While active, the un-revealed tail is
+  // fed into hiddenSlots so the player sees each card drop into place
+  // one at a time after the shuffle commits.
   const [shuffleReveal, setShuffleReveal] = useState<{
     slots: number[];
     revealed: number;
+    paused: boolean;
   } | null>(null);
   const [activeHint, setActiveHint] = useState<HintId | null>(null);
   // Anchor rect (in screen coords) for the currently active hint. Null
@@ -438,16 +449,23 @@ export const GameScreen = ({
     animTimer.current = setTimeout(() => setAnim(null), ANIM_DURATION['joker-place']);
   }, [state.grid, settings.reduceMotion, playSound, haptic]);
 
-  // Shuffle reveal stepper — once the shuffleReveal state is set
-  // (immediately after the player confirms a Shuffle commit), reveal
-  // the affected slots one at a time. Cancel-safe via the timer
-  // cleanup; reduce-motion skips the staggered reveal entirely.
+  // Shuffle reveal stepper — runs in two beats:
+  //   1. `paused: true` — every shuffled slot stays hidden while the
+  //      shuffle sound plays. Lasts SHUFFLE_PAUSE_MS.
+  //   2. `paused: false` — un-hide slots one at a time at
+  //      SHUFFLE_REVEAL_INTERVAL_MS intervals.
+  // reduce-motion skips both beats and reveals instantly.
   useEffect(() => {
     if (!shuffleReveal) return;
     if (settings.reduceMotion) {
-      // Reveal everything instantly when motion is reduced.
       setShuffleReveal(null);
       return;
+    }
+    if (shuffleReveal.paused) {
+      const t = setTimeout(() => {
+        setShuffleReveal(r => (r ? { ...r, paused: false } : null));
+      }, SHUFFLE_PAUSE_MS);
+      return () => clearTimeout(t);
     }
     if (shuffleReveal.revealed >= shuffleReveal.slots.length) {
       setShuffleReveal(null);
@@ -824,8 +842,13 @@ export const GameScreen = ({
         ));
 
   // Trigger an animation, then dispatch the action when it ends.
+  // Slip & Slide's duration scales with the path length (each step
+  // is one cell-shift). Every other kind reads from ANIM_DURATION.
   const performAnimated = (spec: AnimSpec, action: Action) => {
-    const duration = ANIM_DURATION[spec.kind];
+    const duration =
+      spec.kind === 'slip-slide'
+        ? SLIP_SLIDE_STEP_MS * spec.path.length
+        : ANIM_DURATION[spec.kind];
     if (settings.reduceMotion) {
       dispatch(action);
       return;
@@ -836,6 +859,36 @@ export const GameScreen = ({
       dispatch(action);
       setAnim(null);
     }, duration);
+  };
+
+  // Mega Destroy — fire the standard ♦ destroy animation on each picked
+  // card with a stagger between them. One destroy sound per step keeps
+  // the audio feedback per-card so the count is audible. The dispatch
+  // commits the grid change once every animation has had time to play.
+  const handleMegaDestroyConfirm = (items: { card: Card; slot: number }[]) => {
+    if (items.length === 0) return;
+    haptic('destroy');
+    if (settings.reduceMotion) {
+      // Reduce-motion: skip the staggered visual entirely. Single
+      // destroy sound + immediate dispatch.
+      playSound('destroy');
+      dispatch({ type: 'RESOLVE_MEGA_DESTROY' });
+      return;
+    }
+    // Per-step destroy sounds. The animation component handles the
+    // visual stagger via withDelay; we trigger the sounds separately
+    // so each card has its own audible "pop".
+    for (let i = 0; i < items.length; i++) {
+      setTimeout(() => playSound('destroy'), i * MEGA_DESTROY_STAGGER_MS);
+    }
+    const totalDuration =
+      MEGA_DESTROY_STAGGER_MS * (items.length - 1) + ANIM_DURATION.destroy;
+    setAnim({ kind: 'mega-destroy', items, staggerMs: MEGA_DESTROY_STAGGER_MS });
+    if (animTimer.current) clearTimeout(animTimer.current);
+    animTimer.current = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_MEGA_DESTROY' });
+      setAnim(null);
+    }, totalDuration);
   };
 
   const handlePlace = () => {
@@ -959,8 +1012,8 @@ export const GameScreen = ({
       }
     } else if (p.kind === 'awaiting-special-doubler') {
       if (p.slots.includes(idx)) {
-        haptic('light');
-        playSound('tap');
+        haptic('destroy');
+        playSound('thud');
         dispatch({ type: 'RESOLVE_DOUBLER', slot: idx });
       }
     } else if (p.kind === 'awaiting-special-wildcard') {
@@ -986,8 +1039,16 @@ export const GameScreen = ({
       const valid = p.moves.find(m => m.leadingDest === idx);
       if (valid) {
         haptic('slide');
-        playSound('slide');
-        dispatch({ type: 'RESOLVE_SIDE_SLIDE', path: valid.path });
+        playSound('whoosh');
+        // Animate every chain member through the path. The reducer
+        // commits after the animation timer fires.
+        const cards = p.chain
+          .map(slot => ({ card: state.grid[slot], from: slot }))
+          .filter((c): c is { card: Card; from: number } => c.card !== null);
+        performAnimated(
+          { kind: 'slip-slide', cards, path: valid.path },
+          { type: 'RESOLVE_SIDE_SLIDE', path: valid.path }
+        );
         setSelectedSlot(null);
       }
     } else if (p.kind === 'awaiting-special-jump-source') {
@@ -1003,10 +1064,16 @@ export const GameScreen = ({
         setSelectedSlot(null);
         dispatch({ type: 'CANCEL_ACTION' });
       } else if (p.dests.includes(idx)) {
-        haptic('swap');
-        playSound('swap');
-        dispatch({ type: 'RESOLVE_JUMP', source: p.source, dest: idx });
-        setSelectedSlot(null);
+        const card = state.grid[p.source];
+        if (card) {
+          haptic('swap');
+          playSound('boing');
+          performAnimated(
+            { kind: 'jump', card, from: p.source, to: idx },
+            { type: 'RESOLVE_JUMP', source: p.source, dest: idx }
+          );
+          setSelectedSlot(null);
+        }
       }
     } else if (p.kind === 'awaiting-special-shuffle') {
       if (p.slots.includes(idx)) {
@@ -1425,14 +1492,18 @@ export const GameScreen = ({
               grid={state.grid}
               highlight={highlightedSlots}
               hiddenSlots={
-                // Shuffle: any slot whose card hasn't been "revealed"
-                // yet by the reveal sequence is hidden so the cards
-                // appear to drop in one at a time. Union with any
-                // anim-driven hides (joker-place, slide, etc).
+                // Shuffle: while paused, every shuffled slot stays
+                // hidden so the player sees the cards "lifted off"
+                // and hears the shuffle sound. After the pause, the
+                // un-revealed tail is hidden so cards drop in one at
+                // a time. Union with any anim-driven hides
+                // (joker-place, slide, slip-slide, jump, etc).
                 shuffleReveal
                   ? new Set([
                       ...Array.from(hiddenSlotsFor(anim)),
-                      ...shuffleReveal.slots.slice(shuffleReveal.revealed),
+                      ...(shuffleReveal.paused
+                        ? shuffleReveal.slots
+                        : shuffleReveal.slots.slice(shuffleReveal.revealed)),
                     ])
                   : hiddenSlotsFor(anim)
               }
@@ -1478,7 +1549,9 @@ export const GameScreen = ({
           perkButtonRef,
           deckCountRef,
           drawnIsWild ? () => setWildPerkOpen(true) : undefined,
-          (slots: number[]) => setShuffleReveal({ slots, revealed: 0 })
+          (slots: number[]) =>
+            setShuffleReveal({ slots, revealed: 0, paused: true }),
+          handleMegaDestroyConfirm
         )}
       </View>
 
@@ -2080,7 +2153,9 @@ const renderBottom = (
   onPlace: () => void,
   dispatch: (a: Action) => void,
   haptic: (k: import('../haptics').HapticKind) => void,
-  playSound: (k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus') => void,
+  playSound: (
+    k: 'tap' | 'place' | 'swap' | 'slide' | 'destroy' | 'bonus' | 'whoosh' | 'boing' | 'shuffle'
+  ) => void,
   suitOK: boolean,
   drawnKey: string,
   animating: boolean,
@@ -2099,7 +2174,11 @@ const renderBottom = (
   // Called when the Shuffle "Confirm" button fires so the parent can
   // kick off the staggered reveal animation before the grid catches
   // up with the post-shuffle state.
-  onShuffleConfirm?: (slots: number[]) => void
+  onShuffleConfirm?: (slots: number[]) => void,
+  // Called when the Mega Destroy "Confirm" button fires so the parent
+  // can play a sequence of destroy animations on the picked cards
+  // (one per stagger step) before committing the grid change.
+  onMegaDestroyConfirm?: (items: { card: Card; slot: number }[]) => void
 ) => {
   const p = state.phase;
   const disabled = animating;
@@ -2413,9 +2492,10 @@ const renderBottom = (
             size="sm"
             disabled={n === 0}
             onPress={() => {
-              haptic('destroy');
-              playSound('destroy');
-              dispatch({ type: 'RESOLVE_MEGA_DESTROY' });
+              const items = p.selected
+                .map(slot => ({ slot, card: state.grid[slot] }))
+                .filter((it): it is { slot: number; card: Card } => it.card !== null);
+              onMegaDestroyConfirm?.(items);
             }}
           />
           <NeonButton
@@ -2556,7 +2636,7 @@ const renderBottom = (
             disabled={n !== 5}
             onPress={() => {
               haptic('bonus');
-              playSound('bonus');
+              playSound('shuffle');
               // Snapshot the picked slots so the parent's reveal
               // sequence has the order to walk through (the phase
               // clears once the reducer commits).

@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Card } from '../../game/cards';
+import { Direction, GRID_SIZE } from '../../game/grid';
 import { colors, glow, gridCellSize } from '../theme';
 import { CardTile } from './CardTile';
 
@@ -41,6 +42,26 @@ export type AnimSpec =
       kind: 'slide';
       cards: { card: Card; from: number; to: number }[];
     }
+  // Slip & Slide — animates each chain member through every step of
+  // the path. `cards` are the chain members in starting positions; the
+  // animation interpolates them one cell at a time per path entry.
+  | {
+      kind: 'slip-slide';
+      cards: { card: Card; from: number }[];
+      path: Direction[];
+    }
+  // Jump, Jump — a single card lifts off, arcs to the destination, and
+  // lands. Bigger lift + scale wobble than the regular swap arc.
+  | { kind: 'jump'; card: Card; from: number; to: number }
+  // Mega Destroy — the same ♦ destroy animation, fired sequentially on
+  // each picked card with a per-step stagger. The whole animation
+  // runs as one AnimSpec so the existing animTimer pipeline can drive
+  // the eventual dispatch.
+  | {
+      kind: 'mega-destroy';
+      items: { card: Card; slot: number }[];
+      staggerMs: number;
+    }
   | { kind: 'destroy'; card: Card; slot: number };
 
 export const ANIM_DURATION = {
@@ -49,7 +70,20 @@ export const ANIM_DURATION = {
   swap: 480,
   slide: 360,
   destroy: 640,
+  // Slip & Slide — each step in the path takes SLIP_SLIDE_STEP_MS, so
+  // the full duration scales with path length. The base entry is used
+  // by the GameScreen for the queued-action timer.
+  'slip-slide': 0,
+  jump: 600,
+  // mega-destroy is dynamic: stagger * (n - 1) + per-card destroy.
+  // The GameScreen computes the real duration when scheduling the
+  // dispatch.
+  'mega-destroy': 0,
 } as const;
+
+// Per-step duration for Slip & Slide. The whole anim runs for
+// SLIP_SLIDE_STEP_MS * path.length, computed at performAnimated time.
+export const SLIP_SLIDE_STEP_MS = 200;
 
 // Returns the slots whose grid cells should be hidden while the animation
 // plays — usually the cards that are moving (we draw them on the overlay).
@@ -67,6 +101,16 @@ export const hiddenSlotsFor = (anim: AnimSpec | null): Set<number> => {
       return new Set([anim.slotA, anim.slotB]);
     case 'slide':
       return new Set(anim.cards.map(c => c.from));
+    case 'slip-slide':
+      return new Set(anim.cards.map(c => c.from));
+    case 'jump':
+      // Hide both endpoints — the source vacates as the card lifts
+      // off, and the dest gets occupied by the reducer the moment we
+      // dispatch (so the static cell would show through under the
+      // overlay).
+      return new Set([anim.from, anim.to]);
+    case 'mega-destroy':
+      return new Set(anim.items.map(i => i.slot));
     case 'destroy':
       return new Set([anim.slot]);
   }
@@ -289,6 +333,137 @@ const SlideAnim = ({
   </>
 );
 
+const stepOf = (d: Direction): number =>
+  d === 'up' ? -GRID_SIZE
+  : d === 'down' ? GRID_SIZE
+  : d === 'left' ? -1
+  : 1;
+
+// Slip & Slide — animates each chain card through every step of the
+// path. Each step takes SLIP_SLIDE_STEP_MS, and the cards travel
+// together. Built by chaining `withSequence` so the slot-to-slot motion
+// reads as "slide, slide, slide" rather than a single straight-line
+// flight.
+const SlipSlideStepCard = ({
+  card,
+  from,
+  path,
+}: {
+  card: Card;
+  from: number;
+  path: Direction[];
+}) => {
+  // Each waypoint is the chain card's position after that many steps.
+  const waypoints: { x: number; y: number }[] = [];
+  let cur = from;
+  waypoints.push(slotXY(cur));
+  for (const d of path) {
+    cur += stepOf(d);
+    waypoints.push(slotXY(cur));
+  }
+  const tx = useSharedValue(waypoints[0].x);
+  const ty = useSharedValue(waypoints[0].y);
+
+  useEffect(() => {
+    if (waypoints.length <= 1) return;
+    // Build a sequence: tx travels through every waypoint, one step
+    // per SLIP_SLIDE_STEP_MS. The same is done in parallel for ty.
+    const easing = Easing.bezier(0.4, 0.0, 0.2, 1);
+    const buildSeq = (axis: 'x' | 'y') => {
+      const steps = waypoints.slice(1).map(wp =>
+        withTiming(axis === 'x' ? wp.x : wp.y, {
+          duration: SLIP_SLIDE_STEP_MS,
+          easing,
+        })
+      );
+      // withSequence demands at least one entry; we always have one
+      // since path.length >= 1.
+      return withSequence(...(steps as [typeof steps[0], ...typeof steps]));
+    };
+    tx.value = buildSeq('x');
+    ty.value = buildSeq('y');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { translateY: ty.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.absolute, { width: CELL, height: CELL }, style]}>
+      <CardTile card={card} size="md" />
+    </Animated.View>
+  );
+};
+
+const SlipSlideAnim = ({
+  cards,
+  path,
+}: {
+  cards: { card: Card; from: number }[];
+  path: Direction[];
+}) => (
+  <>
+    {cards.map((c, i) => (
+      <SlipSlideStepCard key={`${c.from}-${i}`} card={c.card} from={c.from} path={path} />
+    ))}
+  </>
+);
+
+// Jump, Jump — a card lifts off (scales up), arcs to the destination
+// with a tall vertical hop, then lands (scales back down with a
+// micro-bounce). The bigger lift and scale wobble vs the swap arc make
+// it read as a literal jump rather than a slide.
+const JumpAnim = ({
+  card,
+  from,
+  to,
+}: {
+  card: Card;
+  from: number;
+  to: number;
+}) => {
+  const a = slotXY(from);
+  const b = slotXY(to);
+  const t = useSharedValue(0);
+  const lift = useSharedValue(0);
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    const D = ANIM_DURATION.jump;
+    t.value = withTiming(1, { duration: D, easing: Easing.bezier(0.3, 0, 0.4, 1) });
+    // Tall arc — peaks at ~40% of the duration, ~38px above baseline.
+    lift.value = withSequence(
+      withTiming(1, { duration: D * 0.45, easing: Easing.out(Easing.cubic) }),
+      withTiming(0, { duration: D * 0.55, easing: Easing.in(Easing.cubic) })
+    );
+    // Scale wobble: stretch at lift-off, peak-sized in flight, snappy
+    // bounce on landing. The little overshoot at the end sells the
+    // boing landing.
+    scale.value = withSequence(
+      withTiming(1.18, { duration: D * 0.18, easing: Easing.out(Easing.cubic) }),
+      withTiming(1.28, { duration: D * 0.32, easing: Easing.out(Easing.cubic) }),
+      withTiming(0.92, { duration: D * 0.28, easing: Easing.in(Easing.cubic) }),
+      withTiming(1.0, { duration: D * 0.22, easing: Easing.out(Easing.cubic) })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const style = useAnimatedStyle(() => {
+    const x = a.x + (b.x - a.x) * t.value;
+    const y = a.y + (b.y - a.y) * t.value - lift.value * 38;
+    return {
+      transform: [{ translateX: x }, { translateY: y }, { scale: scale.value }],
+    };
+  });
+
+  return (
+    <Animated.View style={[styles.absolute, { width: CELL, height: CELL }, style]}>
+      <CardTile card={card} size="md" />
+    </Animated.View>
+  );
+};
+
 const Particle = ({
   angle,
   color,
@@ -325,25 +500,53 @@ const Particle = ({
   );
 };
 
-const DestroyAnim = ({ card, slot }: { card: Card; slot: number }) => {
+const DestroyAnim = ({
+  card,
+  slot,
+  delay = 0,
+}: {
+  card: Card;
+  slot: number;
+  delay?: number;
+}) => {
   const { x, y } = slotXY(slot);
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
+  // While the delay is active the card sits at scale=0 / opacity=0
+  // (off-screen). It pops in at the start of its turn so the staggered
+  // mega-destroy doesn't show all 5 cards on top of each other from
+  // t=0. Single-shot ♦ destroy uses delay=0 and the pop-in is
+  // visually identical to "appearing instantly".
+  const scale = useSharedValue(delay > 0 ? 0 : 1);
+  const opacity = useSharedValue(delay > 0 ? 0 : 1);
   const rotate = useSharedValue(0);
   const shockScale = useSharedValue(0);
   const shockOpacity = useSharedValue(0.9);
 
   useEffect(() => {
-    scale.value = withSequence(
-      withTiming(1.15, { duration: 100 }),
-      withTiming(1.4, { duration: 80 }),
-      withTiming(0, { duration: 360, easing: Easing.in(Easing.cubic) })
+    // Pop the card into view (instant for delay=0, after the wait
+    // for staggered fires).
+    if (delay > 0) {
+      scale.value = withDelay(delay, withTiming(1, { duration: 0 }));
+      opacity.value = withDelay(delay, withTiming(1, { duration: 0 }));
+    }
+    scale.value = withDelay(
+      delay,
+      withSequence(
+        withTiming(1.15, { duration: 100 }),
+        withTiming(1.4, { duration: 80 }),
+        withTiming(0, { duration: 360, easing: Easing.in(Easing.cubic) })
+      )
     );
-    opacity.value = withDelay(180, withTiming(0, { duration: 300 }));
-    rotate.value = withTiming(20, { duration: 480 });
-    shockScale.value = withDelay(140, withTiming(2.2, { duration: 460, easing: Easing.out(Easing.cubic) }));
-    shockOpacity.value = withDelay(140, withTiming(0, { duration: 460 }));
-  }, [scale, opacity, rotate, shockScale, shockOpacity]);
+    opacity.value = withDelay(delay + 180, withTiming(0, { duration: 300 }));
+    rotate.value = withDelay(delay, withTiming(20, { duration: 480 }));
+    shockScale.value = withDelay(
+      delay + 140,
+      withTiming(2.2, { duration: 460, easing: Easing.out(Easing.cubic) })
+    );
+    shockOpacity.value = withDelay(
+      delay + 140,
+      withTiming(0, { duration: 460 })
+    );
+  }, [scale, opacity, rotate, shockScale, shockOpacity, delay]);
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
@@ -374,6 +577,25 @@ const DestroyAnim = ({ card, slot }: { card: Card; slot: number }) => {
   );
 };
 
+const MegaDestroyAnim = ({
+  items,
+  staggerMs,
+}: {
+  items: { card: Card; slot: number }[];
+  staggerMs: number;
+}) => (
+  <>
+    {items.map((it, i) => (
+      <DestroyAnim
+        key={`${it.slot}-${i}`}
+        card={it.card}
+        slot={it.slot}
+        delay={i * staggerMs}
+      />
+    ))}
+  </>
+);
+
 // ---------- The layer ----------
 
 export const AnimationLayer = ({ anim }: { anim: AnimSpec | null }) => {
@@ -391,6 +613,15 @@ export const AnimationLayer = ({ anim }: { anim: AnimSpec | null }) => {
         />
       )}
       {anim.kind === 'slide' && <SlideAnim cards={anim.cards} />}
+      {anim.kind === 'slip-slide' && (
+        <SlipSlideAnim cards={anim.cards} path={anim.path} />
+      )}
+      {anim.kind === 'jump' && (
+        <JumpAnim card={anim.card} from={anim.from} to={anim.to} />
+      )}
+      {anim.kind === 'mega-destroy' && (
+        <MegaDestroyAnim items={anim.items} staggerMs={anim.staggerMs} />
+      )}
       {anim.kind === 'destroy' && <DestroyAnim card={anim.card} slot={anim.slot} />}
     </View>
   );
