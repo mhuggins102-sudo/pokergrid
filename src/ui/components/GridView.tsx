@@ -35,6 +35,11 @@ interface Props {
   // cards the player has added to the chain. Rendered as a green
   // outline to distinguish from destruction (danger) selections.
   pickedSlots?: Set<number>;
+  // Dim card overlays — Slip & Slide preview uses this to render the
+  // actual chain cards at their PREVIEW destinations so the player
+  // can see exactly where each picked card will land before
+  // committing.
+  ghostCards?: { slot: number; card: Card }[];
   onSlotPress?: (idx: number) => void;
   onLinePress?: (kind: LineKind, index: number) => void;
   // Render with smaller cells + sm cards. Used by ResultScreen to keep the
@@ -91,6 +96,7 @@ export const GridView = ({
   ghostSlots,
   dangerSlots,
   pickedSlots,
+  ghostCards,
   onSlotPress,
   onLinePress,
   compact,
@@ -141,6 +147,7 @@ export const GridView = ({
             const isGhost = ghostSlots?.has(idx) ?? false;
             const isDanger = dangerSlots?.has(idx) ?? false;
             const isPicked = pickedSlots?.has(idx) ?? false;
+            const ghostCard = ghostCards?.find(g => g.slot === idx)?.card ?? null;
             return (
               <Pressable
                 key={idx}
@@ -200,6 +207,20 @@ export const GridView = ({
                         },
                       ]}
                     />
+                  )}
+                  {ghostCard && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.ghostCardWrap,
+                        {
+                          width: compact ? cardSize.sm : cardSize.md,
+                          height: compact ? cardSize.sm : cardSize.md,
+                        },
+                      ]}
+                    >
+                      <CardTile card={ghostCard} dimmed size={cardSizeKey} />
+                    </View>
                   )}
                 </View>
               </Pressable>
@@ -299,5 +320,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: 'rgba(92, 255, 154, 0.15)',
     ...glow(colors.success, 8, 0.7),
+  },
+  // Slip & Slide preview — render the actual chain card at its
+  // previewed destination, dimmed so the player can tell it apart
+  // from the live grid contents.
+  ghostCardWrap: {
+    position: 'absolute',
+    opacity: 0.55,
   },
 });

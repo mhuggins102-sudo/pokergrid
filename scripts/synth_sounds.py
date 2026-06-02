@@ -133,22 +133,31 @@ def add_noise(
 
 
 def write_wav(buf: list, path: str) -> None:
-    """Write 16-bit mono PCM at SAMPLE_RATE, clipping the float buffer."""
+    """Write 16-bit mono PCM at SAMPLE_RATE.
+
+    Peak-normalizes each clip to PEAK_TARGET so the bundled WAVs all
+    land at the same maximum amplitude. Without normalization the
+    per-recipe `vol` values would have to be hand-tuned for each sound
+    to match the perceived loudness of the others — instead we let
+    the math do the equalization.
+    """
     # Trim trailing silence to keep file sizes reasonable.
     end = len(buf)
     while end > 0 and abs(buf[end - 1]) < 1e-6:
         end -= 1
-    # Master gain to bring the synth output close to the existing
-    # bundled WAV loudness without clipping. The Web Audio path uses a
-    # 0.55 master gain; mirror that here.
-    MASTER = 0.55
+    # Peak normalization: scale the buffer so its loudest sample sits
+    # at PEAK_TARGET. Leaves a touch of headroom under full-scale so
+    # int16 conversion never clips.
+    PEAK_TARGET = 0.85
+    peak = max(abs(v) for v in buf[:end]) if end > 0 else 0.0
+    gain = (PEAK_TARGET / peak) if peak > 1e-6 else 0.0
     with wave.open(path, 'wb') as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(SAMPLE_RATE)
         frames = bytearray()
         for v in buf[:end]:
-            x = max(-1.0, min(1.0, v * MASTER))
+            x = max(-1.0, min(1.0, v * gain))
             frames += struct.pack('<h', int(x * 32767))
         w.writeframes(bytes(frames))
 
@@ -175,16 +184,23 @@ def make_boing() -> list:
 
 
 def make_shuffle() -> list:
-    buf = make_buffer(0.45)
-    add_noise(buf, duration=0.20, vol=0.22, hz=1200)
-    add_noise(buf, duration=0.18, delay=0.14, vol=0.18, hz=1500)
+    """Riffle shuffle — 10 quick noise ticks (cards interleaving) plus
+    a soft squaring-up swoosh at the end."""
+    buf = make_buffer(0.65)
+    for i in range(10):
+        add_noise(buf, duration=0.022, delay=i * 0.032, vol=0.20, hz=2400)
+    add_noise(buf, duration=0.20, delay=0.36, vol=0.14, hz=1100)
     return buf
 
 
 def make_thud() -> list:
-    buf = make_buffer(0.25)
-    add_noise(buf, duration=0.10, vol=0.20, hz=220)
-    add_note(buf, freq=120, end_freq=60, dur=0.16, kind='sine', vol=0.28)
+    """The Doubler — low sine sweep for the body, plus a brighter
+    mid-frequency triangle click on top so small speakers can
+    actually reproduce the hit."""
+    buf = make_buffer(0.32)
+    add_noise(buf, duration=0.10, vol=0.30, hz=320)
+    add_note(buf, freq=120, end_freq=55, dur=0.20, kind='sine', vol=0.42)
+    add_note(buf, freq=920, end_freq=240, dur=0.08, kind='triangle', vol=0.22)
     return buf
 
 

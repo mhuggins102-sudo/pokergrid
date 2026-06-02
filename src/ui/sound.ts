@@ -240,19 +240,24 @@ const playWeb = (k: SoundKey) => {
         { freq: 440, endFreq: 280, dur: 0.10, delay: 0.28, type: 'sine', vol: 0.10 },
       ]);
     case 'shuffle':
-      // Shuffle — a short burst of filtered noise twice in quick
-      // succession to evoke a riffle. The two staggered bursts read
-      // as "cards crossing".
-      playNoise(0.20, { vol: 0.22, hz: 1200 });
-      setTimeout(() => playNoise(0.18, { vol: 0.18, hz: 1500 }), 140);
+      // Shuffle — riffle effect: a rapid burst of short ticks
+      // (cards interleaving) followed by a soft squaring-up swoosh.
+      // Each tick is a tiny lowpass-filtered noise pop; the spacing
+      // gives the ear the "brrrap" of a riffle shuffle.
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => playNoise(0.022, { vol: 0.20, hz: 2400 }), i * 32);
+      }
+      setTimeout(() => playNoise(0.20, { vol: 0.14, hz: 1100 }), 360);
       return;
     case 'thud':
-      // The Doubler — short, low mallet hit. Quick low-frequency
-      // sine punch backed by a touch of filtered noise for the
-      // "impact" thump.
-      playNoise(0.10, { vol: 0.20, hz: 220 });
+      // The Doubler — low mallet hit. The low sine sweep gives the
+      // body; a brief mid-frequency triangle click on top adds the
+      // bright "tap" that small speakers can actually reproduce, so
+      // the chip doesn't sound mysteriously quiet on a laptop.
+      playNoise(0.10, { vol: 0.30, hz: 320 });
       return playNotes([
-        { freq: 120, endFreq: 60, dur: 0.16, type: 'sine', vol: 0.28 },
+        { freq: 120, endFreq: 55, dur: 0.20, type: 'sine', vol: 0.42 },
+        { freq: 920, endFreq: 240, dur: 0.08, type: 'triangle', vol: 0.22 },
       ]);
     case 'sparkle':
       // Wildcard — magical twinkle. Ascending tetrad of bright sine

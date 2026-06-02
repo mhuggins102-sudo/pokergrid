@@ -472,10 +472,14 @@ export const GameScreen = ({
       return;
     }
     const t = setTimeout(() => {
+      // A small "thud" plays as each card drops into its slot — a
+      // soft per-card placement cue so the player hears each one
+      // land instead of just seeing them appear.
+      playSound('thud');
       setShuffleReveal(r => (r ? { ...r, revealed: r.revealed + 1 } : null));
     }, SHUFFLE_REVEAL_INTERVAL_MS);
     return () => clearTimeout(t);
-  }, [shuffleReveal, settings.reduceMotion]);
+  }, [shuffleReveal, settings.reduceMotion, playSound]);
 
   const liveReport = useMemo(
     () =>
@@ -1038,18 +1042,31 @@ export const GameScreen = ({
     } else if (p.kind === 'awaiting-special-side-slide-dest') {
       const valid = p.moves.find(m => m.leadingDest === idx);
       if (valid) {
-        haptic('slide');
-        playSound('whoosh');
-        // Animate every chain member through the path. The reducer
-        // commits after the animation timer fires.
-        const cards = p.chain
-          .map(slot => ({ card: state.grid[slot], from: slot }))
-          .filter((c): c is { card: Card; from: number } => c.card !== null);
-        performAnimated(
-          { kind: 'slip-slide', cards, path: valid.path },
-          { type: 'RESOLVE_SIDE_SLIDE', path: valid.path }
-        );
-        setSelectedSlot(null);
+        // Two-tap commit: the first tap on a landing previews the
+        // chain at its final positions; the second tap on the same
+        // landing actually slides. Tapping a DIFFERENT landing
+        // re-previews. This makes the chain's destination footprint
+        // obvious before the player commits.
+        const previewKey = p.previewPath?.join(',') ?? null;
+        if (previewKey === valid.path.join(',')) {
+          haptic('slide');
+          playSound('whoosh');
+          const cards = p.chain
+            .map(slot => ({ card: state.grid[slot], from: slot }))
+            .filter((c): c is { card: Card; from: number } => c.card !== null);
+          performAnimated(
+            { kind: 'slip-slide', cards, path: valid.path },
+            { type: 'RESOLVE_SIDE_SLIDE', path: valid.path }
+          );
+          setSelectedSlot(null);
+        } else {
+          haptic('light');
+          playSound('tap');
+          dispatch({ type: 'SIDE_SLIDE_PREVIEW', path: valid.path });
+        }
+      } else if (p.previewPath) {
+        // Tap outside any landing clears the current preview.
+        dispatch({ type: 'SIDE_SLIDE_PREVIEW', path: null });
       }
     } else if (p.kind === 'awaiting-special-jump-source') {
       if (p.sources.includes(idx)) {
@@ -1147,8 +1164,42 @@ export const GameScreen = ({
       // see their pending set.
       for (const s of p.slots) out.add(s);
     }
+    // Shuffle reveal: while the cards are lifted, glow each of the 5
+    // landing spots so the player can see exactly where the cards
+    // will drop back. After the first reveal beat the slots that
+    // already have a card stop glowing since the visual hint is
+    // satisfied; pending slots keep glowing.
+    if (shuffleReveal) {
+      const start = shuffleReveal.paused ? 0 : shuffleReveal.revealed;
+      for (let i = start; i < shuffleReveal.slots.length; i++) {
+        out.add(shuffleReveal.slots[i]);
+      }
+    }
     return out;
-  }, [state.phase, selectedSlot, state.grid]);
+  }, [state.phase, selectedSlot, state.grid, shuffleReveal]);
+
+  // Slip & Slide preview — when the player has tapped a destination
+  // but not yet confirmed, render dimmed ghost cards at every final
+  // position so the player sees exactly where each picked card will
+  // land before committing.
+  const slipSlidePreviewCards = useMemo(() => {
+    const p = state.phase;
+    if (p.kind !== 'awaiting-special-side-slide-dest') return undefined;
+    if (!p.previewPath) return undefined;
+    // Net offset = sum of step displacements along the path.
+    const stepOf = (d: Direction): number =>
+      d === 'up' ? -GRID_SIZE
+      : d === 'down' ? GRID_SIZE
+      : d === 'left' ? -1 : 1;
+    let offset = 0;
+    for (const d of p.previewPath) offset += stepOf(d);
+    const out: { slot: number; card: Card }[] = [];
+    for (const slot of p.chain) {
+      const c = state.grid[slot];
+      if (c) out.push({ slot: slot + offset, card: c });
+    }
+    return out;
+  }, [state.phase, state.grid]);
 
   const inspectCards = useMemo(() => {
     if (!inspectLine) return [];
@@ -1524,6 +1575,7 @@ export const GameScreen = ({
                   ? new Set(state.phase.selected)
                   : undefined
               }
+              ghostCards={slipSlidePreviewCards}
               onSlotPress={handleSlotPress}
               onLinePress={(kind, index) => setInspectLine({ kind, index })}
               cellRefs={gridCellRefs}
@@ -2577,8 +2629,9 @@ const renderBottom = (
         </DrawnArea>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>
-            Tap any glowing landing. The group can take a multi-direction path
-            (e.g. up + left) — reachable cells are all lit.
+            {p.previewPath
+              ? 'Ghost cards show where the group will land. Tap the same landing again to slide, or tap a different landing to preview that one.'
+              : 'Tap a landing to preview the group there. The group can take a multi-direction path (e.g. up + left).'}
           </Text>
           <NeonButton
             label="Pick different cards"
