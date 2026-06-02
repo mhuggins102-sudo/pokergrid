@@ -9,7 +9,7 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import type { PlayContext } from '../../../App';
-import { BonusCard } from '../../game/bonusCards';
+import { BONUS_DECK_POOL, BonusCard } from '../../game/bonusCards';
 import { Card, isJoker } from '../../game/cards';
 import {
   ACHIEVEMENTS,
@@ -482,6 +482,21 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         // findChallenge is non-null at this point because mode === 'challenge'
         (context as { id: import('../../game/challenges').ChallengeId }).id
       ) ? 1 : 0);
+    // Full Slate: count distinct cards from BONUS_DECK_POOL that have
+    // ever scored points (Shapley > 0). Combine the all-time aggregate
+    // with the current run's per-card contributions to get the
+    // post-run set. Specials / placeholders never get a positive
+    // Shapley so they're naturally excluded.
+    const scoredIds = new Set<string>();
+    for (const [id, s] of Object.entries(prevStats.bonusCardStats)) {
+      if (s.totalShapley > 0) scoredIds.add(id);
+    }
+    for (let i = 0; i < state.bonusCards.length; i++) {
+      const v = bonusValues[i] ?? 0;
+      if (v > 0) {
+        scoredIds.add(state.bonusCards[i].id.replace(/-pwr\d+$/, ''));
+      }
+    }
     const milestone: MilestoneInputs = {
       winsByDifficulty,
       ssByDifficulty,
@@ -490,6 +505,8 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       totalChallenges: CHALLENGES_TOTAL,
       runBonusShapley: bonusValues,
       runWasFreePlay: isFree && won,
+      uniqueBonusCardsScored: scoredIds.size,
+      totalBonusCardsInPool: BONUS_DECK_POOL.length,
     };
     return ACHIEVEMENTS.filter(
       a =>

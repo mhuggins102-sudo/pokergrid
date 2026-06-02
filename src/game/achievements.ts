@@ -77,12 +77,16 @@ export interface MilestoneInputs {
   challengesCompleted: number;
   totalChallenges: number;
   // Per-card Shapley contribution for the held bonus cards on this
-  // run. Index-aligned with state.bonusCards. Used by the "full bonus
-  // hand" milestone.
+  // run. Index-aligned with state.bonusCards.
   runBonusShapley: number[];
   // True if the current run was a Free Play context (vs Targets Up or
   // Challenge). Milestones that only fire on Free Play wins use this.
   runWasFreePlay: boolean;
+  // How many distinct cards from BONUS_DECK_POOL have ever scored
+  // (Shapley > 0) including the current run, and the size of the
+  // pool itself. The Full Slate milestone fires when these match.
+  uniqueBonusCardsScored: number;
+  totalBonusCardsInPool: number;
 }
 
 export interface AchievementCheckCtx {
@@ -209,7 +213,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'win-every-difficulty',
     tier: 'milestone',
     name: 'Globetrotter',
-    description: 'Win a Free Play game at each difficulty (Easy / Medium / Hard / Extreme).',
+    description: 'Win a game at each difficulty.',
     conditionMet: ({ milestone }) => {
       const w = milestone.winsByDifficulty;
       return w.easy > 0 && w.medium > 0 && w.hard > 0 && w.extreme > 0;
@@ -219,7 +223,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'perfect-every-difficulty',
     tier: 'milestone',
     name: 'Perfectionist',
-    description: 'Earn a Perfect (SS) win at each difficulty.',
+    description: 'Win a game with Perfect (SS rating) at each difficulty.',
     conditionMet: ({ milestone }) => {
       const s = milestone.ssByDifficulty;
       return s.easy > 0 && s.medium > 0 && s.hard > 0 && s.extreme > 0;
@@ -229,21 +233,21 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'wins-25',
     tier: 'milestone',
     name: 'Quarter Century',
-    description: 'Win 25+ Free Play games across all difficulties.',
+    description: 'Win 25+ games across all difficulties.',
     conditionMet: ({ milestone }) => milestone.totalWins >= 25,
   },
   {
     id: 'wins-100',
     tier: 'milestone',
     name: 'Centurion',
-    description: 'Win 100+ Free Play games across all difficulties.',
+    description: 'Win 100+ games across all difficulties.',
     conditionMet: ({ milestone }) => milestone.totalWins >= 100,
   },
   {
     id: 'all-challenges',
     tier: 'milestone',
     name: 'Challenge Sweep',
-    description: 'Clear every Challenge.',
+    description: 'Beat every Challenge.',
     conditionMet: ({ milestone }) =>
       milestone.challengesCompleted >= milestone.totalChallenges,
   },
@@ -251,20 +255,9 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'full-bonus-hand',
     tier: 'milestone',
     name: 'Full Slate',
-    description:
-      'Win a Free Play game holding 3 bonus cards (yellow / purple) that all contribute to the score.',
-    conditionMet: ({ state, milestone }) => {
-      if (!milestone.runWasFreePlay) return false;
-      // Need a full hand of 3 cards, none of them inert (placeholders
-      // or one-time specials), and each must have made a positive
-      // Shapley contribution to the final score.
-      if (state.bonusCards.length !== 3) return false;
-      const allScoring = state.bonusCards.every(
-        c => !c.specialKind && !c.placeholderKind
-      );
-      if (!allScoring) return false;
-      return milestone.runBonusShapley.every(v => v > 0);
-    },
+    description: 'Score points with every bonus card at least once.',
+    conditionMet: ({ milestone }) =>
+      milestone.uniqueBonusCardsScored >= milestone.totalBonusCardsInPool,
   },
 ];
 
