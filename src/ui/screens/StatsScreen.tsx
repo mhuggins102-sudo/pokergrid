@@ -322,7 +322,7 @@ export const StatsScreen = ({ onBack }: Props) => {
               <Text
                 style={[
                   styles.bonusHeaderCell,
-                  styles.bonusNumberCell,
+                  styles.bonusHeaderNumberCell,
                   bonusSortBy === 'held' && styles.bonusHeaderActive,
                 ]}
               >
@@ -337,7 +337,7 @@ export const StatsScreen = ({ onBack }: Props) => {
               <Text
                 style={[
                   styles.bonusHeaderCell,
-                  styles.bonusNumberCell,
+                  styles.bonusHeaderNumberCell,
                   bonusSortBy === 'avg' && styles.bonusHeaderActive,
                 ]}
               >
@@ -671,16 +671,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.outlineSoft,
-    // Generous gap between cells so the "Held" and "Avg" numbers stay
-    // visually separated even when both are short.
-    gap: spacing.md,
+    // Inter-cell spacing is applied via marginLeft on each non-first
+    // cell below — `gap` would be cleaner but RN-web has mixed
+    // behavior with gap when the row contains both Text and
+    // Pressable children, which broke alignment between header and
+    // data rows.
   },
   bonusHeader: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
     paddingVertical: 2,
   },
-  bonusSwatchSpacer: { width: 8 },
+  // First cell in the row — header rolls into this swatch-shaped
+  // spacer so the "Card" label starts where the data row's card
+  // name does.
+  bonusSwatchSpacer: { width: 8, marginRight: spacing.md },
   bonusHeaderCell: {
     color: colors.textLow,
     fontFamily: fonts.mono,
@@ -690,10 +695,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   bonusNameCell: { flex: 1 },
-  // The Pressable wrapping each sortable header label fills the
-  // column exactly so the inner Text sits at the same x-offset as
-  // the data cells below.
-  bonusHeaderBtn: { width: 64 },
+  // Pressable wrapping each sortable header label. flexShrink: 0
+  // pins the width — without it the Pressable inherits the default
+  // flex: 0 1 auto and the flex container can compress the header
+  // columns while the data Text (which has flex: 0 from
+  // bonusNumberCell) keeps its full width.
+  bonusHeaderBtn: {
+    width: 64,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 64,
+    marginLeft: spacing.md,
+  },
   bonusHeaderActive: {
     color: colors.accent,
     textShadowColor: colors.accent,
@@ -703,6 +716,9 @@ const styles = StyleSheet.create({
     width: 8,
     height: 24,
     borderRadius: 2,
+    // Matches bonusSwatchSpacer.marginRight so the row's card name
+    // starts at the same x-offset as the header's "Card" label.
+    marginRight: spacing.md,
   },
   bonusName: {
     flex: 1,
@@ -714,7 +730,19 @@ const styles = StyleSheet.create({
   // Width must match bonusHeaderBtn so the data values land directly
   // under their header labels. textAlign: right pins the digits to
   // the column's right edge so they read like a balance sheet.
+  // marginLeft spaces it from the previous column — same value as
+  // bonusHeaderBtn.marginLeft so header and data share the math.
   bonusNumberCell: {
+    width: 64,
+    textAlign: 'right',
+    flex: 0,
+    marginLeft: spacing.md,
+  },
+  // Text styling for the labels INSIDE the header Pressables. The
+  // Pressable wrapper already brings the width + marginLeft from
+  // bonusHeaderBtn, so the inner Text just needs to fill the
+  // Pressable's 64-wide box with right-aligned text.
+  bonusHeaderNumberCell: {
     width: 64,
     textAlign: 'right',
     flex: 0,
