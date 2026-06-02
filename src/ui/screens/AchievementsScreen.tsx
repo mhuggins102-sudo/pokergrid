@@ -46,8 +46,9 @@ export const AchievementsScreen = ({ onBack }: Props) => {
       </View>
 
       <Text style={styles.intro}>
-        Passive goals earned from Free Play runs or overall prowess. Easy
-        and Hard / Extreme difficulties each have their own set of
+        Passive goals earned from single runs and upon reaching select
+        milestones (Free Play only, except for Challenge Sweep). Easy
+        and Hard / Extreme difficulties each have a unique set of
         achievements to complete.
       </Text>
 

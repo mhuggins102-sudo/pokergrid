@@ -189,7 +189,7 @@ export const HomeScreen = ({
             )}
           </View>
           <Text style={styles.modeBody}>
-            Awarded automatically upon completion.
+            Awarded automatically for noteworthy single games and milestones.
           </Text>
           <Text style={styles.modeCta}>View achievements →</Text>
         </Pressable>
