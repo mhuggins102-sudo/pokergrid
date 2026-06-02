@@ -313,35 +313,44 @@ export const StatsScreen = ({ onBack }: Props) => {
         <View style={styles.bonusBlock}>
           <View style={[styles.bonusRow, styles.bonusHeader]}>
             <View style={styles.bonusSwatchSpacer} />
-            <Text style={[styles.bonusHeaderCell, styles.bonusNameCell]}>Card</Text>
+            <View style={styles.bonusNameCol}>
+              <Text style={styles.bonusHeaderCell}>Card</Text>
+            </View>
             {/*
-              Header labels use Text.onPress directly instead of a
-              Pressable wrapper so the cell structure mirrors the data
-              row exactly (Text-only siblings). Wrapping in a Pressable
-              introduced RN-web layout quirks where the Pressable could
-              shrink and the held / avg columns ended up misaligned
-              against their data rows.
+              Every cell (name + held + avg) is now a View with an
+              explicit width/flex, and the Text lives inside the View.
+              RN-web has been inconsistent at honoring `width` set
+              directly on Text components that are flex children — the
+              text widths could compress or skew differently from the
+              data row's Text cells, leaving columns misaligned.
+              Wrapping in a View moves the layout responsibility onto
+              the View (which RN handles cleanly across all platforms)
+              and the Text just renders content.
             */}
-            <Text
-              onPress={() => toggleBonusSort('held')}
-              style={[
-                styles.bonusHeaderCell,
-                styles.bonusNumberCell,
-                bonusSortBy === 'held' && styles.bonusHeaderActive,
-              ]}
-            >
-              Held{bonusSortBy === 'held' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
-            </Text>
-            <Text
-              onPress={() => toggleBonusSort('avg')}
-              style={[
-                styles.bonusHeaderCell,
-                styles.bonusNumberCell,
-                bonusSortBy === 'avg' && styles.bonusHeaderActive,
-              ]}
-            >
-              Avg{bonusSortBy === 'avg' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
-            </Text>
+            <View style={styles.bonusNumberCol}>
+              <Text
+                onPress={() => toggleBonusSort('held')}
+                style={[
+                  styles.bonusHeaderCell,
+                  styles.bonusHeaderNumberText,
+                  bonusSortBy === 'held' && styles.bonusHeaderActive,
+                ]}
+              >
+                Held{bonusSortBy === 'held' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+              </Text>
+            </View>
+            <View style={styles.bonusNumberCol}>
+              <Text
+                onPress={() => toggleBonusSort('avg')}
+                style={[
+                  styles.bonusHeaderCell,
+                  styles.bonusHeaderNumberText,
+                  bonusSortBy === 'avg' && styles.bonusHeaderActive,
+                ]}
+              >
+                Avg{bonusSortBy === 'avg' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+              </Text>
+            </View>
           </View>
           {bonusRows.map(r => {
             const tone = bonusStyleFor(r.card!);
@@ -350,25 +359,28 @@ export const StatsScreen = ({ onBack }: Props) => {
             return (
               <View key={r.cardId} style={styles.bonusRow}>
                 <View style={[styles.bonusSwatch, { backgroundColor: tone.borderColor }]} />
-                <Text
-                  style={[styles.bonusName, { color: tone.titleColor }]}
-                  numberOfLines={1}
-                >
-                  {r.card!.title}
-                </Text>
-                <Text style={[styles.bonusNumber, styles.bonusNumberCell]}>
-                  ×{r.timesHeld}
-                </Text>
-                <Text
-                  style={[
-                    styles.bonusNumber,
-                    styles.bonusNumberCell,
-                    avgInt > 0 && styles.bonusNumberActive,
-                    avgInt < 0 && styles.bonusNumberLoss,
-                  ]}
-                >
-                  {avgInt === 0 ? '—' : `${sign}${avgInt}`}
-                </Text>
+                <View style={styles.bonusNameCol}>
+                  <Text
+                    style={[styles.bonusName, { color: tone.titleColor }]}
+                    numberOfLines={1}
+                  >
+                    {r.card!.title}
+                  </Text>
+                </View>
+                <View style={styles.bonusNumberCol}>
+                  <Text style={styles.bonusNumber}>×{r.timesHeld}</Text>
+                </View>
+                <View style={styles.bonusNumberCol}>
+                  <Text
+                    style={[
+                      styles.bonusNumber,
+                      avgInt > 0 && styles.bonusNumberActive,
+                      avgInt < 0 && styles.bonusNumberLoss,
+                    ]}
+                  >
+                    {avgInt === 0 ? '—' : `${sign}${avgInt}`}
+                  </Text>
+                </View>
               </View>
             );
           })}
@@ -692,7 +704,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
   },
-  bonusNameCell: { flex: 1 },
+  // Text inside the held / avg header cells — pinned to the right of
+  // its enclosing View so the label sits in the same column position
+  // as the data Text below.
+  bonusHeaderNumberText: {
+    textAlign: 'right',
+    width: '100%',
+  },
   bonusHeaderActive: {
     color: colors.accent,
     textShadowColor: colors.accent,
@@ -706,29 +724,35 @@ const styles = StyleSheet.create({
     // starts at the same x-offset as the header's "Card" label.
     marginRight: spacing.md,
   },
-  bonusName: {
+  // Name column — a View that flexes to fill the gap between the
+  // swatch and the held column. The Text inside takes the full
+  // width of the View; numberOfLines + ellipsizing handle long card
+  // titles without disturbing the column layout.
+  bonusNameCol: {
     flex: 1,
+  },
+  bonusName: {
     fontFamily: fonts.mono,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  // Width must match bonusHeaderBtn so the data values land directly
-  // under their header labels. textAlign: right pins the digits to
-  // the column's right edge so they read like a balance sheet.
-  // marginLeft spaces it from the previous column — same value as
-  // bonusHeaderBtn.marginLeft so header and data share the math.
-  bonusNumberCell: {
+  // Number columns — fixed-width Views aligned to the right of their
+  // contents. Every cell (held + avg, header + data) uses this so
+  // the column boundaries line up. Generous marginLeft separates
+  // them from each other so the "x3 +130" pair reads as two distinct
+  // numbers, not one chunk.
+  bonusNumberCol: {
     width: 64,
-    textAlign: 'right',
-    flex: 0,
-    marginLeft: spacing.md,
+    marginLeft: spacing.lg,
+    alignItems: 'flex-end',
   },
   bonusNumber: {
     fontFamily: fonts.mono,
     fontSize: 13,
     fontWeight: '800',
     color: colors.textMid,
+    textAlign: 'right',
   },
   bonusNumberActive: {
     color: colors.success,
