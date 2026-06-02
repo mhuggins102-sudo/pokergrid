@@ -146,9 +146,13 @@ def write_wav(buf: list, path: str) -> None:
     while end > 0 and abs(buf[end - 1]) < 1e-6:
         end -= 1
     # Peak normalization: scale the buffer so its loudest sample sits
-    # at PEAK_TARGET. Leaves a touch of headroom under full-scale so
-    # int16 conversion never clips.
-    PEAK_TARGET = 0.85
+    # at PEAK_TARGET. The existing bundled WAVs (tap / place / swap /
+    # slide / bonus / lose) peak around 0.14–0.18 with the bigger
+    # moments (destroy / win) at 0.22–0.24. Targeting 0.22 keeps the
+    # new specials at the same perceived loudness as the existing
+    # gameplay sounds — without this they'd run ~4x louder than the
+    # rest of the soundscape and stand out as off-balance.
+    PEAK_TARGET = 0.22
     peak = max(abs(v) for v in buf[:end]) if end > 0 else 0.0
     gain = (PEAK_TARGET / peak) if peak > 1e-6 else 0.0
     with wave.open(path, 'wb') as w:
