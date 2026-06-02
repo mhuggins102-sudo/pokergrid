@@ -510,24 +510,19 @@ const DestroyAnim = ({
   delay?: number;
 }) => {
   const { x, y } = slotXY(slot);
-  // While the delay is active the card sits at scale=0 / opacity=0
-  // (off-screen). It pops in at the start of its turn so the staggered
-  // mega-destroy doesn't show all 5 cards on top of each other from
-  // t=0. Single-shot ♦ destroy uses delay=0 and the pop-in is
-  // visually identical to "appearing instantly".
-  const scale = useSharedValue(delay > 0 ? 0 : 1);
-  const opacity = useSharedValue(delay > 0 ? 0 : 1);
+  // The card stays fully visible (scale 1, opacity 1) during its delay
+  // — the underlying grid cell is hidden via hiddenSlotsFor, so the
+  // overlay card IS what the player sees. The destruction animation
+  // (scale wobble + fade) starts when `delay` elapses, so for the
+  // mega-destroy stagger each card sits there normally until its turn
+  // to be destroyed.
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
   const rotate = useSharedValue(0);
   const shockScale = useSharedValue(0);
   const shockOpacity = useSharedValue(0.9);
 
   useEffect(() => {
-    // Pop the card into view (instant for delay=0, after the wait
-    // for staggered fires).
-    if (delay > 0) {
-      scale.value = withDelay(delay, withTiming(1, { duration: 0 }));
-      opacity.value = withDelay(delay, withTiming(1, { duration: 0 }));
-    }
     scale.value = withDelay(
       delay,
       withSequence(

@@ -158,6 +158,10 @@ export type Phase =
       cardIdx: number;
       chain: number[];
       moves: SideSlideMove[];
+      // Path the player has tapped once. Stays set until they tap
+      // a different destination (re-preview) or the same one again
+      // (commit). null = no preview yet, first tap will set one.
+      previewPath: Direction[] | null;
       returnTo: TargetReturnTo;
     }
   // Jump, Jump: pick any occupied card, then pick any empty slot.
@@ -273,6 +277,7 @@ export type Action =
   | { type: 'RESOLVE_MEGA_DESTROY' }
   | { type: 'TOGGLE_SIDE_SLIDE_PICK'; slot: number }
   | { type: 'SIDE_SLIDE_DONE_PICKING' }
+  | { type: 'SIDE_SLIDE_PREVIEW'; path: Direction[] | null }
   | { type: 'RESOLVE_SIDE_SLIDE'; path: Direction[] }
   | { type: 'RESOLVE_JUMP_SOURCE'; slot: number }
   | { type: 'RESOLVE_JUMP'; source: number; dest: number }
@@ -910,9 +915,25 @@ const handleSideSlideDonePicking = (s: GameState): GameState => {
       cardIdx: s.phase.cardIdx,
       chain: [...chain],
       moves,
+      previewPath: null,
       returnTo: s.phase.returnTo,
     },
   };
+};
+
+const handleSideSlidePreview = (
+  s: GameState,
+  path: Direction[] | null
+): GameState => {
+  if (s.phase.kind !== 'awaiting-special-side-slide-dest') return s;
+  if (path === null) {
+    if (s.phase.previewPath === null) return s; // no-op
+    return { ...s, phase: { ...s.phase, previewPath: null } };
+  }
+  // Validate: must be one of the enumerated moves.
+  const key = path.join(',');
+  if (!s.phase.moves.some(m => m.path.join(',') === key)) return s;
+  return { ...s, phase: { ...s.phase, previewPath: path } };
 };
 
 const handleResolveSideSlide = (
@@ -1343,6 +1364,9 @@ export const step = (
       break;
     case 'SIDE_SLIDE_DONE_PICKING':
       next = handleSideSlideDonePicking(state);
+      break;
+    case 'SIDE_SLIDE_PREVIEW':
+      next = handleSideSlidePreview(state, action.path);
       break;
     case 'RESOLVE_SIDE_SLIDE':
       next = handleResolveSideSlide(state, action.path);

@@ -35,8 +35,8 @@ export type SoundKey =
 // require() pulls the .wav files through Metro as static assets. The exact
 // shape of the returned value differs per platform (a number on native, a
 // URL-ish object on web), but expo-audio accepts both via createAudioPlayer.
-// Keys without a bundled WAV (whoosh / boing / shuffle for now) are
-// web-only — the native build silently no-ops them via playNative below.
+// Stays Partial so future synth-only sounds can be added without a WAV;
+// every key with an entry is played from the bundled clip on native.
 const ASSETS: Partial<Record<SoundKey, number>> = {
   tap: require('../../assets/sounds/tap.wav'),
   draw: require('../../assets/sounds/draw.wav'),
@@ -48,6 +48,11 @@ const ASSETS: Partial<Record<SoundKey, number>> = {
   joker: require('../../assets/sounds/joker.wav'),
   win: require('../../assets/sounds/win.wav'),
   lose: require('../../assets/sounds/lose.wav'),
+  whoosh: require('../../assets/sounds/whoosh.wav'),
+  boing: require('../../assets/sounds/boing.wav'),
+  shuffle: require('../../assets/sounds/shuffle.wav'),
+  thud: require('../../assets/sounds/thud.wav'),
+  sparkle: require('../../assets/sounds/sparkle.wav'),
 };
 
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
@@ -235,19 +240,24 @@ const playWeb = (k: SoundKey) => {
         { freq: 440, endFreq: 280, dur: 0.10, delay: 0.28, type: 'sine', vol: 0.10 },
       ]);
     case 'shuffle':
-      // Shuffle — a short burst of filtered noise twice in quick
-      // succession to evoke a riffle. The two staggered bursts read
-      // as "cards crossing".
-      playNoise(0.20, { vol: 0.22, hz: 1200 });
-      setTimeout(() => playNoise(0.18, { vol: 0.18, hz: 1500 }), 140);
+      // Shuffle — riffle effect: a rapid burst of short ticks
+      // (cards interleaving) followed by a soft squaring-up swoosh.
+      // Each tick is a tiny lowpass-filtered noise pop; the spacing
+      // gives the ear the "brrrap" of a riffle shuffle.
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => playNoise(0.022, { vol: 0.20, hz: 2400 }), i * 32);
+      }
+      setTimeout(() => playNoise(0.20, { vol: 0.14, hz: 1100 }), 360);
       return;
     case 'thud':
-      // The Doubler — short, low mallet hit. Quick low-frequency
-      // sine punch backed by a touch of filtered noise for the
-      // "impact" thump.
-      playNoise(0.10, { vol: 0.20, hz: 220 });
+      // The Doubler — low mallet hit. The low sine sweep gives the
+      // body; a brief mid-frequency triangle click on top adds the
+      // bright "tap" that small speakers can actually reproduce, so
+      // the chip doesn't sound mysteriously quiet on a laptop.
+      playNoise(0.10, { vol: 0.30, hz: 320 });
       return playNotes([
-        { freq: 120, endFreq: 60, dur: 0.16, type: 'sine', vol: 0.28 },
+        { freq: 120, endFreq: 55, dur: 0.20, type: 'sine', vol: 0.42 },
+        { freq: 920, endFreq: 240, dur: 0.08, type: 'triangle', vol: 0.22 },
       ]);
     case 'sparkle':
       // Wildcard — magical twinkle. Ascending tetrad of bright sine

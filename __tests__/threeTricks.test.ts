@@ -363,6 +363,36 @@ describe('Three Tricks challenge', () => {
     expect(s).toBe(beforeBadDrop);
   });
 
+  it('Slip & Slide: SIDE_SLIDE_PREVIEW sets / clears the preview path', () => {
+    let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[12] = null;
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 0 });
+    s = step(s, { type: 'TOGGLE_SIDE_SLIDE_PICK', slot: 1 });
+    s = step(s, { type: 'SIDE_SLIDE_DONE_PICKING' });
+    if (s.phase.kind !== 'awaiting-special-side-slide-dest') throw new Error();
+    expect(s.phase.previewPath).toBeNull();
+
+    s = step(s, { type: 'SIDE_SLIDE_PREVIEW', path: ['down'] });
+    if (s.phase.kind !== 'awaiting-special-side-slide-dest') throw new Error();
+    expect(s.phase.previewPath).toEqual(['down']);
+
+    // Invalid path → reducer rejects.
+    const before = s;
+    s = step(s, { type: 'SIDE_SLIDE_PREVIEW', path: ['up', 'up', 'up', 'up'] });
+    expect(s).toBe(before);
+
+    // Clear.
+    s = step(s, { type: 'SIDE_SLIDE_PREVIEW', path: null });
+    if (s.phase.kind !== 'awaiting-special-side-slide-dest') throw new Error();
+    expect(s.phase.previewPath).toBeNull();
+  });
+
   it('Side Slide: SIDE_SLIDE_DONE_PICKING is a no-op with < 2 picked', () => {
     let s = threeTricks([SIDE_SLIDE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
     const grid = s.grid.slice();
