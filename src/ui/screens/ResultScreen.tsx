@@ -15,6 +15,8 @@ import {
   ACHIEVEMENTS,
   Achievement,
   achievementEarned,
+  CHALLENGES_TOTAL,
+  MilestoneInputs,
 } from '../../game/achievements';
 import { challengeWon, findChallenge } from '../../game/challenges';
 import { LineKind } from '../../game/grid';
@@ -30,7 +32,7 @@ import { RewardsFlow, RewardsResult } from '../components/RewardsFlow';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
-import { useStats } from '../stats';
+import { tierForRun, useStats } from '../stats';
 import { useTUSave } from '../targetsUpSave';
 import { buildShareUrl, shareUrl } from '../share';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -426,26 +428,98 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   })();
 
   // Achievements earned during this run that the player didn't already
-  // have on file. Empty for tainted runs, non-Free-Play runs (challenges
-  // and Targets Up don't count toward achievements — they have their
-  // own progress tracks), Easy / Medium runs, or runs that didn't clear
-  // the score bar. Memoized so the surrounding render + the record
+  // have on file. Memoized so the surrounding render + the record
   // useEffect see the same list.
+  //
+  // Per-tier gating (handled inside achievementEarned):
+  //   - 'easy' / 'hard-extreme' : Free Play only, single-difficulty.
+  //   - 'milestone'             : cumulative; fires when the post-run
+  //                               stats cross the threshold. Free Play
+  //                               wins drive most; the "Challenge
+  //                               Sweep" milestone fires after a
+  //                               Challenge win that completes the
+  //                               last entry in the catalog.
+  //
+  // Tainted runs (any undo used) earn nothing — undos make every
+  // structural check trivially exploitable.
   const newlyEarnedAchievements: Achievement[] = useMemo(() => {
     if (tainted) return [];
-    if (context.mode !== 'free') return [];
+    // Tiered achievements (easy / hard-extreme) only fire on Free Play
+    // wins. Milestones can fire on Free Play OR Challenge runs.
+    const isFree = context.mode === 'free';
+    const isChallenge = context.mode === 'challenge';
+    if (!isFree && !isChallenge) return [];
+    // Project the stats forward to "what they'll look like once this
+    // run is recorded". Milestones check the post-run state — i.e.
+    // "win 25 games" fires on the qualifying 25th win, not the run
+    // after.
+    const tier = tierForRun({
+      ts: Date.now(),
+      difficulty: state.difficulty,
+      score: total,
+      target: state.target,
+      won,
+    });
+    const winInc = isFree && won ? 1 : 0;
+    const ssInc = isFree && won && tier === 'SS' ? 1 : 0;
+    const winsByDifficulty: Record<typeof state.difficulty, number> = {
+      easy: prevStats.byDifficulty.easy.wins,
+      medium: prevStats.byDifficulty.medium.wins,
+      hard: prevStats.byDifficulty.hard.wins,
+      extreme: prevStats.byDifficulty.extreme.wins,
+    };
+    winsByDifficulty[state.difficulty] += winInc;
+    const ssByDifficulty: Record<typeof state.difficulty, number> = {
+      easy: prevStats.tierCounts.easy.SS,
+      medium: prevStats.tierCounts.medium.SS,
+      hard: prevStats.tierCounts.hard.SS,
+      extreme: prevStats.tierCounts.extreme.SS,
+    };
+    ssByDifficulty[state.difficulty] += ssInc;
+    const challengesCompleted =
+      prevStats.challengesDone.length +
+      (isChallenge && won && !prevStats.challengesDone.includes(
+        // findChallenge is non-null at this point because mode === 'challenge'
+        (context as { id: import('../../game/challenges').ChallengeId }).id
+      ) ? 1 : 0);
+    const milestone: MilestoneInputs = {
+      winsByDifficulty,
+      ssByDifficulty,
+      totalWins: prevStats.wins + winInc,
+      challengesCompleted,
+      totalChallenges: CHALLENGES_TOTAL,
+      runBonusShapley: bonusValues,
+      runWasFreePlay: isFree && won,
+    };
     return ACHIEVEMENTS.filter(
       a =>
-        achievementEarned(a, state, report) &&
+        achievementEarned(a, { state, report, milestone }) &&
         !prevStats.achievementsDone.includes(a.id)
     );
-  }, [tainted, context.mode, state, report, prevStats.achievementsDone]);
+  }, [
+    tainted,
+    context,
+    state,
+    report,
+    total,
+    won,
+    prevStats,
+    bonusValues,
+  ]);
 
   // Record the run exactly once on mount — applying the correct stats
-  // method based on the play context. Tainted runs are skipped.
+  // method based on the play context. Tainted runs skip the stats /
+  // achievement bookkeeping below, BUT we still tear down the Targets
+  // Up save on loss so Home doesn't show "Continue" pointing at a
+  // dead run. Without this guard a tainted TU loss would dangle the
+  // save and the player would see the resume option for a level
+  // they've already failed.
   useEffect(() => {
     if (recorded.current) return;
     recorded.current = true;
+    if (context.mode === 'targets-up' && !won) {
+      clearTUProgress();
+    }
     if (tainted) return;
     // Per-card attribution: pair every held bonus card with its Shapley
     // value so recordRun can fold them into the all-time aggregate that

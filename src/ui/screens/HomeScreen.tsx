@@ -102,9 +102,6 @@ export const HomeScreen = ({
               {DIFF_TAGLINE[d]}
             </Text>
             <Text style={styles.diffTarget}>target {TARGET_BY_DIFFICULTY[d]}</Text>
-            <Text style={styles.diffBest}>
-              best {stats.best[d] ?? '—'}
-            </Text>
           </Pressable>
         ))}
       </View>
@@ -192,8 +189,7 @@ export const HomeScreen = ({
             )}
           </View>
           <Text style={styles.modeBody}>
-            Passive goals that are awarded automatically when achieved during qualifying Free Play
-            runs.
+            Awarded automatically upon completion.
           </Text>
           <Text style={styles.modeCta}>View achievements →</Text>
         </Pressable>
@@ -376,12 +372,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textMid,
     marginTop: 6,
-  },
-  diffBest: {
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    color: colors.textMid,
-    marginTop: 2,
   },
   headerInfoBtn: {
     width: 28,
