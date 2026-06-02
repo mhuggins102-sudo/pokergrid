@@ -139,13 +139,24 @@ export const StatsScreen = ({ onBack }: Props) => {
   // Default to "All" so the page opens with the most complete summary.
   const [filter, setFilter] = useState<Filter>('all');
 
-  // Aggregated DifficultyStat for the selected filter.
+  // Aggregated DifficultyStat for the selected filter. For the "All"
+  // rollup we override bestStreak / currentStreak with the top-level
+  // stats.longestStreak / stats.streak — those track the player's
+  // longest sequence of wins ACROSS difficulties, which is what
+  // "longest win streak" means in the all-up view. (e.g. Hard win →
+  // Easy win → Easy win is a 3-streak even though no single
+  // difficulty's bestStreak sees that sequence.)
   const filteredStat: DifficultyStat = useMemo(() => {
     if (filter === 'all') {
-      return sumDifficultyStats(Object.values(stats.byDifficulty));
+      const summed = sumDifficultyStats(Object.values(stats.byDifficulty));
+      return {
+        ...summed,
+        bestStreak: Math.max(summed.bestStreak, stats.longestStreak),
+        currentStreak: stats.streak,
+      };
     }
     return stats.byDifficulty[filter];
-  }, [filter, stats.byDifficulty]);
+  }, [filter, stats.byDifficulty, stats.longestStreak, stats.streak]);
 
   // Tier histogram for the selected filter.
   const filteredTiers: Record<Tier, number> = useMemo(() => {
@@ -209,8 +220,11 @@ export const StatsScreen = ({ onBack }: Props) => {
     ? '—'
     : `${Math.round(filteredStat.totalScore / filteredStat.totalRuns)}`;
   const streakText = filteredStat.bestStreak === 0 ? '—' : `${filteredStat.bestStreak}`;
-  const showCurrentStreak =
-    filter !== 'all' && filteredStat.currentStreak > 0;
+  // "ON N" badge — shows the live streak under whichever filter is
+  // active. For "All" we read stats.streak (overall sequence of wins
+  // across difficulties); per-difficulty filters read that tab's
+  // currentStreak. Both are populated into filteredStat above.
+  const showCurrentStreak = filteredStat.currentStreak > 0;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -657,7 +671,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.outlineSoft,
-    gap: spacing.sm,
+    // Generous gap between cells so the "Held" and "Avg" numbers stay
+    // visually separated even when both are short.
+    gap: spacing.md,
   },
   bonusHeader: {
     backgroundColor: 'transparent',
@@ -674,7 +690,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   bonusNameCell: { flex: 1 },
-  bonusHeaderBtn: { width: 56 },
+  // The Pressable wrapping each sortable header label fills the
+  // column exactly so the inner Text sits at the same x-offset as
+  // the data cells below.
+  bonusHeaderBtn: { width: 64 },
   bonusHeaderActive: {
     color: colors.accent,
     textShadowColor: colors.accent,
@@ -692,8 +711,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+  // Width must match bonusHeaderBtn so the data values land directly
+  // under their header labels. textAlign: right pins the digits to
+  // the column's right edge so they read like a balance sheet.
   bonusNumberCell: {
-    width: 56,
+    width: 64,
     textAlign: 'right',
     flex: 0,
   },
