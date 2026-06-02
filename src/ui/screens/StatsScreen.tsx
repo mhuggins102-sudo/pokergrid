@@ -314,36 +314,34 @@ export const StatsScreen = ({ onBack }: Props) => {
           <View style={[styles.bonusRow, styles.bonusHeader]}>
             <View style={styles.bonusSwatchSpacer} />
             <Text style={[styles.bonusHeaderCell, styles.bonusNameCell]}>Card</Text>
-            <Pressable
+            {/*
+              Header labels use Text.onPress directly instead of a
+              Pressable wrapper so the cell structure mirrors the data
+              row exactly (Text-only siblings). Wrapping in a Pressable
+              introduced RN-web layout quirks where the Pressable could
+              shrink and the held / avg columns ended up misaligned
+              against their data rows.
+            */}
+            <Text
               onPress={() => toggleBonusSort('held')}
-              style={styles.bonusHeaderBtn}
-              hitSlop={6}
+              style={[
+                styles.bonusHeaderCell,
+                styles.bonusNumberCell,
+                bonusSortBy === 'held' && styles.bonusHeaderActive,
+              ]}
             >
-              <Text
-                style={[
-                  styles.bonusHeaderCell,
-                  styles.bonusHeaderNumberCell,
-                  bonusSortBy === 'held' && styles.bonusHeaderActive,
-                ]}
-              >
-                Held{bonusSortBy === 'held' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
-              </Text>
-            </Pressable>
-            <Pressable
+              Held{bonusSortBy === 'held' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+            </Text>
+            <Text
               onPress={() => toggleBonusSort('avg')}
-              style={styles.bonusHeaderBtn}
-              hitSlop={6}
+              style={[
+                styles.bonusHeaderCell,
+                styles.bonusNumberCell,
+                bonusSortBy === 'avg' && styles.bonusHeaderActive,
+              ]}
             >
-              <Text
-                style={[
-                  styles.bonusHeaderCell,
-                  styles.bonusHeaderNumberCell,
-                  bonusSortBy === 'avg' && styles.bonusHeaderActive,
-                ]}
-              >
-                Avg{bonusSortBy === 'avg' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
-              </Text>
-            </Pressable>
+              Avg{bonusSortBy === 'avg' ? (bonusSortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+            </Text>
           </View>
           {bonusRows.map(r => {
             const tone = bonusStyleFor(r.card!);
@@ -695,18 +693,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   bonusNameCell: { flex: 1 },
-  // Pressable wrapping each sortable header label. flexShrink: 0
-  // pins the width — without it the Pressable inherits the default
-  // flex: 0 1 auto and the flex container can compress the header
-  // columns while the data Text (which has flex: 0 from
-  // bonusNumberCell) keeps its full width.
-  bonusHeaderBtn: {
-    width: 64,
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: 64,
-    marginLeft: spacing.md,
-  },
   bonusHeaderActive: {
     color: colors.accent,
     textShadowColor: colors.accent,
@@ -737,15 +723,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 0,
     marginLeft: spacing.md,
-  },
-  // Text styling for the labels INSIDE the header Pressables. The
-  // Pressable wrapper already brings the width + marginLeft from
-  // bonusHeaderBtn, so the inner Text just needs to fill the
-  // Pressable's 64-wide box with right-aligned text.
-  bonusHeaderNumberCell: {
-    width: 64,
-    textAlign: 'right',
-    flex: 0,
   },
   bonusNumber: {
     fontFamily: fonts.mono,
