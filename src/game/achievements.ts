@@ -2,29 +2,35 @@ import { isJoker } from './cards';
 import { HandRank } from './hands';
 import { ScoreReport } from './scoring';
 import type { GameState } from './state';
+import { CHALLENGES } from './challenges';
+import type { Difficulty } from './rules';
 
 // ============================================================================
-// Achievements — passive accomplishments earned during Free Play.
+// Achievements — passive accomplishments earned through play.
 //
-// Two tiers:
+// Three tiers:
 //   - 'easy'         : Free Play on Easy only.
 //   - 'hard-extreme' : Free Play on Hard or Extreme only.
-// Medium runs are deliberately ineligible — Medium is the "comfort" tier
-// with no dedicated goals. Targets Up and Challenges have their own
-// progress tracks (see ResultScreen.tsx, which only counts Free Play
-// runs toward achievements).
+//   - 'milestone'    : longer-term cumulative goals (wins across modes,
+//                      challenge completion totals, etc.) plus a couple of
+//                      one-shot prowess achievements that don't fit a
+//                      single-difficulty tier.
+//
+// Medium runs are deliberately ineligible for tiered achievements. Targets
+// Up and Challenges contribute to milestones but don't have their own
+// tier sets.
 //
 // Every achievement has:
 //   - id: stable string saved into stats.achievementsDone
-//   - tier: gates which difficulty the run must be on
+//   - tier: gates how the run / stats are checked
 //   - name / description: shown on the AchievementsScreen and the result-
 //     screen "earned" callout. The Achievements page renders the tier as
 //     a section header, so descriptions DON'T repeat the difficulty.
-//   - conditionMet: same shape as Challenge.conditionMet
-//   - scoreTarget: the minimum total for the run.
+//   - scoreTarget?: minimum score for the run to qualify (tiered only).
+//   - conditionMet: checks the run / cumulative state.
 // ============================================================================
 
-export type AchievementTier = 'easy' | 'hard-extreme';
+export type AchievementTier = 'easy' | 'hard-extreme' | 'milestone';
 
 // Pair, Two Pair, and Three of a Kind — and anything that scored nothing
 // (no hand). Used by the Low Hands achievement.
@@ -46,15 +52,54 @@ export type AchievementId =
   | 'high-hands'
   | 'easy-overshot'
   | 'easy-grand'
-  | 'easy-soloist';
+  | 'easy-soloist'
+  // Milestones
+  | 'win-every-difficulty'
+  | 'perfect-every-difficulty'
+  | 'wins-25'
+  | 'wins-100'
+  | 'all-challenges'
+  | 'full-bonus-hand';
+
+// Minimal subset of stats / run data the milestone-tier conditions need.
+// Filled in by ResultScreen against the post-run stats, so e.g. the
+// "win 25 games" milestone fires when the qualifying run pushes the
+// total past the threshold. Separating this from the raw Stats type
+// keeps src/game/ from importing src/ui/.
+export interface MilestoneInputs {
+  // Per-difficulty Free Play wins (post-run).
+  winsByDifficulty: Record<Difficulty, number>;
+  // Per-difficulty SS-tier Free Play wins (post-run).
+  ssByDifficulty: Record<Difficulty, number>;
+  // Total Free Play wins across all difficulties (post-run).
+  totalWins: number;
+  // Number of completed Challenges and the size of the catalog.
+  challengesCompleted: number;
+  totalChallenges: number;
+  // Per-card Shapley contribution for the held bonus cards on this
+  // run. Index-aligned with state.bonusCards. Used by the "full bonus
+  // hand" milestone.
+  runBonusShapley: number[];
+  // True if the current run was a Free Play context (vs Targets Up or
+  // Challenge). Milestones that only fire on Free Play wins use this.
+  runWasFreePlay: boolean;
+}
+
+export interface AchievementCheckCtx {
+  state: GameState;
+  report: ScoreReport;
+  milestone: MilestoneInputs;
+}
 
 export interface Achievement {
   id: AchievementId;
   tier: AchievementTier;
   name: string;
   description: string;
-  scoreTarget: number;
-  conditionMet: (state: GameState, report: ScoreReport) => boolean;
+  // Optional — undefined for milestones whose floor isn't a single
+  // per-run score.
+  scoreTarget?: number;
+  conditionMet: (ctx: AchievementCheckCtx) => boolean;
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -81,7 +126,8 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Soloist',
     description: 'Score 500+ with no joker on the grid at game end.',
     scoreTarget: 500,
-    conditionMet: state => !state.grid.some(c => c !== null && isJoker(c)),
+    conditionMet: ({ state }) =>
+      !state.grid.some(c => c !== null && isJoker(c)),
   },
 
   // ---------- Hard / Extreme tier ----------
@@ -91,7 +137,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Dynamite',
     description: 'Score 500+ with at least one row or column worth 300+.',
     scoreTarget: 500,
-    conditionMet: (_state, report) => report.lines.some(l => l.total >= 300),
+    conditionMet: ({ report }) => report.lines.some(l => l.total >= 300),
   },
   {
     id: 'line-only',
@@ -99,7 +145,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Line Only',
     description: 'Score 500+ holding no end-of-game multiplier bonus cards.',
     scoreTarget: 500,
-    conditionMet: state =>
+    conditionMet: ({ state }) =>
       state.bonusCards.length > 0 &&
       state.bonusCards.every(c => !c.gridEffect),
   },
@@ -109,7 +155,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Grid Only',
     description: 'Score 500+ holding only end-of-game multiplier bonus cards.',
     scoreTarget: 500,
-    conditionMet: state =>
+    conditionMet: ({ state }) =>
       state.bonusCards.length > 0 &&
       state.bonusCards.every(c => !c.lineEffect),
   },
@@ -119,7 +165,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Balanced',
     description: 'Score 500+ without any single row or column worth 100+.',
     scoreTarget: 500,
-    conditionMet: (_state, report) => report.lines.every(l => l.total < 100),
+    conditionMet: ({ report }) => report.lines.every(l => l.total < 100),
   },
   {
     id: 'jokerless',
@@ -127,7 +173,8 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Jokerless',
     description: 'Score 500+ with no joker on the grid at game end.',
     scoreTarget: 500,
-    conditionMet: state => !state.grid.some(c => c !== null && isJoker(c)),
+    conditionMet: ({ state }) =>
+      !state.grid.some(c => c !== null && isJoker(c)),
   },
   {
     id: 'no-swap',
@@ -135,7 +182,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'No Swap',
     description: 'Score 500+ without swapping out a bonus card at the cap.',
     scoreTarget: 500,
-    conditionMet: state => !state.swappedBonus,
+    conditionMet: ({ state }) => !state.swappedBonus,
   },
   {
     id: 'high-hands',
@@ -144,7 +191,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     description:
       'Score 500+ with every scoring line a Three of a Kind or higher (High Card lines don\'t count against).',
     scoreTarget: 500,
-    conditionMet: (_state, report) =>
+    conditionMet: ({ report }) =>
       report.lines.every(l => l.hand !== 'PAIR' && l.hand !== 'TWO_PAIR'),
   },
   {
@@ -153,23 +200,90 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'Low Hands',
     description: 'Score 500+ with no line scoring higher than Three of a Kind.',
     scoreTarget: 500,
-    conditionMet: (_state, report) =>
+    conditionMet: ({ report }) =>
       report.lines.every(l => !l.hand || LOW_OR_NONE.has(l.hand)),
+  },
+
+  // ---------- Milestones ----------
+  {
+    id: 'win-every-difficulty',
+    tier: 'milestone',
+    name: 'Globetrotter',
+    description: 'Win a Free Play game at each difficulty (Easy / Medium / Hard / Extreme).',
+    conditionMet: ({ milestone }) => {
+      const w = milestone.winsByDifficulty;
+      return w.easy > 0 && w.medium > 0 && w.hard > 0 && w.extreme > 0;
+    },
+  },
+  {
+    id: 'perfect-every-difficulty',
+    tier: 'milestone',
+    name: 'Perfectionist',
+    description: 'Earn a Perfect (SS) win at each difficulty.',
+    conditionMet: ({ milestone }) => {
+      const s = milestone.ssByDifficulty;
+      return s.easy > 0 && s.medium > 0 && s.hard > 0 && s.extreme > 0;
+    },
+  },
+  {
+    id: 'wins-25',
+    tier: 'milestone',
+    name: 'Quarter Century',
+    description: 'Win 25+ Free Play games across all difficulties.',
+    conditionMet: ({ milestone }) => milestone.totalWins >= 25,
+  },
+  {
+    id: 'wins-100',
+    tier: 'milestone',
+    name: 'Centurion',
+    description: 'Win 100+ Free Play games across all difficulties.',
+    conditionMet: ({ milestone }) => milestone.totalWins >= 100,
+  },
+  {
+    id: 'all-challenges',
+    tier: 'milestone',
+    name: 'Challenge Sweep',
+    description: 'Clear every Challenge.',
+    conditionMet: ({ milestone }) =>
+      milestone.challengesCompleted >= milestone.totalChallenges,
+  },
+  {
+    id: 'full-bonus-hand',
+    tier: 'milestone',
+    name: 'Full Slate',
+    description:
+      'Win a Free Play game holding 3 bonus cards (yellow / purple) that all contribute to the score.',
+    conditionMet: ({ state, milestone }) => {
+      if (!milestone.runWasFreePlay) return false;
+      // Need a full hand of 3 cards, none of them inert (placeholders
+      // or one-time specials), and each must have made a positive
+      // Shapley contribution to the final score.
+      if (state.bonusCards.length !== 3) return false;
+      const allScoring = state.bonusCards.every(
+        c => !c.specialKind && !c.placeholderKind
+      );
+      if (!allScoring) return false;
+      return milestone.runBonusShapley.every(v => v > 0);
+    },
   },
 ];
 
 export const findAchievement = (id: AchievementId): Achievement | undefined =>
   ACHIEVEMENTS.find(a => a.id === id);
 
-// Earned iff the run difficulty matches the achievement's tier, the run
-// cleared the score bar, and the structural condition is satisfied.
-// Medium runs never earn any achievement; Easy runs only earn Easy-tier
-// achievements; Hard / Extreme runs only earn Hard / Extreme-tier ones.
+// Size of the Challenge catalog, exposed for milestone bookkeeping so
+// callers don't need to import CHALLENGES directly.
+export const CHALLENGES_TOTAL = CHALLENGES.length;
+
+// Earned iff the achievement's tier-specific gating passes AND the
+// per-tier condition fires. Easy / Hard-Extreme tiers require the
+// matching Free Play difficulty plus a score floor; Milestones run
+// the condition directly and ignore per-difficulty / score gating.
 export const achievementEarned = (
   ach: Achievement,
-  state: GameState,
-  report: ScoreReport
+  ctx: AchievementCheckCtx
 ): boolean => {
+  const { state, report } = ctx;
   if (ach.tier === 'easy' && state.difficulty !== 'easy') return false;
   if (
     ach.tier === 'hard-extreme' &&
@@ -178,6 +292,8 @@ export const achievementEarned = (
   ) {
     return false;
   }
-  if (report.total < ach.scoreTarget) return false;
-  return ach.conditionMet(state, report);
+  if (ach.scoreTarget !== undefined && report.total < ach.scoreTarget) {
+    return false;
+  }
+  return ach.conditionMet(ctx);
 };

@@ -21,6 +21,7 @@ export const AchievementsScreen = ({ onBack }: Props) => {
   const doneCount = ACHIEVEMENTS.filter(a => done.has(a.id)).length;
   const easyList = ACHIEVEMENTS.filter(a => a.tier === 'easy');
   const hardList = ACHIEVEMENTS.filter(a => a.tier === 'hard-extreme');
+  const milestoneList = ACHIEVEMENTS.filter(a => a.tier === 'milestone');
 
   const renderCard = (a: Achievement) => {
     const isDone = done.has(a.id);
@@ -45,9 +46,9 @@ export const AchievementsScreen = ({ onBack }: Props) => {
       </View>
 
       <Text style={styles.intro}>
-        Passive goals earned during Free Play. The Easy tier ticks off on
-        Easy runs; the Hard / Extreme tier ticks off on Hard or Extreme
-        runs. Medium runs and the other modes don't count.
+        Passive goals earned from Free Play runs or overall prowess. Easy
+        and Hard / Extreme difficulties each have their own set of
+        achievements to complete.
       </Text>
 
       <Text style={styles.tally}>
@@ -61,6 +62,11 @@ export const AchievementsScreen = ({ onBack }: Props) => {
         Hard / Extreme
       </Text>
       <View style={styles.list}>{hardList.map(renderCard)}</View>
+
+      <Text style={[styles.sectionLabel, styles.sectionLabelMilestone]}>
+        Milestones
+      </Text>
+      <View style={styles.list}>{milestoneList.map(renderCard)}</View>
     </ScrollView>
   );
 };
@@ -116,6 +122,13 @@ const styles = StyleSheet.create({
   sectionLabelHard: {
     color: colors.warn,
     textShadowColor: colors.warn,
+    textShadowRadius: 4,
+  },
+  // Milestones — accent (cyan) so the tier reads as "all-up" / cross-
+  // mode goals rather than tied to a single difficulty's color.
+  sectionLabelMilestone: {
+    color: colors.accent,
+    textShadowColor: colors.accent,
     textShadowRadius: 4,
   },
   list: { gap: spacing.sm },
