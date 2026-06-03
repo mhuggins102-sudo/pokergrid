@@ -358,7 +358,13 @@ export const newGame = (
   // at start). ♣ draws are filtered by slot category. The bonus deck
   // is built from BONUS_DECK_POOL + SPECIAL_DECK_POOL so the green
   // slot has something to draw.
-  slotCategories?: SlotKind[]
+  slotCategories?: SlotKind[],
+  // Gridlock challenge: pre-place N cards at random positions on the
+  // grid before the spiral fill begins. The cards are pulled off the
+  // top of the shuffled deck (so RNG drives both which cards and
+  // where they land). 0 / undefined = standard spiral-from-center
+  // start.
+  randomGridFill: number = 0
 ): GameState => {
   // Joker count is determined by difficulty (Easy ships 2 jokers, Hard
   // ships 1, Extreme ships 0). Targets-Up infers difficulty from level
@@ -447,8 +453,33 @@ export const newGame = (
     : slotCategories
     ? shuffle([...remainingPool, ...deckExtras, ...SPECIAL_DECK_POOL], rng)
     : shuffle([...remainingPool, ...deckExtras], rng);
-  const [first, ...rest] = deck;
-  const grid = placeAtSpiralNext(emptyGrid(), first);
+  // Gridlock: scatter the first N cards across random distinct grid
+  // positions, then resume normal spiral fill on the remainder. The
+  // standard start (center first, then spiral) is the N=0 case of
+  // the same logic, treated as a special path so the existing
+  // placeAtSpiralNext helper stays untouched.
+  let grid: Grid;
+  let rest: Card[];
+  if (randomGridFill > 0) {
+    const initialCards = deck.slice(0, randomGridFill);
+    rest = deck.slice(randomGridFill);
+    // Random order over the 25 slot indices; first N positions seat
+    // the initial cards. Uses the same rng so the run is fully
+    // deterministic given the seed.
+    const positions = shuffle(
+      Array.from({ length: 25 }, (_, i) => i),
+      rng
+    ).slice(0, initialCards.length);
+    const g = emptyGrid();
+    for (let i = 0; i < initialCards.length; i++) {
+      g[positions[i]] = initialCards[i];
+    }
+    grid = g;
+  } else {
+    const [first, ...remaining] = deck;
+    rest = remaining;
+    grid = placeAtSpiralNext(emptyGrid(), first);
+  }
   const initial: GameState = {
     deck: rest,
     discards: [],

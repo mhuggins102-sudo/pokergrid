@@ -25,7 +25,8 @@ export const useGame = (
   randomPerks?: boolean,
   noBonusCards?: boolean,
   initialBonusCards?: BonusCard[],
-  slotCategories?: SlotKind[]
+  slotCategories?: SlotKind[],
+  randomGridFill?: number
 ): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
@@ -44,7 +45,8 @@ export const useGame = (
         randomPerks ?? false,
         noBonusCards ?? false,
         initialBonusCards ?? [],
-        slotCategories
+        slotCategories,
+        randomGridFill ?? 0
       )
   );
 

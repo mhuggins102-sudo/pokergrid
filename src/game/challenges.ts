@@ -22,7 +22,8 @@ export type ChallengeId =
   | 'short-circuit'
   | 'poker-purist'
   | 'three-tricks'
-  | 'mixed-bag';
+  | 'mixed-bag'
+  | 'gridlock';
 
 export interface Challenge {
   id: ChallengeId;
@@ -93,6 +94,16 @@ export const CHALLENGES: Challenge[] = [
     scoreTarget: 500,
     // Enforced at newGame via slotCategories — placeholders seed the
     // three slots in category order, and ♣ filters draws to match.
+    conditionMet: () => true,
+  },
+  {
+    id: 'gridlock',
+    name: 'Gridlock',
+    goal: 'Score 500+ with 15 cards pre-placed at random positions on the grid. Spiral placement resumes from whichever slots are still empty — you fill the remaining 10 in normal play.',
+    scoreTarget: 500,
+    // Enforced at newGame: randomGridFill seeds 15 cards into random
+    // positions before drawNext runs. The remaining deck is intact
+    // and the spiral picks up from whichever slots stayed empty.
     conditionMet: () => true,
   },
 ];
