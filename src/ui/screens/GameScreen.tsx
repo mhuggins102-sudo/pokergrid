@@ -291,6 +291,12 @@ export const GameScreen = ({
     slots: number[];
     revealed: number;
     paused: boolean;
+    // When true, glow the pending landing slots so the player sees
+    // where the cards are going to drop back. The Shuffle special
+    // wants this; the Gridlock initial reveal does NOT (those slots
+    // are about to receive specific cards from the deck and the
+    // glow would visually pre-claim them).
+    glowPending: boolean;
   } | null>(null);
   const [activeHint, setActiveHint] = useState<HintId | null>(null);
   // Anchor rect (in screen coords) for the currently active hint. Null
@@ -404,19 +410,22 @@ export const GameScreen = ({
       const j = Math.floor(Math.random() * (i + 1));
       [filled[i], filled[j]] = [filled[j], filled[i]];
     }
-    setShuffleReveal({ slots: filled, revealed: 0, paused: false });
+    setShuffleReveal({ slots: filled, revealed: 0, paused: false, glowPending: false });
     // Run once on mount only — don't re-trigger on grid changes.
   }, []);
 
   // Intro animation: when the game first mounts, replay the place animations
   // for the cards the reducer auto-placed at start (the seeded center card
   // plus any jokers drawn before the first interactive card). Skips entirely
-  // when reduce-motion is on.
+  // when reduce-motion is on OR when the parent has asked for a custom
+  // initial-placement animation (e.g. Gridlock fills 15 random slots and
+  // wants its own staggered reveal, not the spiral-from-center intro).
   const introPlayedRef = useRef(false);
   useEffect(() => {
     if (introPlayedRef.current) return;
     introPlayedRef.current = true;
     if (settings.reduceMotion) return;
+    if (animateInitialPlacement) return;
     const placed: Array<{ slot: number; card: NonNullable<GameState['grid'][number]> }> = [];
     for (const slot of SPIRAL_ORDER) {
       const c = state.grid[slot];
@@ -1200,7 +1209,7 @@ export const GameScreen = ({
     // will drop back. After the first reveal beat the slots that
     // already have a card stop glowing since the visual hint is
     // satisfied; pending slots keep glowing.
-    if (shuffleReveal) {
+    if (shuffleReveal && shuffleReveal.glowPending) {
       const start = shuffleReveal.paused ? 0 : shuffleReveal.revealed;
       for (let i = start; i < shuffleReveal.slots.length; i++) {
         out.add(shuffleReveal.slots[i]);
@@ -1590,7 +1599,16 @@ export const GameScreen = ({
                   : hiddenSlotsFor(anim)
               }
               selected={selectedSlot}
-              nextSlotHint={state.phase.kind === 'awaiting-action' ? nextSlot : null}
+              nextSlotHint={
+                // Suppress the next-slot pulse while the Gridlock-style
+                // initial reveal is still placing cards — the cyan
+                // indicator would point at a slot the reveal is about
+                // to fill, which is confusing. Resumes once the reveal
+                // clears (shuffleReveal === null).
+                state.phase.kind === 'awaiting-action' && !shuffleReveal
+                  ? nextSlot
+                  : null
+              }
               ghostSlots={dragGhost ?? undefined}
               dangerSlots={
                 state.phase.kind === 'awaiting-special-mega-destroy'
@@ -1633,7 +1651,7 @@ export const GameScreen = ({
           deckCountRef,
           drawnIsWild ? () => setWildPerkOpen(true) : undefined,
           (slots: number[]) =>
-            setShuffleReveal({ slots, revealed: 0, paused: true }),
+            setShuffleReveal({ slots, revealed: 0, paused: true, glowPending: true }),
           handleMegaDestroyConfirm
         )}
       </View>
