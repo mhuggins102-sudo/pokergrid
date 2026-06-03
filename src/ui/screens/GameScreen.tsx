@@ -267,6 +267,12 @@ export const GameScreen = ({
   showTierRewards = false,
   animateInitialPlacement = false,
 }: Props) => {
+  // Hoisted above the useState calls so the shuffleReveal lazy
+  // initializer below can check settings.reduceMotion without a
+  // pre-paint flash of the grid.
+  const haptic = useHaptic();
+  const playSound = useSound();
+  const { settings, update: updateSettings } = useSettings();
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
   const [tierBreakdownOpen, setTierBreakdownOpen] = useState(false);
@@ -297,7 +303,36 @@ export const GameScreen = ({
     // are about to receive specific cards from the deck and the
     // glow would visually pre-claim them).
     glowPending: boolean;
-  } | null>(null);
+    // True once every slot has been revealed and we're holding the
+    // reveal state open for a settling beat before the next-slot
+    // pulse and other normal-play affordances come back. Drives the
+    // 270ms tail at the end of the Gridlock / Shuffle reveal.
+    settling: boolean;
+  } | null>(() => {
+    // Lazy initializer — runs once on first render, BEFORE React
+    // commits anything to the DOM. By seeding the hidden-slot list
+    // here we avoid a one-frame flash where all 15 Gridlock cards
+    // appear on the board before the reveal starts hiding them.
+    if (!animateInitialPlacement) return null;
+    if (settings.reduceMotion) return null;
+    const filled: number[] = [];
+    for (let i = 0; i < state.grid.length; i++) {
+      if (state.grid[i] !== null) filled.push(i);
+    }
+    if (filled.length <= 1) return null;
+    // Light shuffle so the reveal order feels organic, not row-major.
+    for (let i = filled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [filled[i], filled[j]] = [filled[j], filled[i]];
+    }
+    return {
+      slots: filled,
+      revealed: 0,
+      paused: false,
+      glowPending: false,
+      settling: false,
+    };
+  });
   const [activeHint, setActiveHint] = useState<HintId | null>(null);
   // Anchor rect (in screen coords) for the currently active hint. Null
   // while measurement is in flight or when the hint has no anchor —
@@ -346,10 +381,6 @@ export const GameScreen = ({
   // so the dismiss handler can also cancel it if needed.
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const haptic = useHaptic();
-  const playSound = useSound();
-  const { settings, update: updateSettings } = useSettings();
-
   // Undo button state. Hidden in challenge mode (maxUndos === 0); greyed when
   // there's nothing on the snapshot stack or we've hit the per-mode cap.
   const undoState: UndoStateKind =
@@ -387,31 +418,6 @@ export const GameScreen = ({
   // Cancel any pending animation if we unmount.
   useEffect(() => () => {
     if (animTimer.current) clearTimeout(animTimer.current);
-  }, []);
-
-  // Gridlock-style initial placement reveal: capture the pre-placed
-  // grid slots on mount and feed them into the shuffleReveal pipeline
-  // (which already handles the "hide tail, drop in one at a time"
-  // sequence + per-card thud). The slots are sorted in a shuffled
-  // order so the reveal feels random rather than left-to-right.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!animateInitialPlacement) return;
-    if (settings.reduceMotion) return;
-    const filled: number[] = [];
-    for (let i = 0; i < state.grid.length; i++) {
-      if (state.grid[i] !== null) filled.push(i);
-    }
-    if (filled.length <= 1) return;
-    // Lightly shuffle the slot order so the reveal feels organic.
-    // Math.random is fine here — this is purely cosmetic, no save
-    // determinism implications.
-    for (let i = filled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [filled[i], filled[j]] = [filled[j], filled[i]];
-    }
-    setShuffleReveal({ slots: filled, revealed: 0, paused: false, glowPending: false });
-    // Run once on mount only — don't re-trigger on grid changes.
   }, []);
 
   // Intro animation: when the game first mounts, replay the place animations
@@ -508,8 +514,17 @@ export const GameScreen = ({
       return () => clearTimeout(t);
     }
     if (shuffleReveal.revealed >= shuffleReveal.slots.length) {
-      setShuffleReveal(null);
-      return;
+      // Settling beat: once every card has landed, hold the reveal
+      // state for one more cadence step before clearing. That keeps
+      // the cyan "next slot" pulse (and any other affordance gated
+      // on shuffleReveal === null) from snapping back the moment the
+      // last card lands — instead it eases in after a brief breath.
+      if (!shuffleReveal.settling) {
+        setShuffleReveal(r => (r ? { ...r, settling: true } : null));
+        return;
+      }
+      const t = setTimeout(() => setShuffleReveal(null), SHUFFLE_REVEAL_INTERVAL_MS);
+      return () => clearTimeout(t);
     }
     const t = setTimeout(() => {
       // A small "thud" plays as each card drops into its slot — a
@@ -1651,7 +1666,13 @@ export const GameScreen = ({
           deckCountRef,
           drawnIsWild ? () => setWildPerkOpen(true) : undefined,
           (slots: number[]) =>
-            setShuffleReveal({ slots, revealed: 0, paused: true, glowPending: true }),
+            setShuffleReveal({
+              slots,
+              revealed: 0,
+              paused: true,
+              glowPending: true,
+              settling: false,
+            }),
           handleMegaDestroyConfirm
         )}
       </View>
