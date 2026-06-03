@@ -395,6 +395,14 @@ const contextSlotCategories = (ctx: PlayContext): SlotKind[] | undefined => {
   return ['special', 'in-game', 'end-game'];
 };
 
+// Gridlock: scatter 15 cards across random grid positions before
+// play begins. The remaining 10 slots fill in via the normal spiral
+// during the run.
+const contextRandomGridFill = (ctx: PlayContext): number => {
+  if (ctx.mode !== 'challenge' || ctx.id !== 'gridlock') return 0;
+  return 15;
+};
+
 const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerProps) => {
   const target = contextTarget(context) || undefined;
   // No bonus cards carry between TU levels — the easy/medium free
@@ -418,7 +426,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     contextRandomPerks(context),
     contextNoBonusCards(context),
     contextInitialBonusCards(context),
-    contextSlotCategories(context)
+    contextSlotCategories(context),
+    contextRandomGridFill(context)
   );
   if (state.phase.kind === 'game-over') {
     return (

@@ -17,10 +17,17 @@ interface Props {
 // become available — so the "unlocked-but-unbeaten" count stays at 2.
 const UNLOCKED_UNBEATEN_WINDOW = 2;
 
+// Temporary playtest toggle: when false, the sequential-unlock gate
+// below is bypassed and every Challenge is playable from the start
+// (locked-tile rendering and lock icons stop showing). Flip back to
+// true to re-enable the unlock progression once playtesting wraps up.
+const UNLOCK_GATE_ENABLED = false;
+
 const isChallengeUnlocked = (
   idx: number,
   doneIds: readonly string[]
 ): boolean => {
+  if (!UNLOCK_GATE_ENABLED) return true;
   if (doneIds.includes(CHALLENGES[idx].id)) return true;
   let unbeatenBefore = 0;
   for (let i = 0; i < idx; i++) {
