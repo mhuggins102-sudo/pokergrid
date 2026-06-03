@@ -510,7 +510,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     };
     return ACHIEVEMENTS.filter(
       a =>
-        achievementEarned(a, { state, report, milestone }) &&
+        achievementEarned(a, { state, report, milestone, mode: context.mode }) &&
         !prevStats.achievementsDone.includes(a.id)
     );
   }, [

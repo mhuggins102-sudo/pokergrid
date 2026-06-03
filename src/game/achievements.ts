@@ -93,6 +93,10 @@ export interface AchievementCheckCtx {
   state: GameState;
   report: ScoreReport;
   milestone: MilestoneInputs;
+  // Which play mode produced this run. Achievements only count from
+  // Free Play, except for 'all-challenges' which fires when the
+  // qualifying Challenge run clears the last entry in the catalog.
+  mode: 'free' | 'targets-up' | 'challenge';
 }
 
 export interface Achievement {
@@ -268,15 +272,33 @@ export const findAchievement = (id: AchievementId): Achievement | undefined =>
 // callers don't need to import CHALLENGES directly.
 export const CHALLENGES_TOTAL = CHALLENGES.length;
 
+// Achievements only earn on Free Play runs, with one exception:
+// 'all-challenges' fires when the qualifying Challenge run clears
+// the last entry in the catalog (so the trigger event is the
+// Challenge win itself).
+const modeAllowedFor = (
+  ach: Achievement,
+  mode: AchievementCheckCtx['mode']
+): boolean => {
+  if (ach.id === 'all-challenges') {
+    return mode === 'free' || mode === 'challenge';
+  }
+  return mode === 'free';
+};
+
 // Earned iff the achievement's tier-specific gating passes AND the
 // per-tier condition fires. Easy / Hard-Extreme tiers require the
 // matching Free Play difficulty plus a score floor; Milestones run
 // the condition directly and ignore per-difficulty / score gating.
+// Every tier additionally requires modeAllowedFor — without it
+// Hard-tier achievements would fire on Challenge runs because every
+// Challenge runs on the Hard ruleset.
 export const achievementEarned = (
   ach: Achievement,
   ctx: AchievementCheckCtx
 ): boolean => {
-  const { state, report } = ctx;
+  const { state, report, mode } = ctx;
+  if (!modeAllowedFor(ach, mode)) return false;
   if (ach.tier === 'easy' && state.difficulty !== 'easy') return false;
   if (
     ach.tier === 'hard-extreme' &&
