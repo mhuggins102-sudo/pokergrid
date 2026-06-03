@@ -66,6 +66,11 @@ interface Props {
   // the per-tier reward column (A: advance, S: 1 supercharge, SS: 2).
   // Other modes don't have tier-based rewards so the column is hidden.
   showTierRewards?: boolean;
+  // True when the grid started with several pre-placed cards (e.g.
+  // Gridlock challenge seeds 15). The GameScreen captures the
+  // initially-filled slots on mount and animates them in one at a
+  // time, the same way the Shuffle special reveals its 5 cards.
+  animateInitialPlacement?: boolean;
 }
 
 const SUIT_PERK_LABEL: Record<string, string> = {
@@ -260,6 +265,7 @@ export const GameScreen = ({
   kicker,
   maxUndos = Infinity,
   showTierRewards = false,
+  animateInitialPlacement = false,
 }: Props) => {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [scoringOpen, setScoringOpen] = useState(false);
@@ -375,6 +381,31 @@ export const GameScreen = ({
   // Cancel any pending animation if we unmount.
   useEffect(() => () => {
     if (animTimer.current) clearTimeout(animTimer.current);
+  }, []);
+
+  // Gridlock-style initial placement reveal: capture the pre-placed
+  // grid slots on mount and feed them into the shuffleReveal pipeline
+  // (which already handles the "hide tail, drop in one at a time"
+  // sequence + per-card thud). The slots are sorted in a shuffled
+  // order so the reveal feels random rather than left-to-right.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!animateInitialPlacement) return;
+    if (settings.reduceMotion) return;
+    const filled: number[] = [];
+    for (let i = 0; i < state.grid.length; i++) {
+      if (state.grid[i] !== null) filled.push(i);
+    }
+    if (filled.length <= 1) return;
+    // Lightly shuffle the slot order so the reveal feels organic.
+    // Math.random is fine here — this is purely cosmetic, no save
+    // determinism implications.
+    for (let i = filled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [filled[i], filled[j]] = [filled[j], filled[i]];
+    }
+    setShuffleReveal({ slots: filled, revealed: 0, paused: false });
+    // Run once on mount only — don't re-trigger on grid changes.
   }, []);
 
   // Intro animation: when the game first mounts, replay the place animations
