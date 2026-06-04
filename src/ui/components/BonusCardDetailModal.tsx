@@ -55,7 +55,7 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
           style={[
             styles.sheet,
             { borderColor: cat.borderColor },
-            glow(cat.borderColor, 16, 0.3),
+            glow(cat.borderColor, 18, 0.3),
           ]}
           onPress={() => {}}
         >
@@ -129,7 +129,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 380,
+    maxHeight: '88%',
     backgroundColor: colors.bgPanel,
     // borderColor + glow set inline from the card's category tone.
     borderWidth: 1,
@@ -178,9 +179,10 @@ const styles = StyleSheet.create({
     flex: 1,
     // color + textShadowColor set inline from category tone.
     fontFamily: fonts.mono,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
     textShadowRadius: 6,
   },
   mult: {
