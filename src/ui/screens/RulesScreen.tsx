@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NeonButton } from '../components/NeonButton';
-import { colors, fonts, glow, radius, spacing } from '../theme';
+import { colors, fonts, spacing } from '../theme';
 
 interface Props {
   onBack: () => void;
@@ -47,6 +47,23 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
       <Text style={styles.tagline}>
         5×5 poker solitaire. Place every card, score the 10 lines, beat your target.
       </Text>
+
+      <View style={styles.quickLinks}>
+        <NeonButton
+          label="Show Tutorial →"
+          variant="primary"
+          size="md"
+          onPress={onOpenTutorial}
+          style={styles.quickLinkBtn}
+        />
+        <NeonButton
+          label="Bonus Cards"
+          variant="secondary"
+          size="md"
+          onPress={onOpenBonusCards}
+          style={styles.quickLinkBtn}
+        />
+      </View>
 
       <Section label="Each turn">
         <Text style={styles.body}>
@@ -145,24 +162,6 @@ export const RulesScreen = ({ onBack, onOpenTutorial, onOpenBonusCards }: Props)
         </Text>
       </Section>
 
-      <View style={styles.ctaWrap}>
-        <NeonButton
-          label="Show Tutorial →"
-          variant="primary"
-          size="lg"
-          onPress={onOpenTutorial}
-        />
-        <NeonButton
-          label="Bonus Cards"
-          variant="secondary"
-          size="lg"
-          onPress={onOpenBonusCards}
-        />
-      </View>
-      <Text style={styles.ctaHint}>
-        The Tutorial walks through the rules with interactive examples. Bonus Cards lists every
-        card in the bonus deck.
-      </Text>
     </ScrollView>
   </View>
 );
@@ -190,9 +189,15 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     fontStyle: 'italic',
   },
+  quickLinks: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  quickLinkBtn: { flex: 1 },
   section: { marginBottom: spacing.lg },
   sectionLabel: {
     color: colors.textMid,
@@ -247,23 +252,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 1,
-  },
-  ctaWrap: {
-    borderTopColor: colors.outlineSoft,
-    borderTopWidth: 1,
-    paddingTop: spacing.lg,
-    marginTop: spacing.md,
-    gap: spacing.sm,
-    ...glow(colors.accent, 0, 0),
-  },
-  ctaHint: {
-    color: colors.textLow,
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    fontStyle: 'italic',
-    lineHeight: 14,
-    textAlign: 'center',
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.sm,
   },
 });
