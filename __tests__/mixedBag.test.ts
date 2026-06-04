@@ -1,9 +1,13 @@
 import { seededRng } from '../src/game/deck';
 import { findChallenge } from '../src/game/challenges';
 import {
+  BonusCard,
+  BONUS_DECK_POOL,
   cardMatchesSlot,
+  DOUBLER_CARD,
   isPlaceholder,
   SlotKind,
+  SPOTLIGHT_ID,
 } from '../src/game/bonusCards';
 import { GameState, newGame, step } from '../src/game/state';
 
@@ -140,5 +144,122 @@ describe('Mixed Bag challenge', () => {
     expect(s.phase.kind).toBe('awaiting-action');
     // Drawn card is still in hand (cancel doesn't spend it).
     expect(s.perkSpent.length).toBe(beforePerkSpent);
+  });
+
+  describe('Spotlight exclusivity', () => {
+    // Helper: surgically pre-place a card at a Mixed Bag slot. Mirrors
+    // what handleBonusKeep does for the categorized-slot path.
+    const seatCard = (s: GameState, slot: number, card: BonusCard): GameState => {
+      const hand = s.bonusCards.slice();
+      hand[slot] = card;
+      return { ...s, bonusCards: hand };
+    };
+    const spotlightCard = (): BonusCard => {
+      const c = BONUS_DECK_POOL.find(b => b.id === SPOTLIGHT_ID);
+      if (!c) throw new Error('Spotlight not in pool');
+      return c;
+    };
+    const aYellow = (): BonusCard => {
+      const c = BONUS_DECK_POOL.find(b => b.lineEffect && !b.gridEffect);
+      if (!c) throw new Error('No yellow card in pool');
+      return c;
+    };
+    const aPurple = (): BonusCard => {
+      // Pick a purple that ISN'T Spotlight so the "another purple
+      // arrives" scenario works.
+      const c = BONUS_DECK_POOL.find(
+        b => b.gridEffect && !b.lineEffect && b.id !== SPOTLIGHT_ID
+      );
+      if (!c) throw new Error('No non-Spotlight purple card in pool');
+      return c;
+    };
+
+    it('picking up Spotlight clears unused real cards from the other slots', () => {
+      let s = mixedBag();
+      // Slot 1 (yellow): a real bonus card. Slot 0 (green): leave the
+      // placeholder. Slot 2 (purple): about to receive Spotlight.
+      s = seatCard(s, 1, aYellow());
+      // Stuff Spotlight directly into the drawn flow at slot 2.
+      s = {
+        ...s,
+        phase: {
+          kind: 'bonus-card-resolving',
+          drawn: [spotlightCard()],
+          targetSlot: 2,
+          returnTo: 'awaiting-action',
+        },
+      };
+      s = step(s, { type: 'BONUS_KEEP', idx: 0 });
+      // Slot 2 holds Spotlight, slot 1 has been reset to its yellow
+      // placeholder, slot 0 was already a green placeholder.
+      expect(s.bonusCards[2].id).toBe(SPOTLIGHT_ID);
+      expect(isPlaceholder(s.bonusCards[1])).toBe(true);
+      expect(s.bonusCards[1].placeholderKind).toBe('in-game');
+      expect(isPlaceholder(s.bonusCards[0])).toBe(true);
+      expect(s.bonusCards[0].placeholderKind).toBe('special');
+    });
+
+    it('used green specials survive a Spotlight pickup', () => {
+      let s = mixedBag();
+      // Slot 0 (green): a USED special card. Spotlight arrives in slot 2.
+      s = seatCard(s, 0, { ...DOUBLER_CARD, used: true });
+      s = {
+        ...s,
+        phase: {
+          kind: 'bonus-card-resolving',
+          drawn: [spotlightCard()],
+          targetSlot: 2,
+          returnTo: 'awaiting-action',
+        },
+      };
+      s = step(s, { type: 'BONUS_KEEP', idx: 0 });
+      // The used Doubler stays — it was already disabled, not active.
+      expect(s.bonusCards[0].id).toBe(DOUBLER_CARD.id);
+      expect(s.bonusCards[0].used).toBe(true);
+      expect(s.bonusCards[2].id).toBe(SPOTLIGHT_ID);
+    });
+
+    it('Spotlight is discarded when another bonus card lands in another slot', () => {
+      let s = mixedBag();
+      // Slot 2 (purple): Spotlight already held.
+      s = seatCard(s, 2, spotlightCard());
+      // A new yellow card arrives in slot 1.
+      const yellow = aYellow();
+      s = {
+        ...s,
+        phase: {
+          kind: 'bonus-card-resolving',
+          drawn: [yellow],
+          targetSlot: 1,
+          returnTo: 'awaiting-action',
+        },
+      };
+      s = step(s, { type: 'BONUS_KEEP', idx: 0 });
+      // Slot 1 holds the new yellow; Spotlight's slot is back to its
+      // purple placeholder.
+      expect(s.bonusCards[1].id).toBe(yellow.id);
+      expect(isPlaceholder(s.bonusCards[2])).toBe(true);
+      expect(s.bonusCards[2].placeholderKind).toBe('end-game');
+    });
+
+    it("Spotlight is also discarded if another purple card lands in Spotlight's own slot", () => {
+      let s = mixedBag();
+      s = seatCard(s, 2, spotlightCard());
+      const purple = aPurple();
+      s = {
+        ...s,
+        phase: {
+          kind: 'bonus-card-resolving',
+          drawn: [purple],
+          targetSlot: 2,
+          returnTo: 'awaiting-action',
+        },
+      };
+      s = step(s, { type: 'BONUS_KEEP', idx: 0 });
+      // The new purple replaces Spotlight at slot 2 naturally — no
+      // surviving Spotlight anywhere.
+      expect(s.bonusCards[2].id).toBe(purple.id);
+      expect(s.bonusCards.some(c => c.id === SPOTLIGHT_ID)).toBe(false);
+    });
   });
 });
