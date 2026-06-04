@@ -29,7 +29,8 @@ export type SoundKey =
   | 'shuffle'    // Shuffle pre-reveal sweep
   | 'thud'       // The Doubler (mallet hit on the picked card)
   | 'sparkle'    // Wildcard (magical twinkle)
-  | 'plus-minus'; // Plus/Minus (rank-shift tick — quick ascending pair)
+  | 'plus'       // Plus/Minus +1 (ascending 3-tone tick)
+  | 'minus';     // Plus/Minus −1 (descending 3-tone tick — reverse of 'plus')
 
 // ---------- Native (expo-audio + bundled WAVs) ----------
 
@@ -54,7 +55,8 @@ const ASSETS: Partial<Record<SoundKey, number>> = {
   shuffle: require('../../assets/sounds/shuffle.wav'),
   thud: require('../../assets/sounds/thud.wav'),
   sparkle: require('../../assets/sounds/sparkle.wav'),
-  'plus-minus': require('../../assets/sounds/plus-minus.wav'),
+  plus: require('../../assets/sounds/plus.wav'),
+  minus: require('../../assets/sounds/minus.wav'),
 };
 
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
@@ -273,14 +275,22 @@ const playWeb = (k: SoundKey) => {
         { freq: 2640, dur: 0.18, delay: 0.18, type: 'sine', vol: 0.12 },
         { freq: 3520, dur: 0.14, delay: 0.18, type: 'triangle', vol: 0.06 },
       ]);
-    case 'plus-minus':
-      // Plus/Minus — quick two-tone tick. Low → high sine pair that
-      // reads as "adjusted by one step". Symmetric across +1 and −1
-      // since the visible card on the grid already shows the
-      // direction.
+    case 'plus':
+      // Plus/Minus +1 — three ascending sine pulses (C5 → E5 → G5)
+      // walking up the rank ladder. Each tick is 70ms with a 60ms
+      // step so the ascent reads as a tight three-note climb.
       return playNotes([
-        { freq: 660, dur: 0.06, type: 'sine', vol: 0.18 },
-        { freq: 990, dur: 0.10, delay: 0.05, type: 'sine', vol: 0.18 },
+        { freq: 523, dur: 0.07, type: 'sine', vol: 0.18 },
+        { freq: 659, dur: 0.07, delay: 0.06, type: 'sine', vol: 0.18 },
+        { freq: 784, dur: 0.10, delay: 0.12, type: 'sine', vol: 0.18 },
+      ]);
+    case 'minus':
+      // Plus/Minus −1 — mirror of 'plus': the same triad reversed
+      // so the descent reads as "rank stepped down".
+      return playNotes([
+        { freq: 784, dur: 0.07, type: 'sine', vol: 0.18 },
+        { freq: 659, dur: 0.07, delay: 0.06, type: 'sine', vol: 0.18 },
+        { freq: 523, dur: 0.10, delay: 0.12, type: 'sine', vol: 0.18 },
       ]);
   }
 };
