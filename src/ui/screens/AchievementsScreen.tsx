@@ -108,11 +108,11 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: fonts.mono,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 2.5,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2,
     textTransform: 'uppercase',
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
   sectionLabelEasy: {
