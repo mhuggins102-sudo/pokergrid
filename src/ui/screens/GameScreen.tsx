@@ -1277,15 +1277,24 @@ export const GameScreen = ({
     return out;
   }, [state.phase, state.grid]);
 
+  // Stash the most recently inspected line so the LineDetailModal's
+  // fade-out animation keeps rendering valid kind/index/cards after
+  // the parent clears inspectLine on close. Without this the modal
+  // was wrapped in {inspectLine && ...} and unmounted instantly,
+  // killing the fade.
+  const lastInspectLineRef = useRef<{ kind: LineKind; index: number } | null>(null);
+  if (inspectLine) lastInspectLineRef.current = inspectLine;
+  const stableInspectLine = inspectLine ?? lastInspectLineRef.current;
+
   const inspectCards = useMemo(() => {
-    if (!inspectLine) return [];
-    if (inspectLine.kind === 'row') {
-      return state.grid.slice(inspectLine.index * 5, inspectLine.index * 5 + 5);
+    if (!stableInspectLine) return [];
+    if (stableInspectLine.kind === 'row') {
+      return state.grid.slice(stableInspectLine.index * 5, stableInspectLine.index * 5 + 5);
     }
     const out = [];
-    for (let r = 0; r < 5; r++) out.push(state.grid[r * 5 + inspectLine.index]);
+    for (let r = 0; r < 5; r++) out.push(state.grid[r * 5 + stableInspectLine.index]);
     return out;
-  }, [state.grid, inspectLine]);
+  }, [state.grid, stableInspectLine]);
 
   const drawnKey = drawn
     ? isJoker(drawn) ? 'joker' : `${drawn.rank}${drawn.suit}`
@@ -1709,16 +1718,14 @@ export const GameScreen = ({
         onClose={() => setScoringOpen(false)}
         bonusCards={state.bonusCards}
       />
-      {inspectLine && (
-        <LineDetailModal
-          visible
-          onClose={() => setInspectLine(null)}
-          kind={inspectLine.kind}
-          index={inspectLine.index}
-          cards={inspectCards}
-          bonusCards={state.bonusCards}
-        />
-      )}
+      <LineDetailModal
+        visible={inspectLine !== null}
+        onClose={() => setInspectLine(null)}
+        kind={stableInspectLine?.kind ?? 'row'}
+        index={stableInspectLine?.index ?? 0}
+        cards={inspectCards}
+        bonusCards={state.bonusCards}
+      />
       <BonusCardDetailModal
         visible={bonusDetailIdx !== null}
         card={bonusDetailIdx !== null ? state.bonusCards[bonusDetailIdx] ?? null : null}
