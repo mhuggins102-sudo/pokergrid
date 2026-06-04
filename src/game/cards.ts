@@ -43,6 +43,15 @@ export const RANKS: Rank[] = [
 // The two are mutually exclusive on a card; re-supercharging replaces.
 export type Supercharge = 'wild' | 'double';
 
+// Shift a rank up or down by one step, wrapping around the deck order
+// (A → 2 on +1, A → K on -1; K → A on +1, 2 → A on -1). Used by the
+// Plus/Minus one-time green card to nudge a chosen card's rank.
+export const shiftRank = (rank: Rank, delta: 1 | -1): Rank => {
+  const idx = RANKS.indexOf(rank);
+  const next = (idx + delta + RANKS.length) % RANKS.length;
+  return RANKS[next];
+};
+
 export type StandardCard = {
   kind: 'standard';
   rank: Rank;

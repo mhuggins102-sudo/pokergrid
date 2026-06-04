@@ -5,6 +5,7 @@ import {
   DOUBLER_CARD,
   JUMP_JUMP_CARD,
   MEGA_DESTROY_CARD,
+  PLUS_MINUS_CARD,
   POWER_SWAP_CARD,
   SHUFFLE_CARD,
   SIDE_SLIDE_CARD,
@@ -485,7 +486,7 @@ describe('Three Tricks challenge', () => {
     expect(s.bonusCards[0].used).toBe(true);
   });
 
-  it('Shuffle: refuses to commit with fewer than 5 picked', () => {
+  it('Shuffle: refuses to commit with fewer than 3 picked', () => {
     let s = threeTricks([SHUFFLE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
     const grid = s.grid.slice();
     grid[0] = C('A', 'H');
@@ -498,9 +499,91 @@ describe('Three Tricks challenge', () => {
     s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
     s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 0 });
     s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 1 });
-    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 2 });
+    // Only 2 picked.
     const before = s;
     s = step(s, { type: 'RESOLVE_SHUFFLE' });
     expect(s).toBe(before);
+  });
+
+  it('Shuffle: commits cleanly with exactly 3 picked (lower bound)', () => {
+    let s = threeTricks([SHUFFLE_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[0] = C('A', 'H');
+    grid[1] = C('K', 'C');
+    grid[2] = C('Q', 'D');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 0 });
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 1 });
+    s = step(s, { type: 'TOGGLE_SHUFFLE_TARGET', slot: 2 });
+    s = step(s, { type: 'RESOLVE_SHUFFLE' });
+    expect(s.phase.kind).toBe('awaiting-action');
+    expect(s.bonusCards[0].used).toBe(true);
+  });
+
+  it('Plus/Minus: +1 shifts a queen to a king on the same suit', () => {
+    let s = threeTricks([PLUS_MINUS_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[13] = C('Q', 'H');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    expect(s.phase.kind).toBe('awaiting-special-plus-minus-target');
+
+    s = step(s, { type: 'RESOLVE_PLUS_MINUS_TARGET', slot: 13 });
+    expect(s.phase.kind).toBe('awaiting-special-plus-minus-direction');
+
+    s = step(s, { type: 'RESOLVE_PLUS_MINUS', delta: 1 });
+    expect(s.phase.kind).toBe('awaiting-action');
+    expect(s.grid[13]).toEqual({ kind: 'standard', rank: 'K', suit: 'H' });
+    expect(s.bonusCards[0].used).toBe(true);
+  });
+
+  it('Plus/Minus: −1 from an Ace wraps to a King; +1 to a King wraps to an Ace', () => {
+    let s = threeTricks([PLUS_MINUS_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    let grid = s.grid.slice();
+    grid[0] = C('A', 'S');
+    s = { ...s, grid };
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'RESOLVE_PLUS_MINUS_TARGET', slot: 0 });
+    s = step(s, { type: 'RESOLVE_PLUS_MINUS', delta: -1 });
+    expect(s.grid[0]).toEqual({ kind: 'standard', rank: 'K', suit: 'S' });
+
+    // Fresh game with a King → +1 should wrap to Ace.
+    let s2 = threeTricks([PLUS_MINUS_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    grid = s2.grid.slice();
+    grid[0] = C('K', 'C');
+    s2 = { ...s2, grid };
+    s2 = step(s2, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s2 = step(s2, { type: 'RESOLVE_PLUS_MINUS_TARGET', slot: 0 });
+    s2 = step(s2, { type: 'RESOLVE_PLUS_MINUS', delta: 1 });
+    expect(s2.grid[0]).toEqual({ kind: 'standard', rank: 'A', suit: 'C' });
+  });
+
+  it('Plus/Minus: refuses to target a joker', () => {
+    let s = threeTricks([PLUS_MINUS_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[13] = { kind: 'joker' };
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    const before = s;
+    s = step(s, { type: 'RESOLVE_PLUS_MINUS_TARGET', slot: 13 });
+    // Slot 13 isn't in the legal target list (jokers excluded).
+    expect(s).toBe(before);
+  });
+
+  it('Plus/Minus: cancel from direction phase returns to target picking', () => {
+    let s = threeTricks([PLUS_MINUS_CARD, POWER_SWAP_CARD, DOUBLER_CARD]);
+    const grid = s.grid.slice();
+    grid[13] = C('Q', 'H');
+    s = { ...s, grid };
+
+    s = step(s, { type: 'ACTIVATE_SPECIAL_CARD', idx: 0 });
+    s = step(s, { type: 'RESOLVE_PLUS_MINUS_TARGET', slot: 13 });
+    s = step(s, { type: 'CANCEL_ACTION' });
+    expect(s.phase.kind).toBe('awaiting-special-plus-minus-target');
+    expect(s.bonusCards[0].used ?? false).toBe(false);
   });
 });
