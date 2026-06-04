@@ -80,8 +80,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'three-tricks',
     name: 'Three Tricks',
-    goal: 'Score 500+ with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
-    scoreTarget: 500,
+    goal: 'Score 400+ with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
+    scoreTarget: 400,
     // Enforced at newGame: noBonusCards strips the regular bonus deck,
     // and initialBonusCards seeds the hand with three random specials.
     // App.tsx wires the seeding via contextInitialBonusCards.

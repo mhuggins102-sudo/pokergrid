@@ -403,13 +403,14 @@ export const newGame = (
     deckExtras.map(c => c.id.replace(/-pwr\d+$/, ''))
   );
   const excludedBaseIds = new Set<string>([...heldBaseIds, ...poweredBaseIds]);
-  // Joker-dependent bonus cards (Trash Joker, Cozy Joker) can never
-  // trigger when the deck has no jokers — Extreme runs and any future
-  // no-joker challenges. Strip them from the draw pool so the player
-  // doesn't waste a ♣ pulling a dud.
+  // Joker-dependent bonus cards (Trash Joker, Cozy Joker, Joker Line)
+  // can never trigger when the deck has no jokers — Extreme runs and
+  // any future no-joker challenges. Strip them from the draw pool so
+  // the player doesn't waste a ♣ pulling a dud.
   if (jokerCount === 0) {
     excludedBaseIds.add('trash-joker-x1_25');
     excludedBaseIds.add('cozy-joker-x1_15');
+    excludedBaseIds.add('joker-line-x1_5');
   }
   const drawable = BONUS_DECK_POOL.filter(c => !excludedBaseIds.has(c.id));
   const shuffledBonus = shuffle(drawable, rng);
@@ -1092,6 +1093,41 @@ const enforceSpotlight = (
   return proposedHand.filter(c => c.id !== SPOTLIGHT_ID);
 };
 
+// Mixed Bag variant of Spotlight enforcement: same exclusivity rule
+// (Spotlight clears other unused cards on pickup; the next acquired
+// card discards Spotlight), but the hand keeps its fixed slot
+// layout. Used green specials and placeholders are NEVER discarded
+// — used specials stay in their slot (disabled for the rest of the
+// run) and placeholders are inert slot markers, not "other bonus
+// cards" in the Spotlight sense.
+const enforceSpotlightMixedBag = (
+  hand: BonusCard[],
+  justAdded: BonusCard,
+  slotCategories: SlotKind[]
+): BonusCard[] => {
+  const hasSpotlight = hand.some(c => c.id === SPOTLIGHT_ID);
+  if (!hasSpotlight) return hand;
+  const isClearable = (c: BonusCard): boolean =>
+    c.id !== SPOTLIGHT_ID && !isPlaceholder(c) && !(c.specialKind && c.used);
+  const hasOtherClearable = hand.some(isClearable);
+  if (!hasOtherClearable && justAdded.id !== SPOTLIGHT_ID) return hand;
+  if (justAdded.id === SPOTLIGHT_ID) {
+    // Spotlight just landed in its slot. Every OTHER slot that holds
+    // a clearable card resets to its placeholder. Used specials and
+    // existing placeholders stay put.
+    return hand.map((c, i) => {
+      if (c === justAdded) return c;
+      if (isClearable(c)) return slotPlaceholder(slotCategories[i]);
+      return c;
+    });
+  }
+  // A new clearable card arrived — Spotlight has to go. Replace
+  // whichever slot holds Spotlight with that slot's placeholder.
+  return hand.map((c, i) =>
+    c.id === SPOTLIGHT_ID ? slotPlaceholder(slotCategories[i]) : c
+  );
+};
+
 const handleBonusKeep = (s: GameState, idx: number): GameState => {
   if (s.phase.kind !== 'bonus-card-resolving') return s;
   if (idx < 0 || idx >= s.phase.drawn.length) return s;
@@ -1109,11 +1145,18 @@ const handleBonusKeep = (s: GameState, idx: number): GameState => {
     const prior = newHand[phase.targetSlot];
     const swappedReal = prior !== undefined && !isPlaceholder(prior);
     newHand[phase.targetSlot] = kept;
+    // Spotlight exclusivity in Mixed Bag — clear out unused real
+    // cards in the other slots when Spotlight arrives, or discard
+    // Spotlight when another card lands while it's still held.
+    // Used green specials and placeholders are preserved.
+    const finalHand = s.slotCategories
+      ? enforceSpotlightMixedBag(newHand, kept, s.slotCategories)
+      : newHand;
     const returning = phase.drawn.filter((_, i) => i !== idx);
     return finishBonusFlow(
       swappedReal ? { ...s, swappedBonus: true } : s,
       returning,
-      newHand
+      finalHand
     );
   }
   // Spotlight bypasses the cap check: it evicts every other held card
