@@ -47,7 +47,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'short-deck',
     name: 'Short Deck',
-    synopsis: 'Deck: Contains only 45 cards',
+    synopsis: 'Variant: Deck contains only 45 cards',
     goal: 'Score 500+ points with a 45-card deck. 8 cards are removed at random before the start of the game.',
     scoreTarget: 500,
     deckLimit: 45,
@@ -56,7 +56,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'no-discards',
     name: 'No Discards',
-    synopsis: 'Rule: Discard button disabled',
+    synopsis: 'Variant: Discard button disabled',
     goal: 'Score 500+ points without using the Discard button — every drawn card must be placed or spent on a suit perk.',
     scoreTarget: 500,
     // The Discard button is hidden in this challenge and the DISCARD_NONE
@@ -67,7 +67,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'short-circuit',
     name: 'Short Circuit',
-    synopsis: 'Rule: Suit perks fire at random',
+    synopsis: 'Variant: Suit perks fire at random',
     goal: "Score 500+ points with random suit perks — you won't know which of ♥/♠/♦/♣'s effects you'll get until you commit to spending the card.",
     scoreTarget: 500,
     // The randomness is enforced at the reducer level (state.randomPerks
@@ -79,7 +79,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'poker-purist',
     name: 'Poker Purist',
-    synopsis: 'Bonus cards: None',
+    synopsis: 'Variant: No bonus cards',
     goal: 'Score 350+ points with no bonus cards at all — no starter, no ♣ draws, no multipliers. Pure rows and columns scoring as 5-card poker hands.',
     scoreTarget: 350,
     // Enforced at newGame: bonusCards and bonusDeck are both empty,
@@ -90,7 +90,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'three-tricks',
     name: 'Three Tricks',
-    synopsis: 'Hand: 3 random one-time cards',
+    synopsis: 'Variant: One-time actions (green) replace bonus cards',
     goal: 'Score 400+ points with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
     scoreTarget: 400,
     // Enforced at newGame: noBonusCards strips the regular bonus deck,
@@ -101,7 +101,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'mixed-bag',
     name: 'Mixed Bag',
-    synopsis: 'Slots: Locked to green / yellow / purple',
+    synopsis: 'Variant: Bonus slots locked to green/yellow/purple',
     goal: 'Score 500+ points with bonus slots locked to categories — slot 1 holds a green (one-time) card, slot 2 holds a yellow (per-line) card, slot 3 holds a purple (end-game) card. ♣ asks which slot to draw for, then shows 2 category-matching cards to pick from.',
     scoreTarget: 500,
     // Enforced at newGame via slotCategories — placeholders seed the
@@ -111,7 +111,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'gridlock',
     name: 'Gridlock',
-    synopsis: 'Grid: 15 cards pre-placed at random',
+    synopsis: 'Variant: First 15 cards pre-placed at random',
     goal: 'Score 500+ points with 15 cards pre-placed at random positions on the grid. Spiral placement resumes from whichever slots are still empty — you fill the remaining 10 in normal play.',
     scoreTarget: 500,
     // Enforced at newGame: randomGridFill seeds 15 cards into random

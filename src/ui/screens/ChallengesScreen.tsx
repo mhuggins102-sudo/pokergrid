@@ -283,36 +283,34 @@ const styles = StyleSheet.create({
   },
   // Generous tap target for the ⓘ icon — anchored to the right edge
   // of the top row so the player can land on the rightmost ~60px of
-  // the card to open the info popup without hitting Start.
+  // the card to open the info popup without hitting Start. No extra
+  // vertical padding — the title's intrinsic height drives the row
+  // height; the hitSlop above handles touch comfort.
   cardInfoHit: {
     marginLeft: 'auto',
     minWidth: 60,
-    paddingVertical: 4,
     alignItems: 'flex-end',
   },
   cardInfoIcon: {
     color: colors.accent,
     fontFamily: fonts.mono,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     textShadowColor: colors.accent,
     textShadowRadius: 4,
   },
-  // Target line — explicit, neutral coloring so the score floor
-  // reads independently of the per-challenge title color.
+  // Target + synopsis share the original body-text styling. Both
+  // sit in the same visual register as the old single-line goal
+  // text so the card height stays close to the pre-redesign height.
   cardTarget: {
     color: colors.textMid,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 2,
+    lineHeight: 17,
   },
   cardTargetLocked: {
     color: colors.textLow,
   },
-  // One-line synopsis. numberOfLines={1} clips with ellipsis if a
-  // future synopsis runs over.
   cardSynopsis: {
     color: colors.textMid,
     fontFamily: fonts.sans,
