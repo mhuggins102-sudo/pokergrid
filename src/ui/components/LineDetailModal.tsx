@@ -157,7 +157,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 380,
+    maxHeight: '88%',
     backgroundColor: colors.bgPanel,
     // Cyan accent border + matching glow — same treatment the
     // Difficulty / Variants / Challenges info popups use, so all
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     textTransform: 'uppercase',
   },
   closeBtn: {

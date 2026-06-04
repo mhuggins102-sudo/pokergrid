@@ -212,14 +212,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   title: {
     color: colors.textHi,
     fontFamily: fonts.mono,
     fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     textTransform: 'uppercase',
   },
   closeBtn: {
