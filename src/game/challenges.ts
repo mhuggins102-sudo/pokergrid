@@ -28,6 +28,12 @@ export type ChallengeId =
 export interface Challenge {
   id: ChallengeId;
   name: string;
+  // One-line synopsis shown on the Challenges page tile (e.g.
+  // "Deck: Contains only 45 cards"). Designed to fit in a single
+  // line under the title + target row.
+  synopsis: string;
+  // Full description shown in the info popup. Includes the score
+  // target and any background needed to understand the twist.
   goal: string;
   // Total score that must be reached.
   scoreTarget: number;
@@ -41,7 +47,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'short-deck',
     name: 'Short Deck',
-    goal: 'Score 500+ with a 45-card deck (8 cards held out at random).',
+    synopsis: 'Deck: Contains only 45 cards',
+    goal: 'Score 500+ points with a 45-card deck. 8 cards are removed at random before the start of the game.',
     scoreTarget: 500,
     deckLimit: 45,
     conditionMet: () => true,
@@ -49,7 +56,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'no-discards',
     name: 'No Discards',
-    goal: 'Score 500+ without using the Discard button — every drawn card must be placed or spent on a suit perk.',
+    synopsis: 'Rule: Discard button disabled',
+    goal: 'Score 500+ points without using the Discard button — every drawn card must be placed or spent on a suit perk.',
     scoreTarget: 500,
     // The Discard button is hidden in this challenge and the DISCARD_NONE
     // action is rejected by the reducer, so reaching the score target is
@@ -59,7 +67,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'short-circuit',
     name: 'Short Circuit',
-    goal: "Score 500+ with random suit perks — you won't know which of ♥/♠/♦/♣'s effects you'll get until you commit to spending the card.",
+    synopsis: 'Rule: Suit perks fire at random',
+    goal: "Score 500+ points with random suit perks — you won't know which of ♥/♠/♦/♣'s effects you'll get until you commit to spending the card.",
     scoreTarget: 500,
     // The randomness is enforced at the reducer level (state.randomPerks
     // is true and handleBeginSuitAction picks a uniformly-random perk
@@ -70,7 +79,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'poker-purist',
     name: 'Poker Purist',
-    goal: 'Score 350+ with no bonus cards at all — no starter, no ♣ draws, no multipliers. Pure rows and columns scoring as 5-card poker hands.',
+    synopsis: 'Bonus cards: None',
+    goal: 'Score 350+ points with no bonus cards at all — no starter, no ♣ draws, no multipliers. Pure rows and columns scoring as 5-card poker hands.',
     scoreTarget: 350,
     // Enforced at newGame: bonusCards and bonusDeck are both empty,
     // which naturally disables ♣ (canDrawBonus returns false) and
@@ -80,7 +90,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'three-tricks',
     name: 'Three Tricks',
-    goal: 'Score 400+ with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
+    synopsis: 'Hand: 3 random one-time cards',
+    goal: 'Score 400+ points with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
     scoreTarget: 400,
     // Enforced at newGame: noBonusCards strips the regular bonus deck,
     // and initialBonusCards seeds the hand with three random specials.
@@ -90,7 +101,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'mixed-bag',
     name: 'Mixed Bag',
-    goal: 'Score 500+ with bonus slots locked to categories — slot 1 holds a green (one-time) card, slot 2 holds a yellow (per-line) card, slot 3 holds a purple (end-game) card. ♣ asks which slot to draw for, then shows 2 category-matching cards to pick from.',
+    synopsis: 'Slots: Locked to green / yellow / purple',
+    goal: 'Score 500+ points with bonus slots locked to categories — slot 1 holds a green (one-time) card, slot 2 holds a yellow (per-line) card, slot 3 holds a purple (end-game) card. ♣ asks which slot to draw for, then shows 2 category-matching cards to pick from.',
     scoreTarget: 500,
     // Enforced at newGame via slotCategories — placeholders seed the
     // three slots in category order, and ♣ filters draws to match.
@@ -99,7 +111,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'gridlock',
     name: 'Gridlock',
-    goal: 'Score 500+ with 15 cards pre-placed at random positions on the grid. Spiral placement resumes from whichever slots are still empty — you fill the remaining 10 in normal play.',
+    synopsis: 'Grid: 15 cards pre-placed at random',
+    goal: 'Score 500+ points with 15 cards pre-placed at random positions on the grid. Spiral placement resumes from whichever slots are still empty — you fill the remaining 10 in normal play.',
     scoreTarget: 500,
     // Enforced at newGame: randomGridFill seeds 15 cards into random
     // positions before drawNext runs. The remaining deck is intact

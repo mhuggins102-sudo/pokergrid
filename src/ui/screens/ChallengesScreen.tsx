@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CHALLENGES, ChallengeId } from '../../game/challenges';
 import { NeonButton } from '../components/NeonButton';
 import { useStats } from '../stats';
@@ -38,12 +38,15 @@ const isChallengeUnlocked = (
 
 export const ChallengesScreen = ({ onBack, onStart }: Props) => {
   const { stats } = useStats();
+  // Currently-open info popup, keyed by challenge id. null = closed.
+  const [infoId, setInfoId] = useState<ChallengeId | null>(null);
   // Only count IDs that still exist in CHALLENGES — stats.challengesDone
   // may carry migrated IDs from the pre-Achievements split, and we
   // don't want those inflating the tally.
   const doneCount = CHALLENGES.filter(c =>
     stats.challengesDone.includes(c.id)
   ).length;
+  const infoChallenge = CHALLENGES.find(c => c.id === infoId) ?? null;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -68,14 +71,20 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
           if (!unlocked) {
             return (
               <View key={c.id} style={[styles.card, styles.cardLocked]}>
-                <View style={styles.cardHeader}>
+                <View style={styles.cardTopRow}>
                   <Text style={[styles.cardTitle, styles.cardTitleLocked]}>
                     {c.name}
                   </Text>
                   <Text style={styles.cardLockIcon}>🔒</Text>
                 </View>
-                <Text style={[styles.cardGoal, styles.cardGoalLocked]}>
-                  {c.goal}
+                <Text style={[styles.cardTarget, styles.cardTargetLocked]}>
+                  Target: {c.scoreTarget}
+                </Text>
+                <Text
+                  style={[styles.cardSynopsis, styles.cardSynopsisLocked]}
+                  numberOfLines={1}
+                >
+                  {c.synopsis}
                 </Text>
                 <Text style={[styles.cardCta, styles.cardCtaLocked]}>
                   Locked
@@ -89,11 +98,37 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
               style={[styles.card, done && styles.cardDone]}
               onPress={() => onStart(c.id)}
             >
-              <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, done && styles.cardTitleDone]}>{c.name}</Text>
+              <View style={styles.cardTopRow}>
+                <Text
+                  style={[styles.cardTitle, done && styles.cardTitleDone]}
+                >
+                  {c.name}
+                </Text>
                 {done && <Text style={styles.cardBadge}>· DONE</Text>}
+                {/*
+                  Info hit area lives in the right portion of the
+                  card. Generous width (60px) + extra hitSlop so the
+                  player doesn't have to land precisely on the icon
+                  to open the popup. stopPropagation keeps the outer
+                  Start press from also firing.
+                */}
+                <Pressable
+                  onPress={e => {
+                    e.stopPropagation();
+                    setInfoId(c.id);
+                  }}
+                  hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                  style={styles.cardInfoHit}
+                  accessibilityLabel="More info"
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.cardInfoIcon}>ⓘ</Text>
+                </Pressable>
               </View>
-              <Text style={styles.cardGoal}>{c.goal}</Text>
+              <Text style={styles.cardTarget}>Target: {c.scoreTarget}</Text>
+              <Text style={styles.cardSynopsis} numberOfLines={1}>
+                {c.synopsis}
+              </Text>
               <Text style={styles.cardCta}>
                 {done ? 'Play again →' : 'Start →'}
               </Text>
@@ -105,6 +140,32 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
       <Text style={styles.footnote}>
         More challenges coming. Suggestions welcome.
       </Text>
+
+      <Modal
+        visible={infoChallenge !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInfoId(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setInfoId(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            {infoChallenge && (
+              <>
+                <View style={styles.modalHeaderRow}>
+                  <Text style={styles.modalTitle}>{infoChallenge.name}</Text>
+                  <Pressable onPress={() => setInfoId(null)} hitSlop={12}>
+                    <Text style={styles.modalCloseBtn}>×</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.modalTarget}>
+                  Target: {infoChallenge.scoreTarget}
+                </Text>
+                <Text style={styles.modalDesc}>{infoChallenge.goal}</Text>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 };
@@ -181,9 +242,6 @@ const styles = StyleSheet.create({
     textShadowColor: 'transparent',
     textShadowRadius: 0,
   },
-  cardGoalLocked: {
-    color: colors.textLow,
-  },
   cardCtaLocked: {
     color: colors.textLow,
     textShadowColor: 'transparent',
@@ -194,7 +252,7 @@ const styles = StyleSheet.create({
     color: colors.textLow,
     fontSize: 14,
   },
-  cardHeader: {
+  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     marginBottom: spacing.xs,
@@ -223,12 +281,47 @@ const styles = StyleSheet.create({
     textShadowColor: colors.success,
     textShadowRadius: 4,
   },
-  cardGoal: {
+  // Generous tap target for the ⓘ icon — anchored to the right edge
+  // of the top row so the player can land on the rightmost ~60px of
+  // the card to open the info popup without hitting Start.
+  cardInfoHit: {
+    marginLeft: 'auto',
+    minWidth: 60,
+    paddingVertical: 4,
+    alignItems: 'flex-end',
+  },
+  cardInfoIcon: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 18,
+    fontWeight: '800',
+    textShadowColor: colors.accent,
+    textShadowRadius: 4,
+  },
+  // Target line — explicit, neutral coloring so the score floor
+  // reads independently of the per-challenge title color.
+  cardTarget: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  cardTargetLocked: {
+    color: colors.textLow,
+  },
+  // One-line synopsis. numberOfLines={1} clips with ellipsis if a
+  // future synopsis runs over.
+  cardSynopsis: {
     color: colors.textMid,
     fontFamily: fonts.sans,
     fontSize: 12,
     lineHeight: 17,
     marginBottom: spacing.sm,
+  },
+  cardSynopsisLocked: {
+    color: colors.textLow,
   },
   cardCta: {
     color: colors.accent,
@@ -245,5 +338,61 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: spacing.lg,
+  },
+  // ---- Info popup ----
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 4, 12, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalSheet: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.warn,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...glow(colors.warn, 18, 0.3),
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalTitle: {
+    color: colors.warn,
+    fontFamily: fonts.mono,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    textShadowColor: colors.warn,
+    textShadowRadius: 5,
+  },
+  modalCloseBtn: {
+    color: colors.textMid,
+    fontSize: 24,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+  },
+  modalTarget: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+    textShadowColor: colors.success,
+    textShadowRadius: 3,
+  },
+  modalDesc: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
   },
 });
