@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CHALLENGES, ChallengeId } from '../../game/challenges';
 import { NeonButton } from '../components/NeonButton';
@@ -46,7 +46,14 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
   const doneCount = CHALLENGES.filter(c =>
     stats.challengesDone.includes(c.id)
   ).length;
-  const infoChallenge = CHALLENGES.find(c => c.id === infoId) ?? null;
+  // The currently-selected info card. We also stash a sticky ref to
+  // the LAST shown challenge so the modal's fade-out animation keeps
+  // rendering the previous content instead of going blank for a
+  // frame the moment infoId clears.
+  const liveInfoChallenge = CHALLENGES.find(c => c.id === infoId) ?? null;
+  const lastShownInfoRef = useRef<typeof liveInfoChallenge>(null);
+  if (liveInfoChallenge) lastShownInfoRef.current = liveInfoChallenge;
+  const renderedInfoChallenge = liveInfoChallenge ?? lastShownInfoRef.current;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -142,25 +149,25 @@ export const ChallengesScreen = ({ onBack, onStart }: Props) => {
       </Text>
 
       <Modal
-        visible={infoChallenge !== null}
+        visible={infoId !== null}
         transparent
         animationType="fade"
         onRequestClose={() => setInfoId(null)}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setInfoId(null)}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
-            {infoChallenge && (
+            {renderedInfoChallenge && (
               <>
                 <View style={styles.modalHeaderRow}>
-                  <Text style={styles.modalTitle}>{infoChallenge.name}</Text>
+                  <Text style={styles.modalTitle}>{renderedInfoChallenge.name}</Text>
                   <Pressable onPress={() => setInfoId(null)} hitSlop={12}>
                     <Text style={styles.modalCloseBtn}>×</Text>
                   </Pressable>
                 </View>
                 <Text style={styles.modalTarget}>
-                  Target: {infoChallenge.scoreTarget}
+                  Target: {renderedInfoChallenge.scoreTarget}
                 </Text>
-                <Text style={styles.modalDesc}>{infoChallenge.goal}</Text>
+                <Text style={styles.modalDesc}>{renderedInfoChallenge.goal}</Text>
               </>
             )}
           </Pressable>

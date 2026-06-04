@@ -1153,6 +1153,21 @@ export const GameScreen = ({
         playSound('tap');
         dispatch({ type: 'TOGGLE_SHUFFLE_TARGET', slot: idx });
       }
+    } else if (p.kind === 'awaiting-special-plus-minus-target') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'RESOLVE_PLUS_MINUS_TARGET', slot: idx });
+        setSelectedSlot(idx);
+      }
+    } else if (p.kind === 'awaiting-special-plus-minus-direction') {
+      // Tap the picked card again to deselect and pick a different
+      // one. Any other tap goes through the +/− buttons in the
+      // action bar.
+      if (idx === p.target) {
+        setSelectedSlot(null);
+        dispatch({ type: 'CANCEL_ACTION' });
+      }
     }
   };
 
@@ -1218,6 +1233,12 @@ export const GameScreen = ({
       // below tints the currently-chosen 5 in green so the player can
       // see their pending set.
       for (const s of p.slots) out.add(s);
+    } else if (p.kind === 'awaiting-special-plus-minus-target') {
+      for (const s of p.slots) out.add(s);
+    } else if (p.kind === 'awaiting-special-plus-minus-direction') {
+      // Picked card stays lit; the +/− buttons in the action bar
+      // commit the rank shift.
+      out.add(p.target);
     }
     // Shuffle reveal: while the cards are lifted, glow each of the 5
     // landing spots so the player can see exactly where the cards
@@ -2761,13 +2782,13 @@ const renderBottom = (
         </DrawnArea>
         <View style={styles.btnCol}>
           <Text style={styles.hint}>
-            Pick 5 cards to shuffle. {n} / 5 selected. Tap a card again to drop it.
+            Pick 3 to 5 cards to shuffle. {n} selected. Tap a card again to drop it.
           </Text>
           <NeonButton
-            label={n === 5 ? 'Shuffle' : `${5 - n} more`}
+            label={n >= 3 ? `Shuffle ${n}` : `${3 - n} more`}
             variant="primary"
             size="sm"
-            disabled={n !== 5}
+            disabled={n < 3}
             onPress={() => {
               haptic('bonus');
               playSound('shuffle');
@@ -2778,6 +2799,63 @@ const renderBottom = (
               dispatch({ type: 'RESOLVE_SHUFFLE' });
             }}
           />
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (
+    p.kind === 'awaiting-special-plus-minus-target' ||
+    p.kind === 'awaiting-special-plus-minus-direction'
+  ) {
+    const isPick = p.kind === 'awaiting-special-plus-minus-target';
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-plus-minus'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Plus/Minus</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            {isPick
+              ? "Tap any card on the grid (jokers can't be picked). Then choose +1 or −1 to shift its rank."
+              : 'Choose +1 or −1 to shift the picked card. Tap the card again to pick a different one.'}
+          </Text>
+          {!isPick && (
+            <View style={styles.actionRowInline}>
+              <NeonButton
+                label="−1"
+                variant="primary"
+                size="sm"
+                onPress={() => {
+                  haptic('light');
+                  playSound('tap');
+                  dispatch({ type: 'RESOLVE_PLUS_MINUS', delta: -1 });
+                }}
+              />
+              <NeonButton
+                label="+1"
+                variant="primary"
+                size="sm"
+                onPress={() => {
+                  haptic('light');
+                  playSound('tap');
+                  dispatch({ type: 'RESOLVE_PLUS_MINUS', delta: 1 });
+                }}
+              />
+            </View>
+          )}
           <NeonButton
             label="Cancel"
             variant="secondary"
@@ -3015,6 +3093,12 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.xs,
     justifyContent: 'center',
+  },
+  // Inline row of buttons inside btnCol — used by the Plus/Minus
+  // direction picker so −1 and +1 sit side by side.
+  actionRowInline: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   stackedBtn: {
     height: 48,

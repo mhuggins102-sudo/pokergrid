@@ -88,8 +88,10 @@ export const executeJump = (
 
 // ---------- Shuffle (special: ★ one-time multi-target permute) ----------
 
-// Number of grid slots Shuffle pulls in one shot.
-export const SHUFFLE_PICK_COUNT = 5;
+// Range of grid slots Shuffle accepts in one shot. The player can pick
+// any count in [SHUFFLE_PICK_MIN, SHUFFLE_PICK_MAX] before committing.
+export const SHUFFLE_PICK_MIN = 3;
+export const SHUFFLE_PICK_MAX = 5;
 
 // Permute the cards at `slots` and write them back to the same set of
 // slots. Uses the provided RNG so the call is deterministic in tests.

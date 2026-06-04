@@ -1,4 +1,4 @@
-import { Card, isJoker, StandardCard, Suit } from './cards';
+import { Card, isJoker, shiftRank, StandardCard, Suit } from './cards';
 import { freshShuffledDeck, shuffle } from './deck';
 import { emptyGrid, Grid, isFull, nextSpiralSlot, placeAtSpiralNext } from './grid';
 import { HandRank } from './hands';
@@ -46,7 +46,8 @@ import {
   executeSlide,
   MEGA_DESTROY_MAX,
   occupiedSlots,
-  SHUFFLE_PICK_COUNT,
+  SHUFFLE_PICK_MAX,
+  SHUFFLE_PICK_MIN,
   sideSlideChainExtensions,
   sideSlideDestinationsForChain,
   SideSlideMove,
@@ -178,14 +179,29 @@ export type Phase =
       dests: number[];
       returnTo: TargetReturnTo;
     }
-  // Shuffle: multi-select exactly SHUFFLE_PICK_COUNT cards (Confirm
-  // is disabled until the cap is reached). Picked slots toggle off
-  // before commit so the player can adjust.
+  // Shuffle: multi-select between SHUFFLE_PICK_MIN and SHUFFLE_PICK_MAX
+  // cards (Confirm enables once at least MIN are picked, and the cap
+  // blocks additional picks past MAX). Picked slots toggle off before
+  // commit so the player can adjust.
   | {
       kind: 'awaiting-special-shuffle';
       cardIdx: number;
       slots: number[];
       selected: number[];
+      returnTo: TargetReturnTo;
+    }
+  // Plus/Minus: pick any standard (non-joker) card on the grid; the
+  // dest sub-phase shows +1 / −1 buttons that commit the rank shift.
+  | {
+      kind: 'awaiting-special-plus-minus-target';
+      cardIdx: number;
+      slots: number[];
+      returnTo: TargetReturnTo;
+    }
+  | {
+      kind: 'awaiting-special-plus-minus-direction';
+      cardIdx: number;
+      target: number;
       returnTo: TargetReturnTo;
     }
   | { kind: 'game-over' };
@@ -283,6 +299,8 @@ export type Action =
   | { type: 'RESOLVE_JUMP'; source: number; dest: number }
   | { type: 'TOGGLE_SHUFFLE_TARGET'; slot: number }
   | { type: 'RESOLVE_SHUFFLE' }
+  | { type: 'RESOLVE_PLUS_MINUS_TARGET'; slot: number }
+  | { type: 'RESOLVE_PLUS_MINUS'; delta: 1 | -1 }
   | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -795,9 +813,9 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
     }
     case 'shuffle': {
       const slots = occupiedSlots(s.grid);
-      // Need at least 5 cards on the grid to pick from. Less than
-      // that and the action can't fire.
-      if (slots.length < SHUFFLE_PICK_COUNT) return s;
+      // Need at least SHUFFLE_PICK_MIN cards on the grid to fire —
+      // anything less can't form a meaningful permutation.
+      if (slots.length < SHUFFLE_PICK_MIN) return s;
       return {
         ...s,
         phase: {
@@ -805,6 +823,22 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
           cardIdx: idx,
           slots,
           selected: [],
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+    case 'plus-minus': {
+      // Same target rules as Doubler / Wildcard — any non-joker
+      // standard card. Jokers carry no rank so a rank shift would
+      // be meaningless on them.
+      const slots = supercharchableSlots(s.grid);
+      if (slots.length === 0) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-plus-minus-target',
+          cardIdx: idx,
+          slots,
           returnTo: 'awaiting-action',
         },
       };
@@ -1027,7 +1061,7 @@ const handleToggleShuffleTarget = (s: GameState, slot: number): GameState => {
   if (already >= 0) {
     selected = phase.selected.filter(i => i !== slot);
   } else {
-    if (phase.selected.length >= SHUFFLE_PICK_COUNT) return s;
+    if (phase.selected.length >= SHUFFLE_PICK_MAX) return s;
     selected = [...phase.selected, slot];
   }
   return { ...s, phase: { ...phase, selected } };
@@ -1039,12 +1073,41 @@ const handleResolveShuffle = (
 ): GameState => {
   if (s.phase.kind !== 'awaiting-special-shuffle') return s;
   const phase = s.phase;
-  if (phase.selected.length !== SHUFFLE_PICK_COUNT) return s;
+  if (phase.selected.length < SHUFFLE_PICK_MIN) return s;
+  if (phase.selected.length > SHUFFLE_PICK_MAX) return s;
   const grid = executeShuffle(s.grid, phase.selected, rng);
   const newHand = consumeSpecial(s, phase.cardIdx);
   return log(
     { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
     `Shuffle on ${phase.selected.length} slots`
+  );
+};
+
+const handlePlusMinusTarget = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-plus-minus-target') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  return {
+    ...s,
+    phase: {
+      kind: 'awaiting-special-plus-minus-direction',
+      cardIdx: s.phase.cardIdx,
+      target: slot,
+      returnTo: s.phase.returnTo,
+    },
+  };
+};
+
+const handleResolvePlusMinus = (s: GameState, delta: 1 | -1): GameState => {
+  if (s.phase.kind !== 'awaiting-special-plus-minus-direction') return s;
+  const phase = s.phase;
+  const card = s.grid[phase.target];
+  if (!card || isJoker(card)) return s;
+  const grid = s.grid.slice();
+  grid[phase.target] = { ...card, rank: shiftRank(card.rank, delta) };
+  const newHand = consumeSpecial(s, phase.cardIdx);
+  return log(
+    { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
+    `Plus/Minus ${delta > 0 ? '+1' : '-1'} on slot ${phase.target}`
   );
 };
 
@@ -1327,7 +1390,22 @@ const handleCancelAction = (s: GameState): GameState => {
     case 'awaiting-special-side-slide-pick':
     case 'awaiting-special-jump-source':
     case 'awaiting-special-shuffle':
+    case 'awaiting-special-plus-minus-target':
       return { ...s, phase: { kind: s.phase.returnTo } };
+    case 'awaiting-special-plus-minus-direction':
+      // Step back to target selection so the player can pick a
+      // different card without losing the activation. Keeping the
+      // card-idx threads the consumed flag through cleanly when
+      // they do eventually commit.
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-plus-minus-target',
+          cardIdx: s.phase.cardIdx,
+          slots: supercharchableSlots(s.grid),
+          returnTo: s.phase.returnTo,
+        },
+      };
   }
 };
 
@@ -1352,6 +1430,7 @@ const SNAP_ACTIONS = new Set<Action['type']>([
   'RESOLVE_SIDE_SLIDE',
   'RESOLVE_JUMP',
   'RESOLVE_SHUFFLE',
+  'RESOLVE_PLUS_MINUS',
 ]);
 
 const handleUndo = (s: GameState): GameState => {
@@ -1456,6 +1535,12 @@ export const step = (
       break;
     case 'RESOLVE_SHUFFLE':
       next = handleResolveShuffle(state, rng);
+      break;
+    case 'RESOLVE_PLUS_MINUS_TARGET':
+      next = handlePlusMinusTarget(state, action.slot);
+      break;
+    case 'RESOLVE_PLUS_MINUS':
+      next = handleResolvePlusMinus(state, action.delta);
       break;
   }
   if (next === state) return state;

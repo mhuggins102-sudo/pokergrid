@@ -87,7 +87,8 @@ export interface BonusCard {
     | 'mega-destroy'
     | 'side-slide'
     | 'jump'
-    | 'shuffle';
+    | 'shuffle'
+    | 'plus-minus';
   // True after a one-time-use card has been activated. The card stays
   // in the hand (occupying its slot) but is rendered dimmed and no
   // longer accepts activation. Keeping the spent card around — rather
@@ -177,8 +178,18 @@ export const SHUFFLE_CARD: BonusCard = {
   title: 'Shuffle',
   mult: 'one-time',
   description:
-    'Pick 5 cards on the grid. The cards are pulled, shuffled, and dropped back into the same 5 slots — a card may end up where it started. Consumed on use.',
+    'Pick 3 to 5 cards on the grid. The cards are pulled, shuffled, and dropped back into the same slots — a card may end up where it started. Consumed on use.',
   specialKind: 'shuffle',
+};
+
+export const PLUS_MINUS_CARD: BonusCard = {
+  id: 'special-plus-minus',
+  name: 'Plus/Minus',
+  title: 'Plus/Minus',
+  mult: 'one-time',
+  description:
+    "Pick a card on the grid and bump its rank up or down by 1. Aces wrap to either Kings (−1) or 2s (+1). Joker can't be picked. Consumed on use.",
+  specialKind: 'plus-minus',
 };
 
 // Pool of every one-time action card. Used by the Three Tricks challenge
@@ -192,6 +203,7 @@ export const SPECIAL_DECK_POOL: BonusCard[] = [
   SIDE_SLIDE_CARD,
   JUMP_JUMP_CARD,
   SHUFFLE_CARD,
+  PLUS_MINUS_CARD,
 ];
 
 export const isSpecialCard = (c: BonusCard): boolean =>
