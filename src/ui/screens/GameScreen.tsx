@@ -2320,7 +2320,8 @@ const renderBottom = (
       | 'shuffle'
       | 'thud'
       | 'sparkle'
-      | 'plus-minus'
+      | 'plus'
+      | 'minus'
   ) => void,
   suitOK: boolean,
   drawnKey: string,
@@ -2852,7 +2853,7 @@ const renderBottom = (
                 size="sm"
                 onPress={() => {
                   haptic('light');
-                  playSound('plus-minus');
+                  playSound('minus');
                   dispatch({ type: 'RESOLVE_PLUS_MINUS', delta: -1 });
                 }}
               />
@@ -2862,7 +2863,7 @@ const renderBottom = (
                 size="sm"
                 onPress={() => {
                   haptic('light');
-                  playSound('plus-minus');
+                  playSound('plus');
                   dispatch({ type: 'RESOLVE_PLUS_MINUS', delta: 1 });
                 }}
               />

@@ -218,13 +218,24 @@ def make_sparkle() -> list:
     return buf
 
 
-def make_plus_minus() -> list:
-    """Plus/Minus rank shift — quick two-tone tick (low → high sine
-    pair) that reads as a single-step adjustment. Symmetric across
-    +1 and -1; the player sees the direction in the rendered card."""
-    buf = make_buffer(0.25)
-    add_note(buf, freq=660, dur=0.06, kind='sine', vol=0.18)
-    add_note(buf, freq=990, dur=0.10, delay=0.05, kind='sine', vol=0.18)
+def make_plus() -> list:
+    """Plus/Minus +1 — three ascending sine pulses (C5 → E5 → G5)
+    walking up the rank ladder. Each tick is 70ms with a 60ms step
+    so the ascent reads as a tight three-note climb."""
+    buf = make_buffer(0.35)
+    add_note(buf, freq=523, dur=0.07, kind='sine', vol=0.18)
+    add_note(buf, freq=659, dur=0.07, delay=0.06, kind='sine', vol=0.18)
+    add_note(buf, freq=784, dur=0.10, delay=0.12, kind='sine', vol=0.18)
+    return buf
+
+
+def make_minus() -> list:
+    """Plus/Minus -1 — mirror of make_plus: the same triad reversed
+    so the descent reads as 'rank stepped down'."""
+    buf = make_buffer(0.35)
+    add_note(buf, freq=784, dur=0.07, kind='sine', vol=0.18)
+    add_note(buf, freq=659, dur=0.07, delay=0.06, kind='sine', vol=0.18)
+    add_note(buf, freq=523, dur=0.10, delay=0.12, kind='sine', vol=0.18)
     return buf
 
 
@@ -234,7 +245,8 @@ RECIPES = {
     'shuffle': make_shuffle,
     'thud': make_thud,
     'sparkle': make_sparkle,
-    'plus-minus': make_plus_minus,
+    'plus': make_plus,
+    'minus': make_minus,
 }
 
 

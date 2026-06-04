@@ -21,17 +21,30 @@ interface Props {
 
 export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onUse }: Props) => {
   const { settings } = useSettings();
-  // Stash the most recently shown card so the fade-out animation
-  // keeps rendering valid content after the parent clears `card` on
-  // close. Without this the early-return below killed the modal
-  // instantly and the fade played over an empty backdrop.
+  // Stash the most recently shown content so the fade-out animation
+  // keeps rendering the same body after the parent clears its
+  // nullable props on close. Without this:
+  //   - clearing `card` killed the modal instantly (early-return),
+  //   - clearing `currentValue` collapsed the "Currently contributing"
+  //     row mid-fade,
+  //   - clearing `onUse` hid the Use button mid-fade,
+  // making the close look like the modal "shrinks to an empty box"
+  // before vanishing.
   const lastCardRef = useRef<BonusCard | null>(null);
-  if (card) lastCardRef.current = card;
+  const lastValueRef = useRef<number | undefined>(undefined);
+  const lastOnUseRef = useRef<(() => void) | undefined>(undefined);
+  if (card) {
+    lastCardRef.current = card;
+    lastValueRef.current = currentValue;
+    lastOnUseRef.current = onUse;
+  }
   const cardToShow = card ?? lastCardRef.current;
+  const valueToShow = card ? currentValue : lastValueRef.current;
+  const onUseToShow = card ? onUse : lastOnUseRef.current;
   if (!cardToShow) return null;
   const cat = styleFor(cardToShow);
-  const showValue = currentValue !== undefined;
-  const showUse = !!onUse && isSpecialCard(cardToShow) && !cardToShow.used;
+  const showValue = valueToShow !== undefined;
+  const showUse = !!onUseToShow && isSpecialCard(cardToShow) && !cardToShow.used;
   // Already-used specials surface a small "Already used" note in place
   // of the Use button so the player understands why the action is gone.
   const showUsedNote = isSpecialCard(cardToShow) && !!cardToShow.used;
@@ -77,10 +90,10 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
               <Text
                 style={[
                   styles.valueValue,
-                  currentValue! > 0 && styles.valueActive,
+                  valueToShow! > 0 && styles.valueActive,
                 ]}
               >
-                {currentValue! > 0 ? `+${currentValue}` : currentValue === 0 ? '—' : `${currentValue}`}
+                {valueToShow! > 0 ? `+${valueToShow}` : valueToShow === 0 ? '—' : `${valueToShow}`}
               </Text>
             </View>
           )}
@@ -91,7 +104,7 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
                 variant="primary"
                 size="md"
                 onPress={() => {
-                  onUse?.();
+                  onUseToShow?.();
                   onClose();
                 }}
               />
