@@ -159,11 +159,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
     backgroundColor: colors.bgPanel,
-    borderColor: colors.outline,
+    // Cyan accent border + matching glow — same treatment the
+    // Difficulty / Variants / Challenges info popups use, so all
+    // four read as siblings instead of one carrying an older
+    // gray-outline style.
+    borderColor: colors.accent,
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: spacing.lg,
-    ...glow(colors.accent, 24, 0.25),
+    ...glow(colors.accent, 18, 0.3),
   },
   headerRow: {
     flexDirection: 'row',
