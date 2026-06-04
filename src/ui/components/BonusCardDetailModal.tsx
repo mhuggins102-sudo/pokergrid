@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BonusCard, isSpecialCard } from '../../game/bonusCards';
 import { styleFor } from '../bonusCardCategory';
@@ -21,13 +21,20 @@ interface Props {
 
 export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onUse }: Props) => {
   const { settings } = useSettings();
-  if (!card) return null;
-  const cat = styleFor(card);
+  // Stash the most recently shown card so the fade-out animation
+  // keeps rendering valid content after the parent clears `card` on
+  // close. Without this the early-return below killed the modal
+  // instantly and the fade played over an empty backdrop.
+  const lastCardRef = useRef<BonusCard | null>(null);
+  if (card) lastCardRef.current = card;
+  const cardToShow = card ?? lastCardRef.current;
+  if (!cardToShow) return null;
+  const cat = styleFor(cardToShow);
   const showValue = currentValue !== undefined;
-  const showUse = !!onUse && isSpecialCard(card) && !card.used;
+  const showUse = !!onUse && isSpecialCard(cardToShow) && !cardToShow.used;
   // Already-used specials surface a small "Already used" note in place
   // of the Use button so the player understands why the action is gone.
-  const showUsedNote = isSpecialCard(card) && !!card.used;
+  const showUsedNote = isSpecialCard(cardToShow) && !!cardToShow.used;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -58,11 +65,11 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
               style={[styles.title, { color: cat.titleColor, textShadowColor: cat.titleColor }]}
               numberOfLines={2}
             >
-              {card.title}
+              {cardToShow.title}
             </Text>
-            <Text style={styles.mult} numberOfLines={1}>{card.mult}</Text>
+            <Text style={styles.mult} numberOfLines={1}>{cardToShow.mult}</Text>
           </View>
-          <Text style={styles.desc}>{card.description}</Text>
+          <Text style={styles.desc}>{cardToShow.description}</Text>
 
           {showValue && (
             <View style={styles.valueRow}>
