@@ -621,7 +621,10 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   const stableInspectLine = inspectLine ?? lastInspectLineRef.current;
 
   const inspectCards = useMemo(() => {
-    if (!stableInspectLine) return [];
+    // LineDetailModal calls evaluateLine which throws unless the
+    // array is exactly 5 slots long. Initial render (no inspectLine
+    // yet) gets a 5-null placeholder; the modal is invisible then.
+    if (!stableInspectLine) return [null, null, null, null, null];
     if (stableInspectLine.kind === 'row') {
       return state.grid.slice(stableInspectLine.index * 5, stableInspectLine.index * 5 + 5);
     }

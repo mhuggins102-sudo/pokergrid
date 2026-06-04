@@ -24,11 +24,12 @@ export type SoundKey =
   | 'joker'
   | 'win'
   | 'lose'
-  | 'whoosh'   // Slip & Slide (distinct from regular slide)
-  | 'boing'    // Jump, Jump (cartoon bounce)
-  | 'shuffle'  // Shuffle pre-reveal sweep
-  | 'thud'     // The Doubler (mallet hit on the picked card)
-  | 'sparkle'; // Wildcard (magical twinkle)
+  | 'whoosh'     // Slip & Slide (distinct from regular slide)
+  | 'boing'      // Jump, Jump (cartoon bounce)
+  | 'shuffle'    // Shuffle pre-reveal sweep
+  | 'thud'       // The Doubler (mallet hit on the picked card)
+  | 'sparkle'    // Wildcard (magical twinkle)
+  | 'plus-minus'; // Plus/Minus (rank-shift tick — quick ascending pair)
 
 // ---------- Native (expo-audio + bundled WAVs) ----------
 
@@ -53,6 +54,7 @@ const ASSETS: Partial<Record<SoundKey, number>> = {
   shuffle: require('../../assets/sounds/shuffle.wav'),
   thud: require('../../assets/sounds/thud.wav'),
   sparkle: require('../../assets/sounds/sparkle.wav'),
+  'plus-minus': require('../../assets/sounds/plus-minus.wav'),
 };
 
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
@@ -270,6 +272,15 @@ const playWeb = (k: SoundKey) => {
         { freq: 2093, dur: 0.10, delay: 0.12, type: 'sine', vol: 0.14 },
         { freq: 2640, dur: 0.18, delay: 0.18, type: 'sine', vol: 0.12 },
         { freq: 3520, dur: 0.14, delay: 0.18, type: 'triangle', vol: 0.06 },
+      ]);
+    case 'plus-minus':
+      // Plus/Minus — quick two-tone tick. Low → high sine pair that
+      // reads as "adjusted by one step". Symmetric across +1 and −1
+      // since the visible card on the grid already shows the
+      // direction.
+      return playNotes([
+        { freq: 660, dur: 0.06, type: 'sine', vol: 0.18 },
+        { freq: 990, dur: 0.10, delay: 0.05, type: 'sine', vol: 0.18 },
       ]);
   }
 };
