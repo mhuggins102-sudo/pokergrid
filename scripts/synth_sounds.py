@@ -218,12 +218,23 @@ def make_sparkle() -> list:
     return buf
 
 
+def make_plus_minus() -> list:
+    """Plus/Minus rank shift — quick two-tone tick (low → high sine
+    pair) that reads as a single-step adjustment. Symmetric across
+    +1 and -1; the player sees the direction in the rendered card."""
+    buf = make_buffer(0.25)
+    add_note(buf, freq=660, dur=0.06, kind='sine', vol=0.18)
+    add_note(buf, freq=990, dur=0.10, delay=0.05, kind='sine', vol=0.18)
+    return buf
+
+
 RECIPES = {
     'whoosh': make_whoosh,
     'boing': make_boing,
     'shuffle': make_shuffle,
     'thud': make_thud,
     'sparkle': make_sparkle,
+    'plus-minus': make_plus_minus,
 }
 
 
