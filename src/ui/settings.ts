@@ -13,10 +13,6 @@ export interface Settings {
   // When true, use the standard 2-color playing-card palette (red for ♥/♦,
   // pale-white for ♠/♣) instead of the default 4-color neon palette.
   twoColorDeck: boolean;
-  // True once the player has acknowledged the first-time undo warning
-  // ("undoing taints the run for stats"). Persists so we only show the
-  // confirmation modal once across the lifetime of the app.
-  undoWarningSeen: boolean;
   // First-time contextual hints. Each fires exactly once per device the
   // first time the relevant in-game condition appears (joker on the grid,
   // bonus hand full at 3 cards, a held grid-effect bonus card actually
@@ -46,7 +42,6 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   colorBlindAssist: false,
   twoColorDeck: false,
-  undoWarningSeen: false,
   seenJokerHint: false,
   seenBonusCapHint: false,
   seenGridEffectHint: false,
@@ -66,7 +61,6 @@ export const DEFAULT_SETTINGS: Settings = {
 // "Reset first-time hints" so re-arming them all doesn't mean hand-listing
 // the keys at the call site (and silently missing one when a hint is added).
 export const HINT_KEYS: (keyof Settings)[] = [
-  'undoWarningSeen',
   'seenJokerHint',
   'seenBonusCapHint',
   'seenGridEffectHint',

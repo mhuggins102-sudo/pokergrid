@@ -69,6 +69,13 @@ interface DailyContextValue {
   // Mostly diagnostic — the UI doesn't need to surface it but the
   // RankPanel can use it to show a "re-syncing…" hint if it wants.
   drainingPendingSubmits: boolean;
+  // Monotonically increments after every successful server submit
+  // (live recordCompletion or queue drain). useDailyRank watches it
+  // so the panel re-fetches once the server actually has the row —
+  // the local plays update fires the first fetch before submitDailyPlay
+  // completes, which would otherwise leave the panel stuck on the
+  // initial "rank-pending" read.
+  submitToken: number;
 }
 
 const DailyContext = createContext<DailyContextValue | null>(null);
@@ -93,6 +100,8 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
   const [handle, setHandleState] = useState<string | null>(null);
   const [plays, setPlays] = useState<DailyPlaysMap | null>(null);
   const [drainingPendingSubmits, setDraining] = useState(false);
+  const [submitToken, setSubmitToken] = useState(0);
+  const bumpSubmitToken = useCallback(() => setSubmitToken(t => t + 1), []);
 
   const todayISO = useMemo(() => currentDateISO(), []);
   const todayRecipe = useMemo(() => recipeFor(todayISO), [todayISO]);
@@ -121,6 +130,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
     setDraining(true);
     try {
       const pending = await getPendingSubmits();
+      let anySubmitted = false;
       for (const p of pending) {
         try {
           await submitDailyPlay({
@@ -132,6 +142,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             usedUndo: p.usedUndo,
           });
           await removePendingSubmit(p.deviceId, p.dateISO);
+          anySubmitted = true;
         } catch (e) {
           if (e instanceof AlreadySubmittedError) {
             // The server already has this play. Most likely cause:
@@ -139,6 +150,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             // back to the client; the local write happened and the
             // queue retry collides. Drop the queue entry.
             await removePendingSubmit(p.deviceId, p.dateISO);
+            anySubmitted = true;
             continue;
           }
           if (e instanceof BackendUnavailableError) {
@@ -149,10 +161,11 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
           // drain will retry.
         }
       }
+      if (anySubmitted) bumpSubmitToken();
     } finally {
       setDraining(false);
     }
-  }, []);
+  }, [bumpSubmitToken]);
 
   // First drain runs after the deviceId bootstrap finishes (so the
   // queue isn't drained before we have a device-id to compare against).
@@ -229,9 +242,16 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
           recipe: play.recipe,
           usedUndo: play.state.undoCount > 0,
         });
+        // Server now has the row. Bump the token so useDailyRank
+        // refires its fetch — without this nudge the panel stays
+        // stuck on the rank-pending read that fired the moment
+        // setPlays(next) updated the local map.
+        bumpSubmitToken();
       } catch (e) {
         if (e instanceof AlreadySubmittedError) {
-          // Server already has this play — treat as success.
+          // Server already has this play — treat as success and
+          // bump so the panel refreshes against the existing row.
+          bumpSubmitToken();
           return next;
         }
         // Anything else: queue for later drain. The local write above
@@ -241,7 +261,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       }
       return next;
     },
-    [deviceId]
+    [deviceId, bumpSubmitToken]
   );
 
   const value = useMemo<DailyContextValue>(
@@ -254,6 +274,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       plays,
       recordCompletion,
       drainingPendingSubmits,
+      submitToken,
     }),
     [
       deviceId,
@@ -264,6 +285,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       plays,
       recordCompletion,
       drainingPendingSubmits,
+      submitToken,
     ]
   );
 

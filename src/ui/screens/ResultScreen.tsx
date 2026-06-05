@@ -329,10 +329,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       ? `DAILY · ${context.dateISO}`
       : context.difficulty.toUpperCase();
 
-  // Practice runs: any UNDO during the run "taints" it for stats. We skip
-  // recording entirely so undos can't be used to game the leaderboard.
-  const tainted = state.undoCount > 0;
-
   const tier = tierFor(total, state.target, won);
 
   // ---- Targets Up rewards (S / SS) -----------------------------------
@@ -427,10 +423,8 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   // aren't required OR the modal already completed.
   const advanceReady = !tierRequiresRewards || rewards !== null;
 
-  // Personal-best detection. Tainted runs don't count — they wouldn't be
-  // recorded either, so flagging them as "new best" would be misleading.
   const isNewBest = ((): boolean => {
-    if (tainted || !won) return false;
+    if (!won) return false;
     switch (context.mode) {
       case 'free': {
         const prev = prevStats.byDifficulty[state.difficulty].best;
@@ -457,11 +451,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   //                               Sweep" milestone fires after a
   //                               Challenge win that completes the
   //                               last entry in the catalog.
-  //
-  // Tainted runs (any undo used) earn nothing — undos make every
-  // structural check trivially exploitable.
   const newlyEarnedAchievements: Achievement[] = useMemo(() => {
-    if (tainted) return [];
     // Tiered achievements (easy / hard-extreme) only fire on Free Play
     // wins. Milestones can fire on Free Play OR Challenge runs.
     const isFree = context.mode === 'free';
@@ -532,7 +522,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         !prevStats.achievementsDone.includes(a.id)
     );
   }, [
-    tainted,
     context,
     state,
     report,
@@ -543,12 +532,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   ]);
 
   // Record the run exactly once on mount — applying the correct stats
-  // method based on the play context. Tainted runs skip the stats /
-  // achievement bookkeeping below, BUT we still tear down the Targets
-  // Up save on loss so Home doesn't show "Continue" pointing at a
-  // dead run. Without this guard a tainted TU loss would dangle the
-  // save and the player would see the resume option for a level
-  // they've already failed.
+  // method based on the play context.
   useEffect(() => {
     if (recorded.current) return;
     recorded.current = true;
@@ -560,7 +544,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     if (context.mode === 'targets-up' && !won) {
       clearTUProgress();
     }
-    if (tainted) return;
     // Per-card attribution: pair every held bonus card with its Shapley
     // value so recordRun can fold them into the all-time aggregate that
     // powers the StatsScreen's bonus-card analytics. Strip any "-pwrN"
@@ -610,15 +593,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         break;
     }
     // Achievements fire across every mode, gated only on Hard / Extreme
-    // difficulty and the per-achievement structural condition. Tainted
-    // runs (any undo used) still don't qualify — undos make every
-    // structural check trivially exploitable.
-    if (!tainted) {
-      for (const a of newlyEarnedAchievements) {
-        recordAchievement(a.id);
-      }
+    // difficulty and the per-achievement structural condition.
+    for (const a of newlyEarnedAchievements) {
+      recordAchievement(a.id);
     }
-  }, [record, recordTargetsUp, recordChallenge, recordAchievement, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues, newlyEarnedAchievements, isDaily]);
+  }, [record, recordTargetsUp, recordChallenge, recordAchievement, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, state.bonusCards, bonusValues, newlyEarnedAchievements, isDaily]);
 
   // Daily Grid recording. Fires once on mount for a freshly-finished
   // run; idempotent on re-renders via the ref guard. The full
@@ -708,14 +687,6 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       )}
       {context.mode === 'challenge' && (
         <Text style={styles.modeNote}>{challenge!.goal}</Text>
-      )}
-      {/* Daily Grid grants 1 free undo regardless of difficulty (it's
-          the standard daily ration, not a practice exemption) so the
-          tainted-practice note is suppressed in daily mode. */}
-      {tainted && !isDaily && (
-        <Text style={styles.taintedNote}>
-          Practice run · {state.undoCount} undo{state.undoCount === 1 ? '' : 's'} used · score not recorded
-        </Text>
       )}
 
       {/* Daily plays don't grant achievements — they sit on their own
@@ -1011,21 +982,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     lineHeight: 17,
   },
-  taintedNote: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    textShadowColor: colors.warn,
-    textShadowRadius: 3,
-  },
   // Achievement-earned callout. Joker-violet to match the SS-tier
   // celebration and stand out from the score banner above. Sits
-  // between the banner / tainted notice and the bonus card strip so
+  // between the banner / mode note and the bonus card strip so
   // the player sees it before scanning their final grid.
   achievementBlock: {
     alignSelf: 'center',

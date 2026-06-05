@@ -285,7 +285,6 @@ export const GameScreen = ({
   const [wildPerkOpen, setWildPerkOpen] = useState(false);
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [anim, setAnim] = useState<AnimSpec | null>(null);
-  const [undoWarnOpen, setUndoWarnOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<Set<number> | null>(null);
   // Shuffle reveal sequence — `slots` is the order to drop into,
   // `revealed` counts how many have been un-hidden, and `paused` is
@@ -398,16 +397,6 @@ export const GameScreen = ({
   };
 
   const handleUndoPress = () => {
-    if (settings.undoWarningSeen) {
-      doUndo();
-      return;
-    }
-    setUndoWarnOpen(true);
-  };
-
-  const confirmUndoWarning = () => {
-    updateSettings({ undoWarningSeen: true });
-    setUndoWarnOpen(false);
     doUndo();
   };
 
@@ -1757,11 +1746,6 @@ export const GameScreen = ({
         discards={state.discards}
         perkSpent={state.perkSpent}
       />
-      <UndoWarningModal
-        visible={undoWarnOpen}
-        onCancel={() => setUndoWarnOpen(false)}
-        onConfirm={confirmUndoWarning}
-      />
       <HintModal
         hint={activeHint}
         anchor={hintAnchor}
@@ -2219,85 +2203,6 @@ const wildPerkStyles = StyleSheet.create({
   },
   cancelRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-});
-
-const UndoWarningModal = ({
-  visible,
-  onCancel,
-  onConfirm,
-}: {
-  visible: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) => (
-  <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-    <Pressable style={undoModalStyles.backdrop} onPress={onCancel}>
-      <Pressable style={undoModalStyles.sheet} onPress={() => {}}>
-        <Text style={undoModalStyles.title}>Heads up — undo is for practice</Text>
-        <Text style={undoModalStyles.body}>
-          Using undo marks this run as a practice run. It won't count as a win or
-          loss and no score will be saved to your stats.
-        </Text>
-        <Text style={undoModalStyles.bodySecondary}>
-          You'll only see this warning once.
-        </Text>
-        <View style={undoModalStyles.btnRow}>
-          <NeonButton label="Cancel" variant="secondary" onPress={onCancel} />
-          <NeonButton label="Undo anyway" variant="primary" onPress={onConfirm} />
-        </View>
-      </Pressable>
-    </Pressable>
-  </Modal>
-);
-
-const undoModalStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 4, 12, 0.78)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  sheet: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: colors.bgPanel,
-    borderColor: colors.warn,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    ...glow(colors.warn, 18, 0.3),
-  },
-  title: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
-    textShadowColor: colors.warn,
-    textShadowRadius: 4,
-  },
-  body: {
-    color: colors.textHi,
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: spacing.sm,
-  },
-  bodySecondary: {
-    color: colors.textLow,
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    fontStyle: 'italic',
-    marginBottom: spacing.md,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
     justifyContent: 'flex-end',
   },
 });
