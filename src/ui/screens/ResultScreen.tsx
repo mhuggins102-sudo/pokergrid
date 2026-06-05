@@ -983,8 +983,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   confettiContainer: {
     position: 'absolute',
@@ -1048,8 +1046,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1.5,
-    textShadowColor: colors.joker,
-    textShadowRadius: 2,
     textAlign: 'center',
   },
   achievementDisclosure: {
@@ -1173,13 +1169,9 @@ const styles = StyleSheet.create({
   },
   lineScoreActive: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   lineScorePenalty: {
     color: colors.danger,
-    textShadowColor: colors.danger,
-    textShadowRadius: 2,
   },
   subtotalRow: {
     flexDirection: 'row',
@@ -1220,8 +1212,6 @@ const styles = StyleSheet.create({
   },
   totalScoreWon: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 5,
   },
   penaltyValue: {
     color: colors.danger,

@@ -103,13 +103,13 @@ export const BonusCardsScreen = ({ onBack }: Props) => {
                       >
                         {settings.colorBlindAssist && (
                           <Text
-                            style={[styles.cardIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}
+                            style={[styles.cardIcon, { color: s.iconColor}]}
                           >
                             {s.icon}
                           </Text>
                         )}
                         <Text
-                          style={[styles.cardTitle, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                          style={[styles.cardTitle, { color: s.titleColor}]}
                           numberOfLines={1}
                           adjustsFontSizeToFit
                         >
@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
   groupCount: {
     color: colors.textLow,
     fontWeight: '600',
-    textShadowRadius: 0,
   },
   // Sub-category labels (e.g. "Hand-type bonus") sit one level below the
   // colored tone header. Smaller / dimmer / non-glowing so the eye reads
@@ -219,7 +218,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 16,
     fontWeight: '800',
-    textShadowRadius: 2,
     textAlign: 'center',
     marginBottom: 2,
   },
@@ -229,7 +227,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowRadius: 2,
     textAlign: 'center',
   },
   cardMult: {
@@ -238,8 +235,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
     textAlign: 'center',
     marginTop: 2,
   },

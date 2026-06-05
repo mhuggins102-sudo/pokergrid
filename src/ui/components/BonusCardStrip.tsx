@@ -112,12 +112,12 @@ const BonusChip = ({ card, value, isSelected, onPress }: ChipProps) => {
     >
       <View style={styles.chipTextWrap}>
         {settings.colorBlindAssist && (
-          <Text style={[styles.icon, { color: cat.iconColor, textShadowColor: cat.iconColor }]}>
+          <Text style={[styles.icon, { color: cat.iconColor}]}>
             {cat.icon}
           </Text>
         )}
         <Text
-          style={[styles.title, { color: cat.titleColor, textShadowColor: cat.titleColor }]}
+          style={[styles.title, { color: cat.titleColor}]}
           numberOfLines={1}
           adjustsFontSizeToFit
         >
@@ -204,8 +204,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   valueZero: {
     color: colors.textLow,
@@ -271,7 +269,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0,
-    textShadowRadius: 2,
     lineHeight: 14,
   },
   title: {
@@ -280,7 +277,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     // color + textShadowColor set inline from category tone.
     letterSpacing: 0.5,
-    textShadowRadius: 2,
     textAlign: 'center',
   },
   mult: {
@@ -289,8 +285,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.success,
     letterSpacing: 0.5,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
     textAlign: 'center',
   },
   // Briefly visible category-color wash on the chip when its scoring

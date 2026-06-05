@@ -102,8 +102,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1.5,
-    textShadowColor: colors.joker,
-    textShadowRadius: 2,
     marginBottom: spacing.md,
   },
   sectionLabel: {
@@ -163,8 +161,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     marginLeft: spacing.sm,
-    textShadowColor: colors.joker,
-    textShadowRadius: 2,
   },
   cardDesc: {
     color: colors.textMid,

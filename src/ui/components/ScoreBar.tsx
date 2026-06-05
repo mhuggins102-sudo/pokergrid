@@ -71,7 +71,7 @@ const ScoreReadout = ({
         <Text
           style={[
             styles.scoreValue,
-            { color: accent, textShadowColor: accent },
+            { color: accent},
           ]}
         >
           {score}
@@ -193,7 +193,6 @@ const styles = StyleSheet.create({
   },
   iconTextDisabled: {
     color: colors.textLow,
-    textShadowRadius: 0,
   },
   scoreBlock: {
     flex: 1,
@@ -218,7 +217,6 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '900',
     letterSpacing: 1,
-    textShadowRadius: 5,
   },
   scoreSep: {
     color: colors.textLow,
@@ -242,7 +240,5 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: 2,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
 });

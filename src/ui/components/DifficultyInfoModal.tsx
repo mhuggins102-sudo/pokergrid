@@ -72,7 +72,7 @@ export const DifficultyInfoModal = ({ visible, onClose }: Props) => (
                   styles.cell,
                   styles.diffCell,
                   styles.headerText,
-                  { color: difficultyColor(d), textShadowColor: difficultyColor(d) },
+                  { color: difficultyColor(d)},
                 ]}
               >
                 {DIFF_LABEL[d]}
@@ -195,8 +195,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   labelText: {
     color: colors.textHi,
@@ -213,8 +211,6 @@ const styles = StyleSheet.create({
   },
   checkText: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   crossText: {
     color: colors.danger,

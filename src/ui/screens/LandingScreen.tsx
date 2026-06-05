@@ -198,8 +198,6 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
-    textShadowColor: colors.suitH,
-    textShadowRadius: 3,
   },
   brandTitle: {
     color: colors.textHi,
@@ -244,8 +242,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   handlePillEdit: {
     color: colors.textLow,
@@ -289,8 +285,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   modeBody: {
     color: colors.textMid,

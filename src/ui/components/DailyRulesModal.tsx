@@ -77,7 +77,7 @@ export const DailyRulesModal = ({
             <Text
               style={[
                 styles.recipeValue,
-                { color: diffColor, textShadowColor: diffColor },
+                { color: diffColor},
               ]}
             >
               {DIFFICULTY_LABEL[recipe.difficulty]}
@@ -165,8 +165,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 3,
-    textShadowColor: colors.accent,
-    textShadowRadius: 3,
   },
   closeBtn: {
     color: colors.textMid,
@@ -207,7 +205,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowRadius: 2,
   },
   recipeValueNeutral: {
     color: colors.textHi,
@@ -222,8 +219,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   twistSynopsis: {
     color: colors.textMid,

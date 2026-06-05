@@ -842,7 +842,7 @@ export const TutorialScreen = ({ onDone }: Props) => {
             glow(step.accent, 14, 0.35),
           ]}
         >
-          <Text style={[styles.kicker, { color: step.accent, textShadowColor: step.accent }]}>
+          <Text style={[styles.kicker, { color: step.accent}]}>
             {step.kicker}
           </Text>
           <Text style={styles.title}>{step.title}</Text>
@@ -943,7 +943,6 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     fontWeight: '800',
     marginBottom: spacing.sm,
-    textShadowRadius: 3,
   },
   title: {
     fontFamily: fonts.mono,
@@ -1099,8 +1098,6 @@ const demoStyles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   valuesBlock: {
     width: '100%',
@@ -1127,8 +1124,6 @@ const demoStyles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   lineRow: {
     flexDirection: 'row',
@@ -1209,8 +1204,6 @@ const demoStyles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 18,
     fontWeight: '800',
-    textShadowColor: colors.success,
-    textShadowRadius: 3,
   },
   tipRow: {
     flexDirection: 'row',

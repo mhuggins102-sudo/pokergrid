@@ -202,8 +202,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     minWidth: 40,
     textAlign: 'right',
-    textShadowColor: colors.success,
-    textShadowRadius: 3,
   },
   divider: { height: 1, backgroundColor: colors.outline, marginVertical: spacing.md },
   sectionLabel: {

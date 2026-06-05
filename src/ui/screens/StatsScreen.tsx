@@ -108,7 +108,7 @@ const TierHistogram = ({ counts }: { counts: Record<Tier, number> }) => {
         const color = TIER_COLOR[t];
         return (
           <View key={t} style={styles.histRow}>
-            <Text style={[styles.histTier, { color, textShadowColor: color }]}>
+            <Text style={[styles.histTier, { color}]}>
               {t}
             </Text>
             <View style={styles.histBarTrack}>
@@ -507,8 +507,6 @@ const styles = StyleSheet.create({
   },
   toggleLabelActive: {
     color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   summaryBlock: { gap: 4, marginTop: spacing.md },
   summaryRow: {
@@ -545,8 +543,6 @@ const styles = StyleSheet.create({
   },
   summaryValueActive: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 3,
   },
   activeBadge: {
     backgroundColor: 'rgba(255, 183, 74, 0.18)',
@@ -563,8 +559,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   // Score-distribution histogram. One horizontal bar per tier; the bar
   // width is the tier's run count normalized to the largest bin in the
@@ -589,7 +583,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
-    textShadowRadius: 2,
   },
   histBarTrack: {
     flex: 1,
@@ -652,8 +645,6 @@ const styles = StyleSheet.create({
   },
   recentScoreWon: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   recentTarget: {
     fontFamily: fonts.mono,
@@ -669,7 +660,6 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     width: 16,
     textAlign: 'center',
-    textShadowRadius: 2,
   },
   bonusBlock: { gap: 2 },
   bonusRow: {
@@ -713,8 +703,6 @@ const styles = StyleSheet.create({
   },
   bonusHeaderActive: {
     color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   bonusSwatch: {
     width: 8,
@@ -756,8 +744,6 @@ const styles = StyleSheet.create({
   },
   bonusNumberActive: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   bonusNumberLoss: {
     color: colors.danger,

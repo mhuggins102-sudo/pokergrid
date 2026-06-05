@@ -2059,8 +2059,6 @@ const hintModalStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 1,
-    textShadowColor: colors.accent,
-    textShadowRadius: 3,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
@@ -2177,8 +2175,6 @@ const wildPerkStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 1,
-    textShadowColor: colors.joker,
-    textShadowRadius: 3,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
@@ -2892,12 +2888,12 @@ const renderBottom = (
                 }}
               >
                 {colorBlindAssist && (
-                  <Text style={[styles.bonusIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}>
+                  <Text style={[styles.bonusIcon, { color: s.iconColor}]}>
                     {s.icon}
                   </Text>
                 )}
                 <Text
-                  style={[styles.bonusName, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                  style={[styles.bonusName, { color: s.titleColor}]}
                   numberOfLines={2}
                 >
                   {b.title} <Text style={styles.bonusMult}>{b.mult}</Text>
@@ -2965,12 +2961,12 @@ const renderBottom = (
                 }}
               >
                 {colorBlindAssist && (
-                  <Text style={[styles.bonusIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}>
+                  <Text style={[styles.bonusIcon, { color: s.iconColor}]}>
                     {s.icon}
                   </Text>
                 )}
                 <Text
-                  style={[styles.bonusName, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                  style={[styles.bonusName, { color: s.titleColor}]}
                   numberOfLines={2}
                 >
                   {b.title} <Text style={styles.bonusMult}>{b.mult}</Text>
@@ -3075,8 +3071,6 @@ const styles = StyleSheet.create({
   },
   deckUnderDrawnLink: {
     color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   perkUnderDrawn: {
     color: colors.textLow,
@@ -3128,8 +3122,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
     textAlign: 'center',
     marginBottom: 2,
   },
@@ -3160,7 +3152,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowRadius: 2,
     marginBottom: 2,
   },
   bonusName: {
@@ -3169,7 +3160,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     // color + textShadowColor set inline from category tone.
     letterSpacing: 0.5,
-    textShadowRadius: 2,
   },
   bonusMult: {
     fontFamily: fonts.mono,

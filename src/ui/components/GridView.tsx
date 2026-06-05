@@ -278,8 +278,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     opacity: 1,
     fontSize: 17,
-    textShadowColor: colors.accent,
-    textShadowRadius: 3,
   },
   nextPulse: {
     position: 'absolute',

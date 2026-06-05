@@ -213,8 +213,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     marginBottom: 2,
-    textShadowColor: colors.danger,
-    textShadowRadius: 2,
   },
   errorBody: {
     color: colors.textLow,

@@ -76,7 +76,7 @@ export const TierBreakdownModal = ({ visible, target, showRewards, onClose }: Pr
                 <Text
                   style={[
                     styles.tierBadge,
-                    { color: accent, borderColor: accent, textShadowColor: accent },
+                    { color: accent, borderColor: accent},
                   ]}
                 >
                   {rule.tier}
@@ -170,7 +170,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderWidth: 1,
     borderRadius: radius.pill,
-    textShadowRadius: 2,
     width: 36,
     textAlign: 'center',
   },
