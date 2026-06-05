@@ -68,6 +68,23 @@ export interface RankSnapshot {
   topPercent: number; // 1..100, smaller is better
 }
 
+export interface TopScoreEntry {
+  rank: number;
+  displayName: string;
+  score: number;
+  isOwn: boolean;
+}
+
+export interface DailyStatsSnapshot {
+  median: number | null;
+  total: number;
+  // Whole-percent share of players who beat the target. Server-side
+  // count off the `won` boolean column, so it reflects each player's
+  // recorded recipe even if the global config drifts.
+  winRatePct: number | null;
+  topScores: TopScoreEntry[];
+}
+
 export interface HistogramBin {
   lo: number;
   hi: number;
@@ -160,6 +177,45 @@ export const fetchHistogram = async (
     min: h.min ?? null,
     max: h.max ?? null,
     total: h.total ?? 0,
+  };
+};
+
+// Top N + median + win-rate. Backs the DailyStatsModal that opens
+// from the result-screen rank panel. Lazy-fetched on modal open
+// rather than upfront because most players never tap through.
+export const fetchDailyStats = async (
+  deviceId: string,
+  dateISO: string,
+  limit: number = 10
+): Promise<DailyStatsSnapshot> => {
+  const c = requireClient();
+  const { data, error } = await c.rpc('daily_top_scores', {
+    p_device_id: deviceId,
+    p_date: dateISO,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  const raw = (data ?? {}) as {
+    median?: number | null;
+    total?: number;
+    win_rate_pct?: number | null;
+    top_scores?: Array<{
+      rank: number;
+      display_name: string;
+      score: number;
+      is_own: boolean;
+    }>;
+  };
+  return {
+    median: raw.median ?? null,
+    total: raw.total ?? 0,
+    winRatePct: raw.win_rate_pct ?? null,
+    topScores: (raw.top_scores ?? []).map(r => ({
+      rank: r.rank,
+      displayName: r.display_name,
+      score: r.score,
+      isOwn: r.is_own,
+    })),
   };
 };
 

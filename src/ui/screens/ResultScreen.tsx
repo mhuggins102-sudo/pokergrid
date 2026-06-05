@@ -241,7 +241,13 @@ const BannerHero = ({
 export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
-  const [linesExpanded, setLinesExpanded] = useState(false);
+  // Score math is hidden behind a single top-level disclosure now. The
+  // previous per-line accordion (linesExpanded) merged into this — when
+  // a player opens the math they want all of it.
+  const [mathExpanded, setMathExpanded] = useState(false);
+  // Achievement descriptions tap-expand; collapsed by default to a
+  // single line of names.
+  const [achievementsExpanded, setAchievementsExpanded] = useState(false);
   const {
     stats,
     record,
@@ -689,20 +695,32 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         <Text style={styles.modeNote}>{challenge!.goal}</Text>
       )}
 
-      {/* Daily plays don't grant achievements — they sit on their own
-          ladder. */}
+      {/* Slim achievement row — heading summarizes ("✦ Comeback Win"
+          or "✦ 2 achievements earned"); tapping expands to show
+          descriptions. Daily plays don't grant achievements so this
+          block stays hidden for daily mode entirely. */}
       {!isDaily && newlyEarnedAchievements.length > 0 && (
-        <View style={styles.achievementBlock}>
+        <Pressable
+          style={styles.achievementBlock}
+          onPress={() => setAchievementsExpanded(v => !v)}
+        >
           <Text style={styles.achievementHeading}>
-            ✦ Achievement{newlyEarnedAchievements.length === 1 ? '' : 's'} earned
+            ✦{' '}
+            {newlyEarnedAchievements.length === 1
+              ? newlyEarnedAchievements[0].name
+              : `${newlyEarnedAchievements.length} achievements earned`}
+            {'  '}
+            <Text style={styles.achievementDisclosure}>
+              {achievementsExpanded ? '▾' : '▸'}
+            </Text>
           </Text>
-          {newlyEarnedAchievements.map(a => (
+          {achievementsExpanded && newlyEarnedAchievements.map(a => (
             <View key={a.id} style={styles.achievementRow}>
               <Text style={styles.achievementName}>{a.name}</Text>
               <Text style={styles.achievementDesc}>{a.description}</Text>
             </View>
           ))}
-        </View>
+        </Pressable>
       )}
 
       <BonusCardStrip
@@ -726,73 +744,78 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         />
       </View>
 
-      <View style={styles.breakdownBlock}>
-        <Text style={styles.sectionLabel}>Score Breakdown</Text>
+      {/* Score math — collapsed by default. The previous Score
+          Breakdown block (per-line accordion + subtotal rows + total)
+          is now hidden behind this single disclosure. Players can
+          still inspect individual lines by tapping cells on the grid
+          above. */}
+      <Pressable
+        style={styles.mathDisclosure}
+        onPress={() => setMathExpanded(v => !v)}
+      >
+        <Text style={styles.mathDisclosureLabel}>
+          {mathExpanded ? '▾' : '▸'} Score math
+        </Text>
+        <Text style={styles.mathDisclosureHint}>
+          {scoredLines.filter(l => l.total !== 0).length} of 10 lines scoring
+        </Text>
+      </Pressable>
 
-        <Pressable
-          style={styles.accordionHeader}
-          onPress={() => setLinesExpanded(v => !v)}
-        >
-          <Text style={styles.accordionLabel}>
-            {linesExpanded ? '▼' : '▶'} Per-line scores
-          </Text>
-          <Text style={styles.accordionHint}>
-            {scoredLines.filter(l => l.total !== 0).length} of 10 scoring
-          </Text>
-        </Pressable>
-
-        {linesExpanded && scoredLines.map(line => (
-          <Pressable
-            key={`${line.kind}-${line.index}`}
-            onPress={() => setInspectLine({ kind: line.kind, index: line.index })}
-            style={[
-              styles.lineRow,
-              line.total > 0 && styles.lineRowActive,
-              line.total < 0 && styles.lineRowPenalty,
-            ]}
-          >
-            <Text style={styles.lineLabel}>
-              {line.kind === 'row' ? `R${line.index + 1}` : `C${line.index + 1}`}
-            </Text>
-            <Text style={styles.lineHand}>
-              {line.hand ? HAND_LABEL[line.hand] : line.incomplete ? 'Incomplete' : '—'}
-            </Text>
-            <Text
+      {mathExpanded && (
+        <View style={styles.breakdownBlock}>
+          {scoredLines.map(line => (
+            <Pressable
+              key={`${line.kind}-${line.index}`}
+              onPress={() => setInspectLine({ kind: line.kind, index: line.index })}
               style={[
-                styles.lineScore,
-                line.total < 0 && styles.lineScorePenalty,
-                line.total > 0 && styles.lineScoreActive,
+                styles.lineRow,
+                line.total > 0 && styles.lineRowActive,
+                line.total < 0 && styles.lineRowPenalty,
               ]}
             >
-              {line.total}
-            </Text>
-          </Pressable>
-        ))}
+              <Text style={styles.lineLabel}>
+                {line.kind === 'row' ? `R${line.index + 1}` : `C${line.index + 1}`}
+              </Text>
+              <Text style={styles.lineHand}>
+                {line.hand ? HAND_LABEL[line.hand] : line.incomplete ? 'Incomplete' : '—'}
+              </Text>
+              <Text
+                style={[
+                  styles.lineScore,
+                  line.total < 0 && styles.lineScorePenalty,
+                  line.total > 0 && styles.lineScoreActive,
+                ]}
+              >
+                {line.total}
+              </Text>
+            </Pressable>
+          ))}
 
-        <View style={styles.subtotalRow}>
-          <Text style={styles.totalLabel}>Subtotal</Text>
-          <Text style={styles.subtotalValue}>{subtotal}</Text>
-        </View>
-        {incompletePenalty < 0 && (
           <View style={styles.subtotalRow}>
-            <Text style={styles.totalLabel}>Incomplete (in subtotal)</Text>
-            <Text style={styles.penaltyValue}>{incompletePenalty}</Text>
+            <Text style={styles.totalLabel}>Subtotal</Text>
+            <Text style={styles.subtotalValue}>{subtotal}</Text>
           </View>
-        )}
-        {(gridMultiplier !== 1 || gridFlat !== 0) && (
-          <View style={styles.subtotalRow}>
-            <Text style={styles.totalLabel}>Grid achievements</Text>
-            <Text style={styles.subtotalValue}>
-              {gridMultiplier !== 1 ? `× ${gridMultiplier.toFixed(2)}` : ''}
-              {gridFlat !== 0 ? ` + ${gridFlat}` : ''}
-            </Text>
+          {incompletePenalty < 0 && (
+            <View style={styles.subtotalRow}>
+              <Text style={styles.totalLabel}>Incomplete (in subtotal)</Text>
+              <Text style={styles.penaltyValue}>{incompletePenalty}</Text>
+            </View>
+          )}
+          {(gridMultiplier !== 1 || gridFlat !== 0) && (
+            <View style={styles.subtotalRow}>
+              <Text style={styles.totalLabel}>Grid achievements</Text>
+              <Text style={styles.subtotalValue}>
+                {gridMultiplier !== 1 ? `× ${gridMultiplier.toFixed(2)}` : ''}
+                {gridFlat !== 0 ? ` + ${gridFlat}` : ''}
+              </Text>
+            </View>
+          )}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={[styles.totalScore, won && styles.totalScoreWon]}>{total}</Text>
           </View>
-        )}
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={[styles.totalScore, won && styles.totalScoreWon]}>{total}</Text>
         </View>
-      </View>
+      )}
 
       <View style={styles.btnRow}>
         {context.mode === 'targets-up' ? (
@@ -986,40 +1009,46 @@ const styles = StyleSheet.create({
   // celebration and stand out from the score banner above. Sits
   // between the banner / mode note and the bonus card strip so
   // the player sees it before scanning their final grid.
+  // Slim achievement strip. Joker-violet to keep the celebratory tone
+  // but smaller padding / no full bordered panel so it reads as a
+  // ribbon rather than a third stacked card.
   achievementBlock: {
     alignSelf: 'center',
     width: '100%',
     maxWidth: 320,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: 'rgba(184, 130, 255, 0.10)',
     borderColor: colors.joker,
     borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    paddingVertical: 6,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
-    ...glow(colors.joker, 10, 0.5),
   },
   achievementHeading: {
     color: colors.joker,
     fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 2.5,
-    textTransform: 'uppercase',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
     textShadowColor: colors.joker,
-    textShadowRadius: 4,
+    textShadowRadius: 3,
     textAlign: 'center',
-    marginBottom: spacing.xs,
+  },
+  achievementDisclosure: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    letterSpacing: 1,
   },
   achievementRow: {
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   achievementName: {
     color: colors.textHi,
     fontFamily: fonts.mono,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   achievementDesc: {
     color: colors.textMid,
@@ -1044,49 +1073,43 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   gridArea: { paddingVertical: spacing.xs },
-  sectionLabel: {
-    color: colors.textMid,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
-    letterSpacing: 2,
-    fontWeight: '800',
-  },
-  // Narrower than the rest of the page so the breakdown reads less like a
-  // full-screen sheet. The button row uses the same maxWidth so it visually
-  // pairs with the breakdown block beneath the grid.
-  breakdownBlock: {
-    marginTop: spacing.md,
+  // Top-level disclosure for the score math. Tap toggles mathExpanded;
+  // collapsed shows just the label + a lightweight teaser ("X of 10
+  // lines scoring"). Borderless to keep first-paint quiet.
+  mathDisclosure: {
     alignSelf: 'center',
     width: '100%',
     maxWidth: 320,
-  },
-  accordionHeader: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    marginBottom: spacing.xs,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgPanel,
-    borderWidth: 1,
-    borderColor: colors.outlineSoft,
+    borderBottomColor: colors.outlineSoft,
+    borderBottomWidth: 1,
   },
-  accordionLabel: {
+  mathDisclosureLabel: {
     color: colors.textHi,
     fontFamily: fonts.mono,
     fontSize: 12,
-    letterSpacing: 1.5,
+    letterSpacing: 2,
     fontWeight: '800',
     textTransform: 'uppercase',
   },
-  accordionHint: {
+  mathDisclosureHint: {
     color: colors.textLow,
     fontFamily: fonts.mono,
     fontSize: 10,
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+  },
+  // The expanded math body. Narrower than the rest of the page so the
+  // breakdown reads less like a full-screen sheet.
+  breakdownBlock: {
+    marginTop: spacing.sm,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
   },
   lineRow: {
     flexDirection: 'row',
