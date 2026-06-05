@@ -255,7 +255,7 @@ const modalStyles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   body: {
     color: colors.textMid,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
-    textShadowRadius: 5,
+    textShadowRadius: 3,
   },
   // "target N" / "best N" use the same sans body voice as the mode
   // card descriptions ("Climb the ladder…") rather than the mono
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   modesCol: { gap: spacing.sm },
   modeCard: {
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   // Stats card uses the accent (cyan) tint so it visually separates
   // from the warn-amber Targets-Up and Challenges variants.
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     fontWeight: '800',
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   modeBestJoker: {
     color: colors.joker,
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     fontWeight: '800',
     textShadowColor: colors.joker,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   modeBody: {
     color: colors.textMid,
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   modeSecondaryCta: {
     color: colors.textLow,

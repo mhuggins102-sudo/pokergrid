@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   labelText: {
     color: colors.textHi,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   checkText: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   crossText: {
     color: colors.danger,

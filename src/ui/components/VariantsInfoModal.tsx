@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },

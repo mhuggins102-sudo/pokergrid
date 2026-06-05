@@ -2060,7 +2060,7 @@ const hintModalStyles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textShadowColor: colors.accent,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
@@ -2178,7 +2178,7 @@ const wildPerkStyles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textShadowColor: colors.joker,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
@@ -3076,7 +3076,7 @@ const styles = StyleSheet.create({
   deckUnderDrawnLink: {
     color: colors.accent,
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   perkUnderDrawn: {
     color: colors.textLow,
@@ -3129,7 +3129,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textShadowColor: colors.warn,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     textAlign: 'center',
     marginBottom: 2,
   },
@@ -3160,7 +3160,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowRadius: 4,
+    textShadowRadius: 2,
     marginBottom: 2,
   },
   bonusName: {
@@ -3169,7 +3169,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     // color + textShadowColor set inline from category tone.
     letterSpacing: 0.5,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   bonusMult: {
     fontFamily: fonts.mono,

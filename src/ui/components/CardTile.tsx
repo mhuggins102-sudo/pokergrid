@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     color: colors.warn,
     letterSpacing: 0.5,
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   dimmed: { opacity: 0.4 },
   highlighted: {

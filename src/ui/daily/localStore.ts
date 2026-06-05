@@ -5,6 +5,7 @@
 // device play this date?" and for re-rendering past results offline.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { hydrateBonusCards } from '../../game/bonusCards';
 import type { GameState } from '../../game/state';
 import type { DailyRecipe } from '../../game/daily/recipe';
 
@@ -75,12 +76,33 @@ export interface DailyPlay {
 
 export type DailyPlaysMap = Record<string, DailyPlay>;
 
+// Rehydrate a stored play's GameState. JSON.stringify drops the
+// function fields on BonusCard (lineEffect / gridEffect), so without
+// this fix the bonus chips on a re-entered daily show 0 contributions
+// across the board (the "dash above each card" bug). bonusCards +
+// bonusDeck are both restored so the state is internally consistent
+// even if the result screen only renders bonusCards directly.
+const hydratePlay = (play: DailyPlay): DailyPlay => ({
+  ...play,
+  state: {
+    ...play.state,
+    bonusCards: hydrateBonusCards(play.state.bonusCards),
+    bonusDeck: hydrateBonusCards(play.state.bonusDeck),
+  },
+});
+
 export const getPlays = async (): Promise<DailyPlaysMap> => {
   const raw = await AsyncStorage.getItem(KEY_PLAYS);
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed as DailyPlaysMap;
+    if (parsed && typeof parsed === 'object') {
+      const out: DailyPlaysMap = {};
+      for (const [k, v] of Object.entries(parsed as DailyPlaysMap)) {
+        out[k] = hydratePlay(v);
+      }
+      return out;
+    }
   } catch {
     // Corrupt save — start fresh. Phase 4 may add a recovery path.
   }

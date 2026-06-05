@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   kicker: {
     color: colors.textLow,
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   mult: {
     color: colors.success,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   desc: {
     color: colors.textMid,
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   valueActive: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   useRow: {
     marginTop: spacing.lg,

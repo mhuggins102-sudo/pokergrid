@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   disabled: {
     opacity: 0.4,

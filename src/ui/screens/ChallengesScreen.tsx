@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     marginBottom: spacing.md,
   },
   list: { gap: spacing.sm },
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 5,
+    textShadowRadius: 3,
   },
   cardTitleDone: {
     color: colors.success,
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginLeft: spacing.sm,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   // Generous tap target for the ⓘ icon — anchored to the right edge
   // of the top row so the player can land on the rightmost ~60px of
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     textShadowColor: colors.accent,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   // Target + synopsis share the original body-text styling. Both
   // sit in the same visual register as the old single-line goal
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2.5,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 5,
+    textShadowRadius: 3,
   },
   modalCloseBtn: {
     color: colors.textMid,
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.sm,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   modalDesc: {
     color: colors.textMid,

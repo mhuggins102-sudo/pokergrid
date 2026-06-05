@@ -154,7 +154,7 @@ const RankCell = ({
       style={[
         styles.rankText,
         present
-          ? { color, textShadowColor: color, textShadowRadius: 3 }
+          ? { color, textShadowColor: color, textShadowRadius: 2 }
           : { color: colors.textLow, textDecorationLine: 'line-through' },
       ]}
     >
@@ -180,7 +180,7 @@ const JokerCell = ({ present }: { present: boolean }) => (
       style={[
         styles.rankText,
         present
-          ? { color: colors.joker, textShadowColor: colors.joker, textShadowRadius: 3 }
+          ? { color: colors.joker, textShadowColor: colors.joker, textShadowRadius: 2 }
           : { color: colors.textLow },
       ]}
     >
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   suitCount: {
     color: colors.textMid,

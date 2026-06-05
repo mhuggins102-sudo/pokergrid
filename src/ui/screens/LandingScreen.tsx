@@ -48,7 +48,7 @@ const NeonBrand = () => {
     return () => cancelAnimation(pulse);
   }, [settings.reduceMotion, pulse]);
   const style = useAnimatedStyle(() => ({
-    textShadowRadius: 4 + pulse.value * 14,
+    textShadowRadius: 2 + pulse.value * 14,
     opacity: 0.85 + pulse.value * 0.15,
   }));
   return <Animated.Text style={[styles.brandTitle, style]}>POKERGRID</Animated.Text>;
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
     textShadowColor: colors.suitH,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   brandTitle: {
     color: colors.textHi,
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   handlePillEdit: {
     color: colors.textLow,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   modeTitleDaily: {
     color: colors.accent,
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   modeBody: {
     color: colors.textMid,
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   // Daily card splits its CTA row in two: the primary action (play /
   // view) on the left, the archive link on the right.

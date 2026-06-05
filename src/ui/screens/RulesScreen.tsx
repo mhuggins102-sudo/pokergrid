@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     width: 28,
     textAlign: 'center',
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   perkText: { flex: 1 },
   perkName: {

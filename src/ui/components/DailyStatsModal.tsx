@@ -51,12 +51,12 @@ export const DailyStatsModal = ({ visible, dateISO, onClose }: Props) => {
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!visible) {
-      setStatus('idle');
-      setStats(null);
-      setErrorDetail(null);
-      return;
-    }
+    // When the modal closes, leave status/stats/errorDetail in place
+    // so the fade-out animation keeps rendering the last-shown body
+    // — otherwise the sheet collapses to an empty box for a frame.
+    // The next open immediately bumps status to 'loading', which
+    // takes over rendering before any stale data shows through.
+    if (!visible) return;
     if (!isBackendConfigured()) {
       setStatus('unavailable');
       return;
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2.5,
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     marginBottom: 4,
   },
   title: {
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   statValueAccent: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   divider: {
     height: 1,
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   rowRankOwn: {
     color: colors.accent,
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   rowName: {
     flex: 1,
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '800',
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   rowScore: {
     color: colors.textHi,
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   rowScoreOwn: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   gapNote: {
     color: colors.textLow,

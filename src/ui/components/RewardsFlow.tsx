@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
     textAlign: 'center',
   },
   chipMult: {
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     textShadowColor: colors.joker,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
     textAlign: 'center',
     marginTop: spacing.sm,
   },

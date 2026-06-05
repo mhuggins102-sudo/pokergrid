@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '900',
     letterSpacing: 1,
-    textShadowRadius: 10,
+    textShadowRadius: 5,
   },
   scoreSep: {
     color: colors.textLow,
@@ -243,6 +243,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 2,
     textShadowColor: colors.warn,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
 });

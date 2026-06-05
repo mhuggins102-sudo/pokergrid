@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: spacing.sm,
     textShadowColor: colors.danger,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   warnLine: {
     color: colors.warn,
