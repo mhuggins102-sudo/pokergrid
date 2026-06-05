@@ -665,8 +665,26 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     return out;
   }, [state.grid, stableInspectLine]);
 
+  // Auto-scroll to the bottom of the score-math section when the
+  // player taps to expand it — without this they have to scroll
+  // manually past the grid + button row to see what they just opened.
+  // Closing the disclosure leaves the scroll position alone.
+  const scrollRef = useRef<ScrollView>(null);
+  const onToggleMath = () => {
+    setMathExpanded(prev => {
+      const next = !prev;
+      if (next) {
+        // Wait one tick for the breakdown block to mount before
+        // measuring; otherwise scrollToEnd reads the pre-expand
+        // contentHeight and stops short.
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+      }
+      return next;
+    });
+  };
+
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.content}>
       {isDaily && context.mode === 'daily' ? (
         <RankPanel
           dateISO={context.dateISO}
@@ -751,7 +769,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           above. */}
       <Pressable
         style={styles.mathDisclosure}
-        onPress={() => setMathExpanded(v => !v)}
+        onPress={onToggleMath}
       >
         <Text style={styles.mathDisclosureLabel}>
           {mathExpanded ? '▾' : '▸'} Score math
@@ -948,7 +966,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 2,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   bestBadge: {
     marginTop: spacing.xs,
@@ -966,7 +984,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   confettiContainer: {
     position: 'absolute',
@@ -992,7 +1010,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 4,
-    textShadowRadius: 8,
+    textShadowRadius: 4,
     marginBottom: spacing.xs,
   },
   modeNote: {
@@ -1031,7 +1049,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textShadowColor: colors.joker,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     textAlign: 'center',
   },
   achievementDisclosure: {
@@ -1062,7 +1080,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     letterSpacing: 2,
-    textShadowRadius: 14,
+    textShadowRadius: 7,
   },
   bannerTarget: {
     fontFamily: fonts.mono,
@@ -1156,12 +1174,12 @@ const styles = StyleSheet.create({
   lineScoreActive: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   lineScorePenalty: {
     color: colors.danger,
     textShadowColor: colors.danger,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   subtotalRow: {
     flexDirection: 'row',
@@ -1203,7 +1221,7 @@ const styles = StyleSheet.create({
   totalScoreWon: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 10,
+    textShadowRadius: 5,
   },
   penaltyValue: {
     color: colors.danger,

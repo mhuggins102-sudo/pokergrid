@@ -1140,3 +1140,45 @@ export const universalEffectSum = (
   }
   return { multiplier, flat };
 };
+
+// Re-attach lineEffect / gridEffect / negatesIncompletePenalty after a
+// JSON.parse roundtrip. The effect *functions* are stripped by
+// JSON.stringify, so re-running scoring against a raw-parsed card
+// returns 0 contributions for every bonus chip — that's the
+// "bonus cards show a dash" bug on re-entered daily plays. The
+// canonical card is looked up by base id in BONUS_DECK_POOL or
+// SPECIAL_DECK_POOL, and power-ups are re-applied to match the
+// saved powerLevel. Placeholders and unknown ids fall through
+// unchanged so rendering doesn't crash.
+//
+// Runtime-mutable fields (`used` for one-time specials) are copied
+// over the rehydrated card so a spent Doubler stays spent on reload.
+export const hydrateBonusCard = (raw: BonusCard): BonusCard => {
+  // Placeholders carry no logic in the first place — return as-is.
+  if (raw.placeholderKind) return raw;
+
+  const baseId = raw.id.replace(/-pwr\d+$/, '');
+  const fromPool =
+    BONUS_DECK_POOL.find(p => p.id === baseId) ??
+    SPECIAL_DECK_POOL.find(p => p.id === baseId);
+  if (!fromPool) {
+    // Unknown id — nothing to rehydrate against. The chip still
+    // renders from its display fields; scoring just won't see it.
+    return raw;
+  }
+
+  let card = fromPool;
+  const powerLevel = raw.powerLevel ?? 0;
+  for (let i = 0; i < powerLevel; i++) {
+    card = powerUpBonusCard(card);
+  }
+
+  // Preserve runtime-mutable state from the saved card.
+  if (raw.used !== undefined) {
+    card = { ...card, used: raw.used };
+  }
+  return card;
+};
+
+export const hydrateBonusCards = (cards: BonusCard[]): BonusCard[] =>
+  cards.map(hydrateBonusCard);

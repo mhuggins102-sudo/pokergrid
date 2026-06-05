@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   valueZero: {
     color: colors.textLow,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
     lineHeight: 14,
   },
   title: {
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     // color + textShadowColor set inline from category tone.
     letterSpacing: 0.5,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
     textAlign: 'center',
   },
   mult: {
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     color: colors.success,
     letterSpacing: 0.5,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     textAlign: 'center',
   },
   // Briefly visible category-color wash on the chip when its scoring

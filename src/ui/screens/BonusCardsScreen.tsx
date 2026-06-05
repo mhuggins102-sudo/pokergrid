@@ -169,17 +169,17 @@ const styles = StyleSheet.create({
   groupLabelYellow: {
     color: colors.warn,
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   groupLabelPurple: {
     color: colors.joker,
     textShadowColor: colors.joker,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   groupLabelGreen: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   groupCount: {
     color: colors.textLow,
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 16,
     fontWeight: '800',
-    textShadowRadius: 4,
+    textShadowRadius: 2,
     textAlign: 'center',
     marginBottom: 2,
   },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     textAlign: 'center',
   },
   cardMult: {
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     textAlign: 'center',
     marginTop: 2,
   },

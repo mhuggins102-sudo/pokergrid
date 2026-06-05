@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     fontWeight: '800',
     marginBottom: spacing.sm,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   title: {
     fontFamily: fonts.mono,
@@ -1100,7 +1100,7 @@ const demoStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   valuesBlock: {
     width: '100%',
@@ -1128,7 +1128,7 @@ const demoStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   lineRow: {
     flexDirection: 'row',
@@ -1210,7 +1210,7 @@ const demoStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     textShadowColor: colors.success,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   tipRow: {
     flexDirection: 'row',

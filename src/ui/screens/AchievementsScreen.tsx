@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textShadowColor: colors.joker,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     marginBottom: spacing.md,
   },
   sectionLabel: {
@@ -118,19 +118,19 @@ const styles = StyleSheet.create({
   sectionLabelEasy: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   sectionLabelHard: {
     color: colors.warn,
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   // Milestones — accent (cyan) so the tier reads as "all-up" / cross-
   // mode goals rather than tied to a single difficulty's color.
   sectionLabelMilestone: {
     color: colors.accent,
     textShadowColor: colors.accent,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   list: { gap: spacing.sm },
   card: {
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   cardNameDone: {
     color: colors.joker,
     textShadowColor: colors.joker,
-    textShadowRadius: 5,
+    textShadowRadius: 3,
   },
   cardBadge: {
     color: colors.joker,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginLeft: spacing.sm,
     textShadowColor: colors.joker,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   cardDesc: {
     color: colors.textMid,

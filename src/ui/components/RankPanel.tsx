@@ -56,39 +56,44 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
       <Text style={styles.score}>{score}</Text>
       <Text style={styles.handle}>{displayNameFor(deviceId, handle)}</Text>
 
-      {status === 'ready' && rank ? (
-        <>
-          <RankLine rank={rank} />
-          <Pressable
-            style={styles.statsBtn}
-            onPress={() => setStatsOpen(true)}
-            hitSlop={8}
-          >
-            <Text style={styles.statsBtnText}>Stats →</Text>
-          </Pressable>
-        </>
-      ) : status === 'loading' || status === 'pending' ? (
-        <Text style={styles.statusLine}>Fetching leaderboard…</Text>
-      ) : status === 'rank-pending' ? (
-        <Text style={styles.statusLine}>
-          {freshlySubmitted
-            ? 'Submitting your score…'
-            : 'Score not yet on the leaderboard.'}
-        </Text>
-      ) : status === 'error' ? (
-        <Pressable onPress={refresh} style={styles.errorBox}>
-          <Text style={styles.errorTitle}>Couldn't reach leaderboard</Text>
-          <Text style={styles.errorBody}>Tap to retry.</Text>
-        </Pressable>
-      ) : (
-        // backend-unavailable — local-only operation.
-        <View style={styles.localOnlyBox}>
-          <Text style={styles.localOnlyTitle}>Saved locally</Text>
-          <Text style={styles.localOnlyBody}>
-            Leaderboard backend not configured.
+      {/* Fixed-height reservation so the panel doesn't grow when
+          rank + Stats button mount, and doesn't shrink when the
+          status line takes their place. */}
+      <View style={styles.rankSlot}>
+        {status === 'ready' && rank ? (
+          <>
+            <RankLine rank={rank} />
+            <Pressable
+              style={styles.statsBtn}
+              onPress={() => setStatsOpen(true)}
+              hitSlop={8}
+            >
+              <Text style={styles.statsBtnText}>Stats →</Text>
+            </Pressable>
+          </>
+        ) : status === 'loading' || status === 'pending' ? (
+          <Text style={styles.statusLine}>Fetching leaderboard…</Text>
+        ) : status === 'rank-pending' ? (
+          <Text style={styles.statusLine}>
+            {freshlySubmitted
+              ? 'Submitting your score…'
+              : 'Score not yet on the leaderboard.'}
           </Text>
-        </View>
-      )}
+        ) : status === 'error' ? (
+          <Pressable onPress={refresh} style={styles.errorBox}>
+            <Text style={styles.errorTitle}>Couldn't reach leaderboard</Text>
+            <Text style={styles.errorBody}>Tap to retry.</Text>
+          </Pressable>
+        ) : (
+          // backend-unavailable — local-only operation.
+          <View style={styles.localOnlyBox}>
+            <Text style={styles.localOnlyTitle}>Saved locally</Text>
+            <Text style={styles.localOnlyBody}>
+              Leaderboard backend not configured.
+            </Text>
+          </View>
+        )}
+      </View>
 
       <DailyStatsModal
         visible={statsOpen}
@@ -122,7 +127,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 3,
     textShadowColor: colors.accent,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   score: {
     color: colors.textHi,
@@ -132,7 +137,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: spacing.xs,
     textShadowColor: colors.accent,
-    textShadowRadius: 14,
+    textShadowRadius: 7,
   },
   handle: {
     color: colors.textMid,
@@ -140,6 +145,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.5,
     marginTop: 2,
+  },
+  // Reserves vertical space for the ready-state rank line + Stats
+  // button (or whichever status content is rendering). Sized to match
+  // the tallest state so the panel doesn't reflow as data arrives.
+  rankSlot: {
+    width: '100%',
+    minHeight: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rankLine: {
     marginTop: spacing.md,
@@ -152,7 +166,7 @@ const styles = StyleSheet.create({
   rankNum: {
     color: colors.success,
     textShadowColor: colors.success,
-    textShadowRadius: 5,
+    textShadowRadius: 3,
     fontSize: 22,
     fontWeight: '900',
   },
@@ -178,7 +192,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   statusLine: {
     color: colors.textMid,
@@ -204,7 +218,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 2,
     textShadowColor: colors.danger,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   errorBody: {
     color: colors.textLow,

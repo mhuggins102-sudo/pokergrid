@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     width: 14,
     textAlign: 'center',
     textShadowColor: colors.warn,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   stepBody: { flex: 1, marginLeft: 4 },
   stepName: {
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     textShadowColor: colors.success,
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   totalRow: {
     flexDirection: 'row',
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     textShadowColor: colors.success,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
   penaltyValue: {
     color: colors.danger,
@@ -309,6 +309,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     textShadowColor: colors.danger,
-    textShadowRadius: 6,
+    textShadowRadius: 3,
   },
 });

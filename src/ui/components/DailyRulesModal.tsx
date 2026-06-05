@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 3,
     textShadowColor: colors.accent,
-    textShadowRadius: 5,
+    textShadowRadius: 3,
   },
   closeBtn: {
     color: colors.textMid,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   recipeValueNeutral: {
     color: colors.textHi,
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     textShadowColor: colors.warn,
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   twistSynopsis: {
     color: colors.textMid,
