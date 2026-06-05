@@ -121,8 +121,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
     textTransform: 'uppercase',
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },

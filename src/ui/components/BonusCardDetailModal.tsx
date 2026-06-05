@@ -62,7 +62,7 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
           <View style={styles.headerRow}>
             <View style={styles.kickerRow}>
               {settings.colorBlindAssist && (
-                <Text style={[styles.icon, { color: cat.iconColor, textShadowColor: cat.iconColor }]}>
+                <Text style={[styles.icon, { color: cat.iconColor}]}>
                   {cat.icon}
                 </Text>
               )}
@@ -75,7 +75,7 @@ export const BonusCardDetailModal = ({ visible, card, currentValue, onClose, onU
 
           <View style={styles.titleRow}>
             <Text
-              style={[styles.title, { color: cat.titleColor, textShadowColor: cat.titleColor }]}
+              style={[styles.title, { color: cat.titleColor}]}
               numberOfLines={2}
             >
               {cardToShow.title}
@@ -152,7 +152,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowRadius: 2,
   },
   kicker: {
     color: colors.textLow,
@@ -183,7 +182,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
-    textShadowRadius: 3,
   },
   mult: {
     color: colors.success,
@@ -191,8 +189,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   desc: {
     color: colors.textMid,
@@ -224,8 +220,6 @@ const styles = StyleSheet.create({
   },
   valueActive: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   useRow: {
     marginTop: spacing.lg,

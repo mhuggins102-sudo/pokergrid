@@ -211,8 +211,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1.5,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
     marginBottom: spacing.md,
   },
   list: { gap: spacing.sm },
@@ -245,13 +243,9 @@ const styles = StyleSheet.create({
     // locked tile, but going all the way to gray-on-gray blurred the
     // title. textMid + no shadow is the sweet spot.
     color: colors.textMid,
-    textShadowColor: 'transparent',
-    textShadowRadius: 0,
   },
   cardCtaLocked: {
     color: colors.textLow,
-    textShadowColor: 'transparent',
-    textShadowRadius: 0,
   },
   cardLockIcon: {
     marginLeft: 'auto',
@@ -284,8 +278,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     marginLeft: spacing.sm,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   // Generous tap target for the ⓘ icon — anchored to the right edge
   // of the top row so the player can land on the rightmost ~60px of
@@ -302,8 +294,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 16,
     fontWeight: '800',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   // Target + synopsis share the original body-text styling. Both
   // sit in the same visual register as the old single-line goal

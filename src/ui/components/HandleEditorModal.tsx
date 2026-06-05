@@ -226,8 +226,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     marginTop: spacing.sm,
-    textShadowColor: colors.danger,
-    textShadowRadius: 2,
   },
   warnLine: {
     color: colors.warn,

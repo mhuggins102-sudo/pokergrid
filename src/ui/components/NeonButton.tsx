@@ -105,15 +105,7 @@ export const NeonButton = ({
             {
               color: tint.text,
               fontSize: pad.font,
-              textShadowColor: tint.text,
             },
-            // noGlow also flattens the LABEL's neon halo — without
-            // this the colored variants (cyan / red text shadow)
-            // would still bleed outward while secondary (gray) text
-            // wouldn't, leaving the discard looking smaller than its
-            // glowing peers.
-            noGlow && styles.labelFlat,
-            disabled && styles.labelDisabled,
           ]}
         >
           {label}
@@ -141,15 +133,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowRadius: 2,
   },
   disabled: {
     opacity: 0.4,
-  },
-  labelDisabled: {
-    textShadowRadius: 0,
-  },
-  labelFlat: {
-    textShadowRadius: 0,
   },
 });

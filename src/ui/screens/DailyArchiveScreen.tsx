@@ -349,8 +349,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 20,
     fontWeight: '900',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   monthLabel: {
     color: colors.textHi,
@@ -429,13 +427,9 @@ const styles = StyleSheet.create({
   },
   cellNumWon: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   cellNumLost: {
     color: colors.warn,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   cellNumDisabled: {
     color: colors.textLow,
@@ -443,8 +437,6 @@ const styles = StyleSheet.create({
   },
   cellNumToday: {
     color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   cellScore: {
     color: colors.textMid,

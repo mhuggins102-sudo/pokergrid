@@ -77,7 +77,7 @@ export const HomeScreen = ({
             style={[styles.diffCell, { borderColor: difficultyColor(d) }, glow(difficultyColor(d), 8, 0.35)]}
             onPress={() => onStartFree(d)}
           >
-            <Text style={[styles.diffName, { color: difficultyColor(d), textShadowColor: difficultyColor(d) }]}>
+            <Text style={[styles.diffName, { color: difficultyColor(d)}]}>
               {d}
             </Text>
             <Text style={[styles.diffTagline, { color: difficultyColor(d) }]}>
@@ -254,8 +254,6 @@ const modalStyles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   body: {
     color: colors.textMid,
@@ -329,7 +327,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
-    textShadowRadius: 3,
   },
   // "target N" / "best N" use the same sans body voice as the mode
   // card descriptions ("Climb the ladder…") rather than the mono
@@ -364,8 +361,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 14,
     fontWeight: '800',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   modesCol: { gap: spacing.sm },
   modeCard: {
@@ -411,8 +406,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1.5,
     fontWeight: '800',
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   modeBestJoker: {
     color: colors.joker,
@@ -420,8 +413,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1.5,
     fontWeight: '800',
-    textShadowColor: colors.joker,
-    textShadowRadius: 2,
   },
   modeBody: {
     color: colors.textMid,

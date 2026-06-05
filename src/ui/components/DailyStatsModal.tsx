@@ -240,8 +240,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.5,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
     marginBottom: 4,
   },
   title: {
@@ -289,8 +287,6 @@ const styles = StyleSheet.create({
   },
   statValueAccent: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   divider: {
     height: 1,
@@ -342,8 +338,6 @@ const styles = StyleSheet.create({
   },
   rowRankOwn: {
     color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   rowName: {
     flex: 1,
@@ -356,8 +350,6 @@ const styles = StyleSheet.create({
   rowNameOwn: {
     color: colors.accent,
     fontWeight: '800',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   rowScore: {
     color: colors.textHi,
@@ -367,8 +359,6 @@ const styles = StyleSheet.create({
   },
   rowScoreOwn: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   gapNote: {
     color: colors.textLow,
