@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 2,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   sectionLabelRow: {
     flexDirection: 'row',

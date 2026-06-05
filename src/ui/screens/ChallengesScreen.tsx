@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 3,
+    textShadowRadius: 1,
   },
   cardTitleDone: {
     color: colors.success,
