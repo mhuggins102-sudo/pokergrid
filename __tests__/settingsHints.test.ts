@@ -22,11 +22,11 @@ describe('first-time hint reset', () => {
 
   it('HINT_KEYS covers every one-time-acknowledgement flag in Settings', () => {
     // Any boolean setting whose name encodes a one-time acknowledgement
-    // (seen* hints + the undo warning) must be in HINT_KEYS so "Reset
-    // first-time hints" re-arms it. This guards against a new hint being
-    // added without being wired into the reset.
+    // (seen* hints) must be in HINT_KEYS so "Reset first-time hints"
+    // re-arms it. This guards against a new hint being added without
+    // being wired into the reset.
     const oneTimeFlags = (Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[])
-      .filter(k => k.startsWith('seen') || k === 'undoWarningSeen');
+      .filter(k => k.startsWith('seen'));
     for (const key of oneTimeFlags) {
       expect(HINT_KEYS).toContain(key);
     }

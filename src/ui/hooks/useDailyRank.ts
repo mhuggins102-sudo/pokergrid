@@ -37,7 +37,7 @@ export interface DailyRankState {
 }
 
 export const useDailyRank = (dateISO: string | null): DailyRankState => {
-  const { deviceId, plays } = useDaily();
+  const { deviceId, plays, submitToken } = useDaily();
   const [status, setStatus] = useState<RankStatus>('pending');
   const [rank, setRank] = useState<RankSnapshot | null>(null);
   const [histogram, setHistogram] = useState<HistogramSnapshot | null>(null);
@@ -79,10 +79,11 @@ export const useDailyRank = (dateISO: string | null): DailyRankState => {
     return () => {
       cancelled = true;
     };
-    // `plays` is in deps so a fresh local submission triggers a
-    // re-fetch — by the time the local state updates, the remote
-    // leaderboard should reflect the new entry.
-  }, [deviceId, dateISO, plays, bumpToken]);
+    // `plays` triggers an initial fetch as soon as the local map
+    // updates (gives a fast "rank-pending" → loading transition);
+    // `submitToken` triggers the second fetch once the server submit
+    // actually completes so the panel resolves to the real row.
+  }, [deviceId, dateISO, plays, bumpToken, submitToken]);
 
   return { status, rank, histogram, refresh };
 };
