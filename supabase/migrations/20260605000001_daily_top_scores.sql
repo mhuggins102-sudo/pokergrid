@@ -58,12 +58,13 @@ begin
 
   with ranked as (
     select
-      device_id,
-      handle::text,
-      score,
-      rank() over (order by score desc) as r
-    from public.daily_plays
-    where date = p_date
+      dp.device_id,
+      pl.handle::text as handle,
+      dp.score,
+      rank() over (order by dp.score desc) as r
+    from public.daily_plays dp
+    left join public.players pl on pl.device_id = dp.device_id
+    where dp.date = p_date
   )
   select jsonb_agg(
     -- display_name falls back to "Anon-XXXX" using the first 4 hex
