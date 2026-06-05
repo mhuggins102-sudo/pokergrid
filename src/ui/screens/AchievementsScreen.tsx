@@ -117,20 +117,14 @@ const styles = StyleSheet.create({
   },
   sectionLabelEasy: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   sectionLabelHard: {
     color: colors.warn,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   // Milestones — accent (cyan) so the tier reads as "all-up" / cross-
   // mode goals rather than tied to a single difficulty's color.
   sectionLabelMilestone: {
     color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   list: { gap: spacing.sm },
   card: {
