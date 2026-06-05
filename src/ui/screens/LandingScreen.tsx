@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 3,
+    textShadowRadius: 1,
   },
   modeTitleDaily: {
     color: colors.accent,
@@ -306,8 +306,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   // Daily card splits its CTA row in two: the primary action (play /
   // view) on the left, the archive link on the right.

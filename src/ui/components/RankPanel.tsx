@@ -126,8 +126,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 3,
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   score: {
     color: colors.textHi,
@@ -137,7 +135,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: spacing.xs,
     textShadowColor: colors.accent,
-    textShadowRadius: 7,
+    textShadowRadius: 3,
   },
   handle: {
     color: colors.textMid,
@@ -191,8 +189,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   statusLine: {
     color: colors.textMid,

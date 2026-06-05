@@ -1080,7 +1080,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     letterSpacing: 2,
-    textShadowRadius: 7,
+    textShadowRadius: 3,
   },
   bannerTarget: {
     fontFamily: fonts.mono,

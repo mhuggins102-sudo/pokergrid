@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     textShadowColor: colors.warn,
-    textShadowRadius: 3,
+    textShadowRadius: 1,
   },
   // Stats card uses the accent (cyan) tint so it visually separates
   // from the warn-amber Targets-Up and Challenges variants.
@@ -437,8 +437,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    textShadowColor: colors.accent,
-    textShadowRadius: 2,
   },
   modeSecondaryCta: {
     color: colors.textLow,
