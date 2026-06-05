@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   cardNameDone: {
     color: colors.joker,
     textShadowColor: colors.joker,
-    textShadowRadius: 3,
+    textShadowRadius: 1,
   },
   cardBadge: {
     color: colors.joker,
