@@ -11,6 +11,7 @@ import type { DailyRecipe } from '../../game/daily/recipe';
 const KEY_DEVICE_ID = 'pokergrid:daily:deviceId';
 const KEY_HANDLE = 'pokergrid:daily:handle';
 const KEY_PLAYS = 'pokergrid:daily:plays:v1';
+const KEY_PENDING_SUBMITS = 'pokergrid:daily:pendingSubmits:v1';
 
 // Lightweight hex string (32 chars / 128 bits). Not a true RFC 4122
 // uuid — we don't need cross-system uniqueness guarantees, just
@@ -96,4 +97,63 @@ export const savePlay = async (play: DailyPlay): Promise<DailyPlaysMap> => {
 export const getPlay = async (dateISO: string): Promise<DailyPlay | null> => {
   const all = await getPlays();
   return all[dateISO] ?? null;
+};
+
+// Pending-submission queue. A play first writes locally + tries the
+// remote submit; failure (offline, backend down) appends here and the
+// AppState 'active' listener in DailyProvider drains the queue on
+// next app foreground. Each entry is shaped like SubmitPlayArgs in
+// supabase.ts, but we keep this file dependency-free of supabase-js
+// so the type lives there and we use a structural type here.
+export interface PendingSubmit {
+  deviceId: string;
+  dateISO: string;
+  score: number;
+  won: boolean;
+  // Inline DailyRecipe rather than importing it — keeps localStore.ts
+  // a pure AsyncStorage wrapper.
+  recipe: { difficulty: string; twist?: string };
+  usedUndo: boolean;
+  // Wall-clock time the play finished, for diagnostic purposes if a
+  // submit ends up sitting in the queue for a long time.
+  enqueuedAt: number;
+}
+
+export const getPendingSubmits = async (): Promise<PendingSubmit[]> => {
+  const raw = await AsyncStorage.getItem(KEY_PENDING_SUBMITS);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as PendingSubmit[];
+  } catch {
+    // Corrupt — start fresh.
+  }
+  return [];
+};
+
+export const enqueuePendingSubmit = async (p: PendingSubmit): Promise<void> => {
+  const current = await getPendingSubmits();
+  // Idempotency guard: if a queue entry already exists for this
+  // (deviceId, dateISO), drop the new one. A retry of the same play
+  // shouldn't double-queue.
+  const exists = current.some(
+    e => e.deviceId === p.deviceId && e.dateISO === p.dateISO
+  );
+  if (exists) return;
+  await AsyncStorage.setItem(
+    KEY_PENDING_SUBMITS,
+    JSON.stringify([...current, p])
+  );
+};
+
+export const removePendingSubmit = async (
+  deviceId: string,
+  dateISO: string
+): Promise<void> => {
+  const current = await getPendingSubmits();
+  const next = current.filter(
+    e => !(e.deviceId === deviceId && e.dateISO === dateISO)
+  );
+  if (next.length === current.length) return;
+  await AsyncStorage.setItem(KEY_PENDING_SUBMITS, JSON.stringify(next));
 };

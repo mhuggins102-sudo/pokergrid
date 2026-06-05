@@ -2,9 +2,15 @@
 // optional player handle, today's date + recipe, the map of completed
 // daily plays, and a helper to record a fresh completion.
 //
-// Phase 1: everything is on-device. Phase 2 will layer Supabase
-// submission on top of `recordCompletion` so the local write and the
-// network submit happen as one step.
+// Phase 2 wires this through to Supabase:
+//   - recordCompletion writes locally, then tries the remote submit.
+//     Network failure queues the submit in AsyncStorage; the queue
+//     drains on app foreground via the AppState listener below.
+//   - setHandle pushes to the server first (so uniqueness validation
+//     happens there) and only updates local on success.
+//   - The whole thing degrades gracefully when env vars aren't set —
+//     isBackendConfigured() returns false and we skip all network
+//     calls, leaving the offline behavior identical to Phase 1.
 
 import React, {
   createContext,
@@ -12,60 +18,86 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { currentDateISO } from '../../game/daily/seed';
 import { recipeFor, DailyRecipe } from '../../game/daily/recipe';
 import {
   DailyPlay,
   DailyPlaysMap,
+  PendingSubmit,
+  enqueuePendingSubmit,
   getHandle,
   getOrCreateDeviceId,
+  getPendingSubmits,
   getPlays,
+  removePendingSubmit,
   savePlay,
   setHandle as persistHandle,
 } from './localStore';
+import {
+  AlreadySubmittedError,
+  BackendUnavailableError,
+  HandleInvalidError,
+  HandleTakenError,
+  isBackendConfigured,
+  setHandleRemote,
+  submitDailyPlay,
+} from './supabase';
 
 interface DailyContextValue {
-  // Anonymous device-id. `null` while the lazy bootstrap is in flight
-  // on first launch.
   deviceId: string | null;
-  // Optional player handle. `null` means "use default Anon-xxxx".
   handle: string | null;
-  setHandle: (h: string | null) => Promise<void>;
-  // UTC YYYY-MM-DD, computed once on mount. Locked at mount so a
-  // session crossing midnight UTC keeps the same "today" until the app
-  // is relaunched — matches the rule that a daily-grid run started
-  // before midnight submits under its start date.
+  // Returns one of:
+  //   - 'ok'                 — handle persisted locally + remotely
+  //   - 'taken'              — another player already claimed it
+  //   - 'invalid'            — failed server-side validation
+  //   - 'backend-unavailable' — local-only path; handle saved on-device
+  //                            but no remote sync. The UI surfaces this
+  //                            as a hint that uniqueness isn't checked.
+  setHandle: (
+    h: string | null
+  ) => Promise<'ok' | 'taken' | 'invalid' | 'backend-unavailable'>;
+  // UTC YYYY-MM-DD, locked at first mount.
   todayISO: string;
   todayRecipe: DailyRecipe;
-  // Local completed plays, keyed by dateISO. `null` while loading; an
-  // empty object means "loaded, no plays yet".
   plays: DailyPlaysMap | null;
-  // Records a completed daily locally. Returns the new plays map.
-  // Phase 2 will also POST to Supabase here.
   recordCompletion: (play: DailyPlay) => Promise<DailyPlaysMap>;
+  // True while the offline-submit queue is draining (post-foreground).
+  // Mostly diagnostic — the UI doesn't need to surface it but the
+  // RankPanel can use it to show a "re-syncing…" hint if it wants.
+  drainingPendingSubmits: boolean;
 }
 
 const DailyContext = createContext<DailyContextValue | null>(null);
+
+// Local play → remote submit-args. Centralized so the recordCompletion
+// path and the queue-drain path build the same payload shape.
+const submitArgsFor = (
+  deviceId: string,
+  play: DailyPlay
+): PendingSubmit => ({
+  deviceId,
+  dateISO: play.dateISO,
+  score: play.score,
+  won: play.won,
+  recipe: play.recipe,
+  usedUndo: play.state.undoCount > 0,
+  enqueuedAt: Date.now(),
+});
 
 export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [handle, setHandleState] = useState<string | null>(null);
   const [plays, setPlays] = useState<DailyPlaysMap | null>(null);
+  const [drainingPendingSubmits, setDraining] = useState(false);
 
-  // todayISO is locked at first mount so a single session has a stable
-  // notion of "today" even if it crosses UTC midnight mid-run.
   const todayISO = useMemo(() => currentDateISO(), []);
   const todayRecipe = useMemo(() => recipeFor(todayISO), [todayISO]);
 
-  // Lazy bootstrap on mount: read or create the device-id, read the
-  // optional handle, read the existing plays map. All three run in
-  // parallel — none depend on the others. The provider's children
-  // render immediately with null values; consumers should guard
-  // against the null state where it matters (LandingScreen does so to
-  // avoid flashing a "play daily" CTA before we know the play
-  // already-completed state).
+  // Bootstrap on mount.
   useEffect(() => {
     let cancelled = false;
     Promise.all([getOrCreateDeviceId(), getHandle(), getPlays()]).then(
@@ -81,18 +113,135 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  const setHandle = useCallback(async (h: string | null) => {
-    await persistHandle(h);
-    setHandleState(h);
+  // Drain the offline-submit queue. Called once after the bootstrap
+  // finishes, and again on every app-foreground event. Best-effort:
+  // entries that still fail are left in the queue for the next drain.
+  const drainQueue = useCallback(async () => {
+    if (!isBackendConfigured()) return;
+    setDraining(true);
+    try {
+      const pending = await getPendingSubmits();
+      for (const p of pending) {
+        try {
+          await submitDailyPlay({
+            deviceId: p.deviceId,
+            dateISO: p.dateISO,
+            score: p.score,
+            won: p.won,
+            recipe: p.recipe as DailyRecipe,
+            usedUndo: p.usedUndo,
+          });
+          await removePendingSubmit(p.deviceId, p.dateISO);
+        } catch (e) {
+          if (e instanceof AlreadySubmittedError) {
+            // The server already has this play. Most likely cause:
+            // first submission landed before the response made it
+            // back to the client; the local write happened and the
+            // queue retry collides. Drop the queue entry.
+            await removePendingSubmit(p.deviceId, p.dateISO);
+            continue;
+          }
+          if (e instanceof BackendUnavailableError) {
+            // Misconfiguration; nothing to drain.
+            break;
+          }
+          // Likely a transient network failure. Leave entry; next
+          // drain will retry.
+        }
+      }
+    } finally {
+      setDraining(false);
+    }
   }, []);
+
+  // First drain runs after the deviceId bootstrap finishes (so the
+  // queue isn't drained before we have a device-id to compare against).
+  // Wrapped in a ref so the effect doesn't re-fire on every render.
+  const initialDrainDone = useRef(false);
+  useEffect(() => {
+    if (!deviceId || initialDrainDone.current) return;
+    initialDrainDone.current = true;
+    drainQueue();
+  }, [deviceId, drainQueue]);
+
+  // Foreground listener. Each transition into 'active' triggers a
+  // drain attempt — covers the "submission failed → app backgrounded
+  // → user comes back later with connectivity" case.
+  useEffect(() => {
+    const onChange = (s: AppStateStatus) => {
+      if (s === 'active') drainQueue();
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [drainQueue]);
+
+  const setHandle = useCallback(
+    async (
+      h: string | null
+    ): Promise<'ok' | 'taken' | 'invalid' | 'backend-unavailable'> => {
+      const trimmed = h && h.trim().length > 0 ? h.trim() : null;
+      if (!isBackendConfigured()) {
+        // No backend — accept the handle locally as the source of
+        // truth. The UI surfaces this so the player knows uniqueness
+        // isn't being checked.
+        await persistHandle(trimmed);
+        setHandleState(trimmed);
+        return 'backend-unavailable';
+      }
+      if (!deviceId) {
+        // Bootstrap hasn't finished. Caller should retry; this is
+        // exceedingly rare in practice (the editor doesn't render
+        // until deviceId resolves) but it's not worth crashing on.
+        return 'backend-unavailable';
+      }
+      try {
+        await setHandleRemote(deviceId, trimmed);
+        await persistHandle(trimmed);
+        setHandleState(trimmed);
+        return 'ok';
+      } catch (e) {
+        if (e instanceof HandleTakenError) return 'taken';
+        if (e instanceof HandleInvalidError) return 'invalid';
+        // Other errors (network, etc.) — fall through to "backend
+        // unavailable" so the UI gets a sensible status.
+        return 'backend-unavailable';
+      }
+    },
+    [deviceId]
+  );
 
   const recordCompletion = useCallback(
     async (play: DailyPlay): Promise<DailyPlaysMap> => {
+      // Local-first write so the result screen has something to render
+      // even if the network roundtrip is in flight.
       const next = await savePlay(play);
       setPlays(next);
+
+      if (!deviceId || !isBackendConfigured()) return next;
+
+      const args = submitArgsFor(deviceId, play);
+      try {
+        await submitDailyPlay({
+          deviceId,
+          dateISO: play.dateISO,
+          score: play.score,
+          won: play.won,
+          recipe: play.recipe,
+          usedUndo: play.state.undoCount > 0,
+        });
+      } catch (e) {
+        if (e instanceof AlreadySubmittedError) {
+          // Server already has this play — treat as success.
+          return next;
+        }
+        // Anything else: queue for later drain. The local write above
+        // already happened, so the player keeps their score record
+        // regardless of the network outcome.
+        await enqueuePendingSubmit(args);
+      }
       return next;
     },
-    []
+    [deviceId]
   );
 
   const value = useMemo<DailyContextValue>(
@@ -104,8 +253,18 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       todayRecipe,
       plays,
       recordCompletion,
+      drainingPendingSubmits,
     }),
-    [deviceId, handle, setHandle, todayISO, todayRecipe, plays, recordCompletion]
+    [
+      deviceId,
+      handle,
+      setHandle,
+      todayISO,
+      todayRecipe,
+      plays,
+      recordCompletion,
+      drainingPendingSubmits,
+    ]
   );
 
   return <DailyContext.Provider value={value}>{children}</DailyContext.Provider>;

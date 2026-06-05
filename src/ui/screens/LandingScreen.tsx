@@ -14,8 +14,9 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { DailyRulesModal } from '../components/DailyRulesModal';
+import { HandleEditorModal } from '../components/HandleEditorModal';
 import { NeonButton } from '../components/NeonButton';
-import { useDaily } from '../daily/DailyProvider';
+import { displayNameFor, useDaily } from '../daily/DailyProvider';
 import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -69,8 +70,9 @@ export const LandingScreen = ({
   onOpenRules,
   onOpenSettings,
 }: Props) => {
-  const { plays, todayISO, todayRecipe } = useDaily();
+  const { plays, todayISO, todayRecipe, deviceId, handle } = useDaily();
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [handleEditorOpen, setHandleEditorOpen] = useState(false);
 
   // Plays map is null while the lazy bootstrap reads AsyncStorage.
   // Don't decide "already played?" until we know the answer — otherwise
@@ -93,6 +95,17 @@ export const LandingScreen = ({
         <Text style={styles.subtitle}>5×5 poker solitaire</Text>
         <NeonBrand />
         <Text style={styles.dateLine}>{formatDate(todayISO)} · UTC</Text>
+        <Pressable
+          style={styles.handlePill}
+          onPress={() => setHandleEditorOpen(true)}
+          hitSlop={6}
+        >
+          <Text style={styles.handlePillLabel}>Playing as</Text>
+          <Text style={styles.handlePillName}>
+            {displayNameFor(deviceId, handle)}
+          </Text>
+          <Text style={styles.handlePillEdit}>· edit</Text>
+        </Pressable>
       </View>
 
       <View style={styles.modeStack}>
@@ -144,6 +157,10 @@ export const LandingScreen = ({
         }}
         onClose={() => setRulesOpen(false)}
       />
+      <HandleEditorModal
+        visible={handleEditorOpen}
+        onClose={() => setHandleEditorOpen(false)}
+      />
     </ScrollView>
   );
 };
@@ -184,6 +201,44 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 2,
     marginTop: spacing.sm,
+  },
+  // "Playing as Anon-3f7c · edit" pill. Tappable to open the handle
+  // editor. Sits under the date so the brand is the obvious focal
+  // point and the identity is a secondary affordance.
+  handlePill: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: spacing.md,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+    backgroundColor: colors.bgPanel,
+  },
+  handlePillLabel: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  handlePillName: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: colors.accent,
+    textShadowRadius: 3,
+  },
+  handlePillEdit: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1,
+    fontStyle: 'italic',
   },
   modeStack: { gap: spacing.md },
   modeCard: {
