@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { BONUS_DECK_POOL } from '../../game/bonusCards';
-import { BonusCategory, categoryOf, CATEGORY_LABEL, styleFor } from '../bonusCardCategory';
+import { BonusCard, BONUS_DECK_POOL, SPECIAL_DECK_POOL } from '../../game/bonusCards';
+import { BonusCategory, categoryOf, styleFor } from '../bonusCardCategory';
 import { NeonButton } from '../components/NeonButton';
 import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -10,26 +10,25 @@ interface Props {
   onBack: () => void;
 }
 
-// Iteration order matches the visual hierarchy of bonus impact: hand-type
-// boosts first (most personal), then line-targeted, then suit density,
-// then conditional, then grid-wide.
-const ORDER: BonusCategory[] = [
-  'hand',
-  'line',
-  'suit',
-  'conditional',
-  'grid',
-  'deck-management',
+// Three tone-grouped sections: yellow = per-line multipliers (fire
+// during the run), purple = grid-wide multipliers (fire at game end),
+// green = one-time consumable actions from the Challenge-only special
+// deck. The catalog page lists the whole bonus universe in one place.
+const YELLOW_CATS = new Set<BonusCategory>(['hand', 'line', 'suit', 'conditional']);
+const PURPLE_CATS = new Set<BonusCategory>(['grid', 'deck-management']);
+
+const yellowCards = BONUS_DECK_POOL.filter(c => YELLOW_CATS.has(categoryOf(c)));
+const purpleCards = BONUS_DECK_POOL.filter(c => PURPLE_CATS.has(categoryOf(c)));
+
+type Tone = 'yellow' | 'purple' | 'green';
+const SECTIONS: { label: string; tone: Tone; cards: BonusCard[] }[] = [
+  { label: 'Line Multipliers', tone: 'yellow', cards: yellowCards },
+  { label: 'Grid Multipliers', tone: 'purple', cards: purpleCards },
+  { label: 'One-Time Actions', tone: 'green', cards: SPECIAL_DECK_POOL },
 ];
 
 export const BonusCardsScreen = ({ onBack }: Props) => {
   const { settings } = useSettings();
-  const groups = new Map<BonusCategory, typeof BONUS_DECK_POOL>();
-  for (const card of BONUS_DECK_POOL) {
-    const g = categoryOf(card);
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g)!.push(card);
-  }
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -38,55 +37,57 @@ export const BonusCardsScreen = ({ onBack }: Props) => {
       </View>
 
       <Text style={styles.intro}>
-        All {BONUS_DECK_POOL.length} bonus cards in the deck. Spend a ♣ during the game to draw
-        2 of them; keep one (hold up to 3 at a time).
+        The standard bonus deck contains {BONUS_DECK_POOL.length} cards, which are yellow and purple. Yellow cards are in-game multipliers that increase the value of a scoring line (row or column). Purple cards multiply your total score at end of game. There is also a special green deck that offers one-time actions rather than point multipliers. It is only used during select Challenges.
       </Text>
 
-      {ORDER.map(cat => {
-        const cards = groups.get(cat) ?? [];
-        if (cards.length === 0) return null;
-        return (
-          <View key={cat} style={styles.groupBlock}>
-            <Text style={styles.groupLabel}>
-              {CATEGORY_LABEL[cat]} <Text style={styles.groupCount}>· {cards.length}</Text>
-            </Text>
-            <View style={styles.cardGrid}>
-              {cards.map(c => {
-                const s = styleFor(c);
-                return (
-                  <View
-                    key={c.id}
-                    style={[
-                      styles.card,
-                      { borderColor: s.borderColor },
-                      glow(s.borderColor, 4, 0.18),
-                    ]}
-                  >
-                    {settings.colorBlindAssist && (
-                      <Text
-                        style={[styles.cardIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}
-                      >
-                        {s.icon}
-                      </Text>
-                    )}
+      {SECTIONS.map(section => (
+        <View key={section.tone} style={styles.groupBlock}>
+          <Text
+            style={[
+              styles.groupLabel,
+              section.tone === 'yellow' && styles.groupLabelYellow,
+              section.tone === 'purple' && styles.groupLabelPurple,
+              section.tone === 'green' && styles.groupLabelGreen,
+            ]}
+          >
+            {section.label} <Text style={styles.groupCount}>· {section.cards.length}</Text>
+          </Text>
+          <View style={styles.cardGrid}>
+            {section.cards.map(c => {
+              const s = styleFor(c);
+              return (
+                <View
+                  key={c.id}
+                  style={[
+                    styles.card,
+                    { borderColor: s.borderColor },
+                    glow(s.borderColor, 4, 0.18),
+                  ]}
+                >
+                  {settings.colorBlindAssist && (
                     <Text
-                      style={[styles.cardTitle, { color: s.titleColor, textShadowColor: s.titleColor }]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
+                      style={[styles.cardIcon, { color: s.iconColor, textShadowColor: s.iconColor }]}
                     >
-                      {c.title}
+                      {s.icon}
                     </Text>
-                    <Text style={styles.cardMult} numberOfLines={1} adjustsFontSizeToFit>
-                      {c.mult}
-                    </Text>
-                    <Text style={styles.cardDesc}>{c.description}</Text>
-                  </View>
-                );
-              })}
-            </View>
+                  )}
+                  <Text
+                    style={[styles.cardTitle, { color: s.titleColor, textShadowColor: s.titleColor }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {c.title}
+                  </Text>
+                  <Text style={styles.cardMult} numberOfLines={1} adjustsFontSizeToFit>
+                    {c.mult}
+                  </Text>
+                  <Text style={styles.cardDesc}>{c.description}</Text>
+                </View>
+              );
+            })}
           </View>
-        );
-      })}
+        </View>
+      ))}
     </ScrollView>
   );
 };
@@ -112,22 +113,38 @@ const styles = StyleSheet.create({
     color: colors.textMid,
     fontFamily: fonts.sans,
     fontSize: 12,
-    lineHeight: 17,
-    marginBottom: spacing.lg,
+    lineHeight: 18,
+    marginBottom: spacing.md,
   },
-  groupBlock: { marginBottom: spacing.lg, gap: 4 },
+  groupBlock: { marginBottom: spacing.lg },
   groupLabel: {
-    color: colors.textMid,
     fontFamily: fonts.mono,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
-    marginBottom: spacing.xs,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  groupLabelYellow: {
+    color: colors.warn,
+    textShadowColor: colors.warn,
+    textShadowRadius: 4,
+  },
+  groupLabelPurple: {
+    color: colors.joker,
+    textShadowColor: colors.joker,
+    textShadowRadius: 4,
+  },
+  groupLabelGreen: {
+    color: colors.success,
+    textShadowColor: colors.success,
+    textShadowRadius: 4,
   },
   groupCount: {
     color: colors.textLow,
     fontWeight: '600',
+    textShadowRadius: 0,
   },
   cardGrid: {
     flexDirection: 'row',
