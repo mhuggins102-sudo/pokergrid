@@ -42,8 +42,6 @@ const RankLine = ({ rank }: { rank: RankSnapshot }) => (
   <Text style={styles.rankLine}>
     <Text style={styles.rankNum}>#{rank.rank}</Text>
     <Text style={styles.rankOf}> of {rank.total}</Text>
-    <Text style={styles.rankSep}>  ·  </Text>
-    <Text style={styles.rankTop}>top {rank.topPercent}%</Text>
   </Text>
 );
 
@@ -161,14 +159,6 @@ const styles = StyleSheet.create({
   rankOf: {
     color: colors.textMid,
     fontWeight: '700',
-  },
-  rankSep: {
-    color: colors.textLow,
-  },
-  rankTop: {
-    color: colors.accent,
-    textShadowColor: colors.accent,
-    textShadowRadius: 4,
   },
   statsBtn: {
     marginTop: spacing.md,
