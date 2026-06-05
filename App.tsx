@@ -86,6 +86,12 @@ const AppShell = () => {
   // returns to 'rules'; launching it from Settings → "Replay tutorial" returns
   // to 'settings'.
   const [tutorialReturn, setTutorialReturn] = useState<Screen>('rules');
+  // Rules and Settings can be opened from either Landing or Free Play home.
+  // Back should land the player where they came from. First-run rules dismiss
+  // uses the default ('landing') so a brand-new player ends up at the entry
+  // screen the rest of the app revolves around.
+  const [rulesReturn, setRulesReturn] = useState<Screen>('landing');
+  const [settingsReturn, setSettingsReturn] = useState<Screen>('landing');
   const { save: tuSave } = useTUSave();
   const daily = useDaily();
 
@@ -97,12 +103,14 @@ const AppShell = () => {
     });
   }, []);
 
-  // First-run + landing-default-aware dismissal: Free Play (the old
-  // root) used to go straight to 'home'. Now the player should land on
-  // the new landing screen after first-run rules.
+  // Rules dismiss returns the player to wherever they opened Rules
+  // from. First-run / landing-launch defaults to 'landing'; opening
+  // from Free Play home pre-sets rulesReturn='home' so Back lands
+  // there. markTutorialSeen is idempotent — fine to call on every
+  // dismiss.
   const dismissRules = () => {
     markTutorialSeen();
-    setScreen('landing');
+    setScreen(rulesReturn);
   };
 
   const startFreePlay = (d: Difficulty) => {
@@ -191,6 +199,14 @@ const AppShell = () => {
           onStartDaily={startDaily}
           onOpenFreePlay={() => setScreen('home')}
           onOpenDailyResult={openTodayDailyResult}
+          onOpenRules={() => {
+            setRulesReturn('landing');
+            setScreen('rules');
+          }}
+          onOpenSettings={() => {
+            setSettingsReturn('landing');
+            setScreen('settings');
+          }}
         />
       )}
       {screen === 'home' && (
@@ -201,8 +217,14 @@ const AppShell = () => {
           onOpenChallenges={() => setScreen('challenges')}
           onOpenStats={() => setScreen('stats')}
           onOpenAchievements={() => setScreen('achievements')}
-          onOpenSettings={() => setScreen('settings')}
-          onOpenRules={() => setScreen('rules')}
+          onOpenSettings={() => {
+            setSettingsReturn('home');
+            setScreen('settings');
+          }}
+          onOpenRules={() => {
+            setRulesReturn('home');
+            setScreen('rules');
+          }}
           onBack={() => setScreen('landing')}
         />
       )}
@@ -227,7 +249,7 @@ const AppShell = () => {
       )}
       {screen === 'settings' && (
         <SettingsScreen
-          onBack={() => setScreen('home')}
+          onBack={() => setScreen(settingsReturn)}
           onReplayTutorial={() => {
             setTutorialReturn('settings');
             setScreen('tutorial');

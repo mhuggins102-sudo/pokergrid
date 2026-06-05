@@ -14,7 +14,9 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { DailyRulesModal } from '../components/DailyRulesModal';
-import { useDaily } from '../daily/DailyProvider';
+import { HandleEditorModal } from '../components/HandleEditorModal';
+import { NeonButton } from '../components/NeonButton';
+import { displayNameFor, useDaily } from '../daily/DailyProvider';
 import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
@@ -28,6 +30,11 @@ interface Props {
   // Called when the player taps an already-completed daily — opens the
   // result screen for that play.
   onOpenDailyResult: () => void;
+  // Sub-screens reachable from landing AND from Free Play home. The
+  // parent owns the return-to-source bookkeeping so Back lands the
+  // player where they came from regardless of entry point.
+  onOpenRules: () => void;
+  onOpenSettings: () => void;
 }
 
 const NeonBrand = () => {
@@ -60,9 +67,12 @@ export const LandingScreen = ({
   onStartDaily,
   onOpenFreePlay,
   onOpenDailyResult,
+  onOpenRules,
+  onOpenSettings,
 }: Props) => {
-  const { plays, todayISO, todayRecipe } = useDaily();
+  const { plays, todayISO, todayRecipe, deviceId, handle } = useDaily();
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [handleEditorOpen, setHandleEditorOpen] = useState(false);
 
   // Plays map is null while the lazy bootstrap reads AsyncStorage.
   // Don't decide "already played?" until we know the answer — otherwise
@@ -85,6 +95,17 @@ export const LandingScreen = ({
         <Text style={styles.subtitle}>5×5 poker solitaire</Text>
         <NeonBrand />
         <Text style={styles.dateLine}>{formatDate(todayISO)} · UTC</Text>
+        <Pressable
+          style={styles.handlePill}
+          onPress={() => setHandleEditorOpen(true)}
+          hitSlop={6}
+        >
+          <Text style={styles.handlePillLabel}>Playing as</Text>
+          <Text style={styles.handlePillName}>
+            {displayNameFor(deviceId, handle)}
+          </Text>
+          <Text style={styles.handlePillEdit}>· edit</Text>
+        </Pressable>
       </View>
 
       <View style={styles.modeStack}>
@@ -113,11 +134,17 @@ export const LandingScreen = ({
             <Text style={styles.modeTitle}>Free Play</Text>
           </View>
           <Text style={styles.modeBody}>
-            Pick your difficulty. Targets Up ladder. Challenges with
-            unique twists. Stats, achievements, settings.
+            Unlimited practice at your chosen difficulty. Play
+            Challenges with unique twists and the Targets Up
+            multi-round game.
           </Text>
           <Text style={styles.modeCta}>Open Free Play →</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.navRow}>
+        <NeonButton label="How to Play" variant="primary" size="md" onPress={onOpenRules} />
+        <NeonButton label="Settings" variant="secondary" size="md" onPress={onOpenSettings} />
       </View>
 
       <DailyRulesModal
@@ -129,6 +156,10 @@ export const LandingScreen = ({
           onStartDaily();
         }}
         onClose={() => setRulesOpen(false)}
+      />
+      <HandleEditorModal
+        visible={handleEditorOpen}
+        onClose={() => setHandleEditorOpen(false)}
       />
     </ScrollView>
   );
@@ -170,6 +201,44 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 2,
     marginTop: spacing.sm,
+  },
+  // "Playing as Anon-3f7c · edit" pill. Tappable to open the handle
+  // editor. Sits under the date so the brand is the obvious focal
+  // point and the identity is a secondary affordance.
+  handlePill: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: spacing.md,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+    backgroundColor: colors.bgPanel,
+  },
+  handlePillLabel: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  handlePillName: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: colors.accent,
+    textShadowRadius: 3,
+  },
+  handlePillEdit: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1,
+    fontStyle: 'italic',
   },
   modeStack: { gap: spacing.md },
   modeCard: {
@@ -225,5 +294,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
     textShadowRadius: 3,
+  },
+  // Mirrors HomeScreen's secondary nav row — How to Play + Settings are
+  // reachable from both entry points (landing and Free Play home) so
+  // the player doesn't have to back out to find them.
+  navRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.xl,
+    flexWrap: 'wrap',
   },
 });
