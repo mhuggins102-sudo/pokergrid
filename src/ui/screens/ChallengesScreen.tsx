@@ -371,11 +371,9 @@ const styles = StyleSheet.create({
     color: colors.warn,
     fontFamily: fonts.mono,
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: '800',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
-    textShadowColor: colors.warn,
-    textShadowRadius: 3,
   },
   modalCloseBtn: {
     color: colors.textMid,
@@ -390,8 +388,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     marginBottom: spacing.sm,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   modalDesc: {
     color: colors.textMid,

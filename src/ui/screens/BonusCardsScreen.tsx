@@ -168,18 +168,12 @@ const styles = StyleSheet.create({
   },
   groupLabelYellow: {
     color: colors.warn,
-    textShadowColor: colors.warn,
-    textShadowRadius: 2,
   },
   groupLabelPurple: {
     color: colors.joker,
-    textShadowColor: colors.joker,
-    textShadowRadius: 2,
   },
   groupLabelGreen: {
     color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 2,
   },
   groupCount: {
     color: colors.textLow,
