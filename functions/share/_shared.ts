@@ -14,7 +14,7 @@ export type CellCode =
 
 export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | 'Q' | 'K';
 export type Suit = 'H' | 'S' | 'D' | 'C';
-export type ModeLabel = 'Free' | 'Targets Up' | 'Challenge';
+export type ModeLabel = 'Free' | 'Targets Up' | 'Challenge' | 'Daily';
 
 const RANKS: Set<string> = new Set(['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']);
 const SUITS: Set<string> = new Set(['H', 'S', 'D', 'C']);
@@ -43,6 +43,7 @@ const MODE_LABELS: Record<string, ModeLabel> = {
   free: 'Free',
   'targets-up': 'Targets Up',
   challenge: 'Challenge',
+  daily: 'Daily',
 };
 
 export const parseShare = (url: URL): ParsedShare => {

@@ -26,7 +26,12 @@ export const useGame = (
   noBonusCards?: boolean,
   initialBonusCards?: BonusCard[],
   slotCategories?: SlotKind[],
-  randomGridFill?: number
+  randomGridFill?: number,
+  // Optional seeded RNG. Daily Grid passes a seededRng(seedForDate(today))
+  // so every player worldwide gets the same deck order on the same date.
+  // newGame defaults to Math.random when undefined, preserving the
+  // existing behavior for Free Play / Targets-Up / Challenges.
+  rng?: () => number
 ): GameApi => {
   const [state, rawDispatch] = useReducer(
     reducer,
@@ -34,7 +39,7 @@ export const useGame = (
     () =>
       newGame(
         difficulty,
-        undefined,
+        rng,
         target,
         deckLimit,
         noSwap ?? false,

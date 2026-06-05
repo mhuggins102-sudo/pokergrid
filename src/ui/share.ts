@@ -20,7 +20,7 @@ export const encodeGrid = (grid: Grid): string =>
 
 export interface ShareParams {
   score: number;
-  mode: 'free' | 'targets-up' | 'challenge';
+  mode: 'free' | 'targets-up' | 'challenge' | 'daily';
   difficulty?: string;
   grid: Grid;
 }
