@@ -43,31 +43,14 @@ export interface Challenge {
   deckLimit?: number;
 }
 
+// Ordered easiest → hardest. Drives the on-screen list order and the
+// sequential-unlock progression (first two not-yet-beaten are
+// playable; clearing one unlocks the next).
 export const CHALLENGES: Challenge[] = [
-  {
-    id: 'short-deck',
-    name: 'Short Deck',
-    synopsis: 'Variant: Deck contains only 45 cards',
-    goal: 'Score 500+ points with a 45-card deck. 8 cards are removed at random before the start of the game.',
-    scoreTarget: 500,
-    deckLimit: 45,
-    conditionMet: () => true,
-  },
-  {
-    id: 'no-discards',
-    name: 'No Discards',
-    synopsis: 'Variant: Discard button disabled',
-    goal: 'Score 500+ points without using the Discard button — every drawn card must be placed or spent on a suit perk.',
-    scoreTarget: 500,
-    // The Discard button is hidden in this challenge and the DISCARD_NONE
-    // action is rejected by the reducer, so reaching the score target is
-    // the only structural requirement.
-    conditionMet: () => true,
-  },
   {
     id: 'short-circuit',
     name: 'Short Circuit',
-    synopsis: 'Variant: Suit perks fire at random',
+    synopsis: 'Twist: Suit perks fire at random',
     goal: "Score 500+ points with random suit perks — you won't know which of ♥/♠/♦/♣'s effects you'll get until you commit to spending the card.",
     scoreTarget: 500,
     // The randomness is enforced at the reducer level (state.randomPerks
@@ -77,9 +60,40 @@ export const CHALLENGES: Challenge[] = [
     conditionMet: () => true,
   },
   {
+    id: 'no-discards',
+    name: 'No Discards',
+    synopsis: 'Twist: Discard button disabled',
+    goal: 'Score 500+ points without using the Discard button — every drawn card must be placed or spent on a suit perk.',
+    scoreTarget: 500,
+    // The Discard button is hidden in this challenge and the DISCARD_NONE
+    // action is rejected by the reducer, so reaching the score target is
+    // the only structural requirement.
+    conditionMet: () => true,
+  },
+  {
+    id: 'gridlock',
+    name: 'Gridlock',
+    synopsis: 'Twist: First 15 cards pre-placed at random',
+    goal: 'Score 500+ points with 15 cards pre-placed at random positions on the grid. Spiral placement resumes from whichever slots are still empty — you fill the remaining 10 in normal play.',
+    scoreTarget: 500,
+    // Enforced at newGame: randomGridFill seeds 15 cards into random
+    // positions before drawNext runs. The remaining deck is intact
+    // and the spiral picks up from whichever slots stayed empty.
+    conditionMet: () => true,
+  },
+  {
+    id: 'short-deck',
+    name: 'Short Deck',
+    synopsis: 'Twist: Deck contains only 45 cards',
+    goal: 'Score 500+ points with a 45-card deck. 8 cards are removed at random before the start of the game.',
+    scoreTarget: 500,
+    deckLimit: 45,
+    conditionMet: () => true,
+  },
+  {
     id: 'poker-purist',
     name: 'Poker Purist',
-    synopsis: 'Variant: No bonus cards',
+    synopsis: 'Twist: No bonus cards',
     goal: 'Score 350+ points with no bonus cards at all — no starter, no ♣ draws, no multipliers. Pure rows and columns scoring as 5-card poker hands.',
     scoreTarget: 350,
     // Enforced at newGame: bonusCards and bonusDeck are both empty,
@@ -88,20 +102,9 @@ export const CHALLENGES: Challenge[] = [
     conditionMet: () => true,
   },
   {
-    id: 'three-tricks',
-    name: 'Three Tricks',
-    synopsis: 'Variant: One-time actions (green) replace bonus cards',
-    goal: 'Score 400+ points with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
-    scoreTarget: 400,
-    // Enforced at newGame: noBonusCards strips the regular bonus deck,
-    // and initialBonusCards seeds the hand with three random specials.
-    // App.tsx wires the seeding via contextInitialBonusCards.
-    conditionMet: () => true,
-  },
-  {
     id: 'mixed-bag',
     name: 'Mixed Bag',
-    synopsis: 'Variant: Bonus slots locked to green/yellow/purple',
+    synopsis: 'Twist: Bonus slots locked to green/yellow/purple',
     goal: 'Score 500+ points with bonus slots locked to categories — slot 1 holds a green (one-time) card, slot 2 holds a yellow (per-line) card, slot 3 holds a purple (end-game) card. ♣ asks which slot to draw for, then shows 2 category-matching cards to pick from.',
     scoreTarget: 500,
     // Enforced at newGame via slotCategories — placeholders seed the
@@ -109,14 +112,14 @@ export const CHALLENGES: Challenge[] = [
     conditionMet: () => true,
   },
   {
-    id: 'gridlock',
-    name: 'Gridlock',
-    synopsis: 'Variant: First 15 cards pre-placed at random',
-    goal: 'Score 500+ points with 15 cards pre-placed at random positions on the grid. Spiral placement resumes from whichever slots are still empty — you fill the remaining 10 in normal play.',
-    scoreTarget: 500,
-    // Enforced at newGame: randomGridFill seeds 15 cards into random
-    // positions before drawNext runs. The remaining deck is intact
-    // and the spiral picks up from whichever slots stayed empty.
+    id: 'three-tricks',
+    name: 'Three Tricks',
+    synopsis: 'Twist: One-time actions (green) replace bonus cards',
+    goal: 'Score 400+ points with no bonus-card deck. You start holding three one-time action cards drawn at random from the special deck — tap any held card to read what it does, then tap Use to activate it. Each is consumed on use.',
+    scoreTarget: 400,
+    // Enforced at newGame: noBonusCards strips the regular bonus deck,
+    // and initialBonusCards seeds the hand with three random specials.
+    // App.tsx wires the seeding via contextInitialBonusCards.
     conditionMet: () => true,
   },
 ];
