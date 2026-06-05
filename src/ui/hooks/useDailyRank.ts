@@ -1,20 +1,24 @@
-// useDailyRank — fetches rank + score histogram for a (dateISO, deviceId)
+// useDailyRank — fetches the player's rank for a (dateISO, deviceId)
 // pair from Supabase. Loading / error / success state surfaced to the
 // caller so RankPanel can render skeletons / fallback copy.
+//
+// Histogram + top-scores live in a separate `useDailyStats` hook
+// (lazy-loaded by the stats modal) so the result screen doesn't pay
+// the cost of fetching that data unless the player taps through.
 //
 // The hook re-fetches on:
 //   - mount (after deviceId is known)
 //   - deviceId or dateISO change
-//   - any change to the daily plays map (so a fresh submission triggers
-//     a re-fetch — once the local write fires, the remote leaderboard
-//     should reflect it on the next call)
+//   - any change to the daily plays map (first nudge after a fresh
+//     submission — gives an immediate "fetching…" transition)
+//   - submitToken bump (post-submit confirmation that the server now
+//     has the row, so the rank read returns real data instead of
+//     "no row for this player")
 
 import { useCallback, useEffect, useState } from 'react';
 import { useDaily } from '../daily/DailyProvider';
 import {
-  fetchHistogram,
   fetchRank,
-  HistogramSnapshot,
   isBackendConfigured,
   RankSnapshot,
 } from '../daily/supabase';
@@ -22,7 +26,7 @@ import {
 export type RankStatus =
   | 'pending'             // bootstrap in flight or fetch not yet started
   | 'loading'             // fetching in progress
-  | 'ready'               // rank + histogram available
+  | 'ready'               // rank available
   | 'rank-pending'        // backend reachable but no row for this player
                           // yet (e.g. submission still in the offline
                           // queue, or the submit RPC hasn't landed)
@@ -32,7 +36,6 @@ export type RankStatus =
 export interface DailyRankState {
   status: RankStatus;
   rank: RankSnapshot | null;
-  histogram: HistogramSnapshot | null;
   refresh: () => void;
 }
 
@@ -40,7 +43,6 @@ export const useDailyRank = (dateISO: string | null): DailyRankState => {
   const { deviceId, plays, submitToken } = useDaily();
   const [status, setStatus] = useState<RankStatus>('pending');
   const [rank, setRank] = useState<RankSnapshot | null>(null);
-  const [histogram, setHistogram] = useState<HistogramSnapshot | null>(null);
   const [bumpToken, setBumpToken] = useState(0);
 
   const refresh = useCallback(() => setBumpToken(t => t + 1), []);
@@ -59,18 +61,13 @@ export const useDailyRank = (dateISO: string | null): DailyRankState => {
       }
       setStatus('loading');
       try {
-        const [r, h] = await Promise.all([
-          fetchRank(deviceId, dateISO),
-          fetchHistogram(dateISO),
-        ]);
+        const r = await fetchRank(deviceId, dateISO);
         if (cancelled) return;
         setRank(r);
-        setHistogram(h);
         setStatus(r === null ? 'rank-pending' : 'ready');
       } catch {
         if (cancelled) return;
         setRank(null);
-        setHistogram(null);
         setStatus('error');
       }
     };
@@ -85,5 +82,5 @@ export const useDailyRank = (dateISO: string | null): DailyRankState => {
     // actually completes so the panel resolves to the real row.
   }, [deviceId, dateISO, plays, bumpToken, submitToken]);
 
-  return { status, rank, histogram, refresh };
+  return { status, rank, refresh };
 };
