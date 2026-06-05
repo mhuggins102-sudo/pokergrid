@@ -8,7 +8,7 @@ import {
   SlotKind,
   SPECIAL_DECK_POOL,
 } from './src/game/bonusCards';
-import { shuffle } from './src/game/deck';
+import { seededRng, shuffle } from './src/game/deck';
 import { Card } from './src/game/cards';
 import {
   ChallengeId,
@@ -16,18 +16,22 @@ import {
   findChallenge,
   targetForLevel,
 } from './src/game/challenges';
-import { Difficulty, UNDOS_BY_DIFFICULTY } from './src/game/rules';
+import { DailyRecipe } from './src/game/daily/recipe';
+import { seedForDate } from './src/game/daily/seed';
+import { Difficulty, TARGET_BY_DIFFICULTY, UNDOS_BY_DIFFICULTY } from './src/game/rules';
 import { useGame } from './src/ui/hooks/useGame';
 import { BonusCardsScreen } from './src/ui/screens/BonusCardsScreen';
 import { ChallengesScreen } from './src/ui/screens/ChallengesScreen';
 import { GameScreen } from './src/ui/screens/GameScreen';
 import { HomeScreen } from './src/ui/screens/HomeScreen';
+import { LandingScreen } from './src/ui/screens/LandingScreen';
 import { ResultScreen } from './src/ui/screens/ResultScreen';
 import { RulesScreen } from './src/ui/screens/RulesScreen';
 import { SettingsScreen } from './src/ui/screens/SettingsScreen';
 import { AchievementsScreen } from './src/ui/screens/AchievementsScreen';
 import { StatsScreen } from './src/ui/screens/StatsScreen';
 import { markTutorialSeen, TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
+import { DailyProvider, useDaily } from './src/ui/daily/DailyProvider';
 import { SettingsProvider } from './src/ui/settings';
 import { StatsProvider } from './src/ui/stats';
 import { hydrateSavedCards, TUSaveProvider, useTUSave } from './src/ui/targetsUpSave';
@@ -55,11 +59,17 @@ export type PlayContext =
       // supercharge the same bonus card type on consecutive rounds.
       lastKeptBaseId?: string | null;
     }
-  | { mode: 'challenge'; id: ChallengeId };
+  | { mode: 'challenge'; id: ChallengeId }
+  // Daily Grid: deterministic from dateISO via seededRng(seedForDate(dateISO)).
+  // recipe is captured at game start so a recipe-config change between
+  // start and game-over doesn't reshape mid-run.
+  | { mode: 'daily'; dateISO: string; recipe: DailyRecipe };
 
 type Screen =
+  | 'landing'
   | 'home'
   | 'game'
+  | 'daily-result'
   | 'settings'
   | 'stats'
   | 'achievements'
@@ -69,7 +79,7 @@ type Screen =
   | 'challenges';
 
 const AppShell = () => {
-  const [screen, setScreen] = useState<Screen>('home');
+  const [screen, setScreen] = useState<Screen>('landing');
   const [playContext, setPlayContext] = useState<PlayContext | null>(null);
   const [nonce, setNonce] = useState(0);
   // Where the tutorial should return to when finished. First-run / Rules flow
@@ -77,6 +87,7 @@ const AppShell = () => {
   // to 'settings'.
   const [tutorialReturn, setTutorialReturn] = useState<Screen>('rules');
   const { save: tuSave } = useTUSave();
+  const daily = useDaily();
 
   // First-run: pop up the single-page Rules. Mark seen on dismiss so we
   // don't show it again. The user can re-open from Home → How to Play.
@@ -86,9 +97,12 @@ const AppShell = () => {
     });
   }, []);
 
+  // First-run + landing-default-aware dismissal: Free Play (the old
+  // root) used to go straight to 'home'. Now the player should land on
+  // the new landing screen after first-run rules.
   const dismissRules = () => {
     markTutorialSeen();
-    setScreen('home');
+    setScreen('landing');
   };
 
   const startFreePlay = (d: Difficulty) => {
@@ -120,6 +134,28 @@ const AppShell = () => {
     setNonce(n => n + 1);
     setScreen('game');
   };
+  const startDaily = () => {
+    // Lock today's date + recipe at commit time so a session crossing
+    // UTC midnight submits under the start date and a recipe-config
+    // change can't reshape the run mid-play.
+    setPlayContext({
+      mode: 'daily',
+      dateISO: daily.todayISO,
+      recipe: daily.todayRecipe,
+    });
+    setNonce(n => n + 1);
+    setScreen('game');
+  };
+  const openTodayDailyResult = () => {
+    // Re-entry path for a completed daily. The daily-result screen
+    // reads the stored GameState from DailyProvider's plays map.
+    setPlayContext({
+      mode: 'daily',
+      dateISO: daily.todayISO,
+      recipe: daily.todayRecipe,
+    });
+    setScreen('daily-result');
+  };
   const advanceTargetsUp = (
     deckExtras?: BonusCard[],
     superchargedDeckCards?: Card[],
@@ -142,8 +178,21 @@ const AppShell = () => {
     setNonce(n => n + 1);
   };
 
+  // Daily-mode home button routes back to landing (where the player
+  // launched the daily from). Other modes return to the Free Play home,
+  // which is itself a sub-screen of landing now.
+  const homeForContext = (ctx: PlayContext): Screen =>
+    ctx.mode === 'daily' ? 'landing' : 'home';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
+      {screen === 'landing' && (
+        <LandingScreen
+          onStartDaily={startDaily}
+          onOpenFreePlay={() => setScreen('home')}
+          onOpenDailyResult={openTodayDailyResult}
+        />
+      )}
       {screen === 'home' && (
         <HomeScreen
           onStartFree={startFreePlay}
@@ -154,15 +203,22 @@ const AppShell = () => {
           onOpenAchievements={() => setScreen('achievements')}
           onOpenSettings={() => setScreen('settings')}
           onOpenRules={() => setScreen('rules')}
+          onBack={() => setScreen('landing')}
         />
       )}
       {screen === 'game' && playContext && (
         <GameContainer
           key={`${nonce}`}
           context={playContext}
-          onHome={() => setScreen('home')}
+          onHome={() => setScreen(homeForContext(playContext))}
           onReplay={() => setNonce(n => n + 1)}
           onAdvance={advanceTargetsUp}
+        />
+      )}
+      {screen === 'daily-result' && playContext?.mode === 'daily' && (
+        <DailyResultContainer
+          context={playContext}
+          onHome={() => setScreen('landing')}
         />
       )}
       {screen === 'stats' && <StatsScreen onBack={() => setScreen('home')} />}
@@ -283,12 +339,14 @@ export default function App() {
         <SettingsProvider>
           <StatsProvider>
             <TUSaveProvider>
-              <WebScaler>
-                <View style={styles.app}>
-                  <StatusBar style="light" />
-                  <AppShell />
-                </View>
-              </WebScaler>
+              <DailyProvider>
+                <WebScaler>
+                  <View style={styles.app}>
+                    <StatusBar style="light" />
+                    <AppShell />
+                  </View>
+                </WebScaler>
+              </DailyProvider>
             </TUSaveProvider>
           </StatsProvider>
         </SettingsProvider>
@@ -313,6 +371,10 @@ const contextTarget = (ctx: PlayContext): number => {
     case 'free': return 0; // useGame defaults via difficulty
     case 'targets-up': return targetForLevel(ctx.level);
     case 'challenge': return findChallenge(ctx.id).scoreTarget;
+    // Daily uses the standard per-difficulty target. Future twists may
+    // override (e.g. Poker Purist drops the bar to 350); for Phase 1
+    // recipe.twist is always undefined so this is the plain target.
+    case 'daily': return TARGET_BY_DIFFICULTY[ctx.recipe.difficulty];
   }
 };
 
@@ -321,6 +383,7 @@ const contextDifficulty = (ctx: PlayContext): Difficulty => {
     case 'free': return ctx.difficulty;
     case 'targets-up': return difficultyForLevel(ctx.level);
     case 'challenge': return 'hard';
+    case 'daily': return ctx.recipe.difficulty;
   }
 };
 
@@ -332,6 +395,7 @@ const contextKicker = (ctx: PlayContext): string | undefined => {
       const c = findChallenge(ctx.id);
       return `CHALLENGE · ${c.name.toUpperCase()}`;
     }
+    case 'daily': return `DAILY · ${ctx.dateISO}`;
   }
 };
 
@@ -340,17 +404,24 @@ const contextKicker = (ctx: PlayContext): string | undefined => {
 // maps to via difficultyForLevel — so L1–6 (Easy / Medium bands) get
 // the 1-undo cap, and L7+ (Hard band) match Free Play Hard's no-undo
 // rule. Free Play itself reads straight from UNDOS_BY_DIFFICULTY.
+// Daily Grid grants exactly 1 free undo regardless of underlying
+// difficulty (locked decision) so even Extreme dailies are recoverable
+// from a single misclick — using it does NOT taint the score.
 const contextMaxUndos = (ctx: PlayContext): number => {
   switch (ctx.mode) {
     case 'free': return UNDOS_BY_DIFFICULTY[ctx.difficulty];
     case 'targets-up': return UNDOS_BY_DIFFICULTY[difficultyForLevel(ctx.level)];
     case 'challenge': return 0;
+    case 'daily': return 1;
   }
 };
 
 const contextDeckLimit = (ctx: PlayContext): number | undefined => {
-  if (ctx.mode !== 'challenge') return undefined;
-  return findChallenge(ctx.id).deckLimit;
+  if (ctx.mode === 'challenge') return findChallenge(ctx.id).deckLimit;
+  // Daily twists may eventually swap in the short-deck deckLimit; for
+  // Phase 1 (no twists) this stays undefined.
+  if (ctx.mode === 'daily' && ctx.recipe.twist === 'short-deck') return 45;
+  return undefined;
 };
 
 // No Swap was a challenge mode in the original set; it's now an
@@ -414,6 +485,13 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     context.mode === 'targets-up' ? context.deckExtras : undefined;
   const superchargedDeckCards =
     context.mode === 'targets-up' ? context.superchargedDeckCards : undefined;
+  // Daily Grid: every player worldwide gets the same deck order on the
+  // same UTC day via seededRng(seedForDate(dateISO)). Other modes pass
+  // undefined so newGame falls back to Math.random.
+  const rng =
+    context.mode === 'daily'
+      ? seededRng(seedForDate(context.dateISO))
+      : undefined;
   const { state, dispatch } = useGame(
     contextDifficulty(context),
     target,
@@ -427,7 +505,8 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
     contextNoBonusCards(context),
     contextInitialBonusCards(context),
     contextSlotCategories(context),
-    contextRandomGridFill(context)
+    contextRandomGridFill(context),
+    rng
   );
   if (state.phase.kind === 'game-over') {
     return (
@@ -449,6 +528,37 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
       maxUndos={contextMaxUndos(context)}
       showTierRewards={context.mode === 'targets-up'}
       animateInitialPlacement={contextRandomGridFill(context) > 0}
+    />
+  );
+};
+
+// Re-entry path for an already-completed daily. Pulls the stored
+// GameState from the DailyProvider's plays map and re-renders the
+// regular ResultScreen with it. The Replay / Advance callbacks are
+// no-ops because daily mode forbids replays and isn't tied to TU
+// progression.
+interface DailyResultContainerProps {
+  context: Extract<PlayContext, { mode: 'daily' }>;
+  onHome: () => void;
+}
+
+const DailyResultContainer = ({ context, onHome }: DailyResultContainerProps) => {
+  const { plays } = useDaily();
+  const play = plays?.[context.dateISO];
+  if (!play) {
+    // Plays map not yet hydrated, or the play vanished from storage
+    // between the landing-screen click and this render. LandingScreen
+    // only routes here when plays[date] exists, so this branch is a
+    // safety net rather than a normal path.
+    return <View style={styles.app} />;
+  }
+  return (
+    <ResultScreen
+      state={play.state}
+      context={context}
+      onHome={onHome}
+      onReplay={() => {}}
+      onAdvance={() => {}}
     />
   );
 };

@@ -1,17 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  cancelAnimation,
-} from 'react-native-reanimated';
 import { Difficulty, TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { DifficultyInfoModal } from '../components/DifficultyInfoModal';
 import { NeonButton } from '../components/NeonButton';
 import { VariantsInfoModal } from '../components/VariantsInfoModal';
-import { useSettings } from '../settings';
 import { useStats } from '../stats';
 import { useTUSave } from '../targetsUpSave';
 import { colors, difficultyColor, fonts, glow, radius, spacing } from '../theme';
@@ -25,6 +17,10 @@ interface Props {
   onOpenAchievements: () => void;
   onOpenSettings: () => void;
   onOpenRules: () => void;
+  // Back-to-landing. The brand title moved to LandingScreen, so Home
+  // is now a sub-screen reached from Daily/Free Play split rather than
+  // the app's root.
+  onBack: () => void;
 }
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
@@ -40,21 +36,6 @@ const DIFF_TAGLINE: Record<Difficulty, string> = {
   extreme: 'brutal',
 };
 
-const NeonTitle = () => {
-  const { settings } = useSettings();
-  const pulse = useSharedValue(0.7);
-  useEffect(() => {
-    if (settings.reduceMotion) return;
-    pulse.value = withRepeat(withTiming(1, { duration: 1600 }), -1, true);
-    return () => cancelAnimation(pulse);
-  }, [settings.reduceMotion, pulse]);
-  const style = useAnimatedStyle(() => ({
-    textShadowRadius: 4 + pulse.value * 14,
-    opacity: 0.85 + pulse.value * 0.15,
-  }));
-  return <Animated.Text style={[styles.title, style]}>POKERGRID</Animated.Text>;
-};
-
 export const HomeScreen = ({
   onStartFree,
   onStartTargetsUp,
@@ -64,6 +45,7 @@ export const HomeScreen = ({
   onOpenAchievements,
   onOpenSettings,
   onOpenRules,
+  onBack,
 }: Props) => {
   const [confirmNewTU, setConfirmNewTU] = React.useState(false);
   const [difficultyInfoOpen, setDifficultyInfoOpen] = React.useState(false);
@@ -73,13 +55,13 @@ export const HomeScreen = ({
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
-        <Text style={styles.subtitle}>5×5 poker solitaire</Text>
-        <NeonTitle />
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Free Play</Text>
+        <NeonButton label="Back" variant="ghost" size="sm" onPress={onBack} />
       </View>
 
       <View style={styles.sectionLabelRow}>
-        <Text style={styles.sectionLabel}>Free Play</Text>
+        <Text style={styles.sectionLabel}>Difficulty</Text>
         <Pressable
           onPress={() => setDifficultyInfoOpen(true)}
           hitSlop={10}
@@ -291,30 +273,24 @@ const modalStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgBase },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
-  hero: {
-    paddingTop: spacing.xl,
-    paddingBottom: 0,
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  // Top row matches the cross-screen page-title baseline (22pt / 900 /
+  // letterSpacing 3 / mono / uppercase + ghost Back) used by Rules,
+  // Settings, Stats, Achievements, Bonus Cards, Challenges. The brand
+  // wordmark moved to LandingScreen.
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  subtitle: {
-    color: colors.suitH,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 4,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
-    textShadowColor: colors.suitH,
-    textShadowRadius: 6,
+    marginBottom: spacing.md,
   },
   title: {
     color: colors.textHi,
     fontFamily: fonts.mono,
-    fontSize: 38,
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: 5,
-    textShadowColor: colors.accent,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
   },
   sectionLabel: {
     color: colors.textMid,

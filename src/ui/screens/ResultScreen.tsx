@@ -28,11 +28,13 @@ import { BonusCardStrip } from '../components/BonusCardStrip';
 import { GridView } from '../components/GridView';
 import { LineDetailModal } from '../components/LineDetailModal';
 import { NeonButton } from '../components/NeonButton';
+import { RankPanel } from '../components/RankPanel';
 import { RewardsFlow, RewardsResult } from '../components/RewardsFlow';
 import { useHaptic } from '../haptics';
 import { useSettings } from '../settings';
 import { useSound } from '../sound';
 import { tierForRun, useStats } from '../stats';
+import { useDaily } from '../daily/DailyProvider';
 import { useTUSave } from '../targetsUpSave';
 import { buildShareUrl, shareUrl } from '../share';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -248,7 +250,21 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
     recordAchievement,
   } = useStats();
   const { saveProgress: saveTUProgress, clearProgress: clearTUProgress } = useTUSave();
+  const daily = useDaily();
   const recorded = useRef(false);
+  const isDaily = context.mode === 'daily';
+  // Daily plays that already have a stored record are historical — the
+  // player tapped the daily tile again to re-view their result. Don't
+  // re-record them locally and don't re-play the win/lose sound effect
+  // when we know this game-over isn't fresh. Snapshot at mount so the
+  // value doesn't flip the moment recordCompletion writes through to
+  // the plays map and forces a re-render.
+  const dailyAlreadyStoredAtMount = useRef<boolean | null>(null);
+  if (dailyAlreadyStoredAtMount.current === null) {
+    dailyAlreadyStoredAtMount.current =
+      isDaily && daily.plays !== null && daily.plays[context.dateISO] !== undefined;
+  }
+  const dailyJustFinished = isDaily && !dailyAlreadyStoredAtMount.current;
   // Snapshot stats on first render so the "NEW BEST" check compares against
   // the player's prior best — not the post-record best (which would always
   // tie or beat itself on win runs).
@@ -309,6 +325,8 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       ? `LEVEL ${context.level}`
       : context.mode === 'challenge'
       ? `CHALLENGE · ${challenge!.name.toUpperCase()}`
+      : context.mode === 'daily'
+      ? `DAILY · ${context.dateISO}`
       : context.difficulty.toUpperCase();
 
   // Practice runs: any UNDO during the run "taints" it for stats. We skip
@@ -534,6 +552,11 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
   useEffect(() => {
     if (recorded.current) return;
     recorded.current = true;
+    // Daily Grid plays live on a separate ladder — they don't touch
+    // per-difficulty bests, win counts, achievement progress, or the
+    // Targets-Up save. The dedicated daily-recording effect below
+    // handles them.
+    if (isDaily) return;
     if (context.mode === 'targets-up' && !won) {
       clearTUProgress();
     }
@@ -595,14 +618,38 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
         recordAchievement(a.id);
       }
     }
-  }, [record, recordTargetsUp, recordChallenge, recordAchievement, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues, newlyEarnedAchievements]);
+  }, [record, recordTargetsUp, recordChallenge, recordAchievement, saveTUProgress, clearTUProgress, context, state.difficulty, state.target, total, won, tainted, state.bonusCards, bonusValues, newlyEarnedAchievements, isDaily]);
+
+  // Daily Grid recording. Fires once on mount for a freshly-finished
+  // run; idempotent on re-renders via the ref guard. The full
+  // GameState is stashed so re-entering the daily after the fact
+  // re-renders the same result without needing to replay the game.
+  const dailyRecorded = useRef(false);
+  useEffect(() => {
+    if (!dailyJustFinished || dailyRecorded.current) return;
+    if (context.mode !== 'daily') return;
+    dailyRecorded.current = true;
+    daily.recordCompletion({
+      dateISO: context.dateISO,
+      score: total,
+      won,
+      recipe: context.recipe,
+      completedAt: Date.now(),
+      state,
+    });
+  }, [dailyJustFinished, context, total, won, state, daily]);
 
   const [shareLabel, setShareLabel] = useState<string | null>(null);
   const handleShare = async () => {
     const url = buildShareUrl({
       score: total,
       mode: context.mode,
-      difficulty: context.mode === 'free' ? state.difficulty : undefined,
+      // Daily Grid shares carry the day's underlying difficulty so the
+      // OG card reads "Daily · Hard" instead of just "Daily".
+      difficulty:
+        context.mode === 'free' || context.mode === 'daily'
+          ? state.difficulty
+          : undefined,
       grid: state.grid,
     });
     const title = `I scored ${total} on PokerGrid. Can you beat me?`;
@@ -635,14 +682,22 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <BannerHero
-        won={won}
-        score={total}
-        target={state.target}
-        kicker={kicker}
-        tier={tier}
-        isNewBest={isNewBest}
-      />
+      {isDaily && context.mode === 'daily' ? (
+        <RankPanel
+          dateISO={context.dateISO}
+          score={total}
+          freshlySubmitted={dailyJustFinished}
+        />
+      ) : (
+        <BannerHero
+          won={won}
+          score={total}
+          target={state.target}
+          kicker={kicker}
+          tier={tier}
+          isNewBest={isNewBest}
+        />
+      )}
 
       {context.mode === 'targets-up' && (
         <Text style={styles.modeNote}>
@@ -654,13 +709,18 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
       {context.mode === 'challenge' && (
         <Text style={styles.modeNote}>{challenge!.goal}</Text>
       )}
-      {tainted && (
+      {/* Daily Grid grants 1 free undo regardless of difficulty (it's
+          the standard daily ration, not a practice exemption) so the
+          tainted-practice note is suppressed in daily mode. */}
+      {tainted && !isDaily && (
         <Text style={styles.taintedNote}>
           Practice run · {state.undoCount} undo{state.undoCount === 1 ? '' : 's'} used · score not recorded
         </Text>
       )}
 
-      {newlyEarnedAchievements.length > 0 && (
+      {/* Daily plays don't grant achievements — they sit on their own
+          ladder. */}
+      {!isDaily && newlyEarnedAchievements.length > 0 && (
         <View style={styles.achievementBlock}>
           <Text style={styles.achievementHeading}>
             ✦ Achievement{newlyEarnedAchievements.length === 1 ? '' : 's'} earned
@@ -798,6 +858,10 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
               />
             )
           ) : null
+        ) : isDaily ? (
+          // Daily Grid enforces one play per date — no Replay button.
+          // The player exits via Home (back to landing) or Share.
+          null
         ) : (
           // Free Play and Challenges keep the Replay button; only the
           // Targets-Up loss case suppresses it so the player can't retry
