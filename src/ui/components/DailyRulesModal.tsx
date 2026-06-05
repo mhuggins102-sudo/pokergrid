@@ -6,6 +6,7 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DailyRecipe } from '../../game/daily/recipe';
+import { findChallenge } from '../../game/challenges';
 import { TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { NeonButton } from './NeonButton';
 import { colors, difficultyColor, fonts, glow, radius, spacing } from '../theme';
@@ -84,23 +85,30 @@ export const DailyRulesModal = ({
           </View>
           <Text style={styles.recipeTagline}>{DIFFICULTY_TAGLINE[recipe.difficulty]}</Text>
 
-          <View style={styles.recipeRow}>
-            <Text style={styles.recipeLabel}>Target</Text>
-            <Text style={styles.recipeValueNeutral}>
-              {TARGET_BY_DIFFICULTY[recipe.difficulty]}
-            </Text>
-          </View>
-
-          {/*
-            Twist row is intentionally hidden in Phase 1 — RECIPE_CONFIG
-            has twistProbability: 0 so recipe.twist is always undefined.
-            Phase 3 turns twists on and the conditional render lights up
-            automatically.
-          */}
-          {recipe.twist && (
+          {recipe.twist ? (
+            <>
+              <View style={styles.recipeRow}>
+                <Text style={styles.recipeLabel}>Twist</Text>
+                <Text style={styles.recipeValueTwist}>
+                  {findChallenge(recipe.twist).name}
+                </Text>
+              </View>
+              <Text style={styles.twistSynopsis}>
+                {findChallenge(recipe.twist).synopsis}
+              </Text>
+              <View style={styles.recipeRow}>
+                <Text style={styles.recipeLabel}>Target</Text>
+                <Text style={styles.recipeValueNeutral}>
+                  {findChallenge(recipe.twist).scoreTarget}
+                </Text>
+              </View>
+            </>
+          ) : (
             <View style={styles.recipeRow}>
-              <Text style={styles.recipeLabel}>Twist</Text>
-              <Text style={styles.recipeValueTwist}>{recipe.twist}</Text>
+              <Text style={styles.recipeLabel}>Target</Text>
+              <Text style={styles.recipeValueNeutral}>
+                {TARGET_BY_DIFFICULTY[recipe.difficulty]}
+              </Text>
             </View>
           )}
 
@@ -216,6 +224,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textShadowColor: colors.warn,
     textShadowRadius: 4,
+  },
+  twistSynopsis: {
+    color: colors.textMid,
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    fontStyle: 'italic',
+    lineHeight: 15,
+    marginBottom: spacing.sm,
+    paddingBottom: spacing.xs,
+    borderBottomColor: colors.outlineSoft,
+    borderBottomWidth: 1,
   },
   recipeTagline: {
     color: colors.textLow,

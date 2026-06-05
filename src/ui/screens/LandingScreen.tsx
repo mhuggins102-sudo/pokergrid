@@ -30,6 +30,8 @@ interface Props {
   // Called when the player taps an already-completed daily — opens the
   // result screen for that play.
   onOpenDailyResult: () => void;
+  // Calendar archive of past dailies.
+  onOpenDailyArchive: () => void;
   // Sub-screens reachable from landing AND from Free Play home. The
   // parent owns the return-to-source bookkeeping so Back lands the
   // player where they came from regardless of entry point.
@@ -67,6 +69,7 @@ export const LandingScreen = ({
   onStartDaily,
   onOpenFreePlay,
   onOpenDailyResult,
+  onOpenDailyArchive,
   onOpenRules,
   onOpenSettings,
 }: Props) => {
@@ -120,13 +123,24 @@ export const LandingScreen = ({
             Today's seed, same for every player. One play per day. New
             grid at UTC midnight.
           </Text>
-          <Text style={styles.modeCta}>
-            {!dailyLoaded
-              ? 'Loading…'
-              : todayPlay
-                ? 'View today\'s result →'
-                : 'Play today\'s daily →'}
-          </Text>
+          <View style={styles.dailyCtaRow}>
+            <Text style={styles.modeCta}>
+              {!dailyLoaded
+                ? 'Loading…'
+                : todayPlay
+                  ? 'View today\'s result →'
+                  : 'Play today\'s daily →'}
+            </Text>
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                onOpenDailyArchive();
+              }}
+              hitSlop={6}
+            >
+              <Text style={styles.modeSecondaryCta}>Archive →</Text>
+            </Pressable>
+          </View>
         </Pressable>
 
         <Pressable style={styles.modeCard} onPress={onOpenFreePlay}>
@@ -294,6 +308,21 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
     textShadowRadius: 3,
+  },
+  // Daily card splits its CTA row in two: the primary action (play /
+  // view) on the left, the archive link on the right.
+  dailyCtaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  modeSecondaryCta: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   // Mirrors HomeScreen's secondary nav row — How to Play + Settings are
   // reachable from both entry points (landing and Free Play home) so

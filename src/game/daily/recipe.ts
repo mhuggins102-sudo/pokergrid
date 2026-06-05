@@ -40,8 +40,9 @@ const ALL_TWISTS: ChallengeId[] = [
 
 export const RECIPE_CONFIG: RecipeConfig = {
   difficultyWeights: { easy: 20, medium: 35, hard: 35, extreme: 10 },
-  // Phase 1: twists disabled. Phase 3 flips this to 0.30.
-  twistProbability: 0,
+  // Phase 3: twists live at 30%. Suppressed on Extreme days so the
+  // hardest baseline doesn't compound with a structural handicap.
+  twistProbability: 0.3,
   twistEligibility: {
     easy: ALL_TWISTS,
     medium: ALL_TWISTS,

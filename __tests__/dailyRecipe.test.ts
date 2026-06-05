@@ -18,14 +18,35 @@ describe('daily recipe', () => {
     expect(valid).toContain(r.difficulty);
   });
 
-  it('never includes a twist when TWIST_PROBABILITY is 0 (Phase 1)', () => {
-    expect(RECIPE_CONFIG.twistProbability).toBe(0);
+  it('never pairs a twist with Extreme', () => {
     const start = new Date(Date.UTC(2026, 0, 1));
-    for (let i = 0; i < 365; i++) {
+    for (let i = 0; i < 3650; i++) {
       const d = new Date(start.getTime() + i * 86400_000);
       const r = recipeFor(currentDateISO(d));
-      expect(r.twist).toBeUndefined();
+      if (r.difficulty === 'extreme') {
+        expect(r.twist).toBeUndefined();
+      }
     }
+  });
+
+  it('twist rate roughly matches RECIPE_CONFIG.twistProbability', () => {
+    const start = new Date(Date.UTC(2026, 0, 1));
+    const TOTAL = 3650;
+    let twistCount = 0;
+    let nonExtremeCount = 0;
+    for (let i = 0; i < TOTAL; i++) {
+      const d = new Date(start.getTime() + i * 86400_000);
+      const r = recipeFor(currentDateISO(d));
+      if (r.difficulty !== 'extreme') {
+        nonExtremeCount += 1;
+        if (r.twist) twistCount += 1;
+      }
+    }
+    // Expected rate among non-Extreme days = twistProbability.
+    const observed = twistCount / nonExtremeCount;
+    const expected = RECIPE_CONFIG.twistProbability;
+    expect(observed).toBeGreaterThan(expected - 0.04);
+    expect(observed).toBeLessThan(expected + 0.04);
   });
 
   it('difficulty distribution matches weights over 10 years of samples', () => {

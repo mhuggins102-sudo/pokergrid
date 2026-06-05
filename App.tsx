@@ -16,12 +16,13 @@ import {
   findChallenge,
   targetForLevel,
 } from './src/game/challenges';
-import { DailyRecipe } from './src/game/daily/recipe';
+import { DailyRecipe, recipeFor } from './src/game/daily/recipe';
 import { seedForDate } from './src/game/daily/seed';
 import { Difficulty, TARGET_BY_DIFFICULTY, UNDOS_BY_DIFFICULTY } from './src/game/rules';
 import { useGame } from './src/ui/hooks/useGame';
 import { BonusCardsScreen } from './src/ui/screens/BonusCardsScreen';
 import { ChallengesScreen } from './src/ui/screens/ChallengesScreen';
+import { DailyArchiveScreen } from './src/ui/screens/DailyArchiveScreen';
 import { GameScreen } from './src/ui/screens/GameScreen';
 import { HomeScreen } from './src/ui/screens/HomeScreen';
 import { LandingScreen } from './src/ui/screens/LandingScreen';
@@ -70,6 +71,7 @@ type Screen =
   | 'home'
   | 'game'
   | 'daily-result'
+  | 'daily-archive'
   | 'settings'
   | 'stats'
   | 'achievements'
@@ -142,25 +144,30 @@ const AppShell = () => {
     setNonce(n => n + 1);
     setScreen('game');
   };
-  const startDaily = () => {
-    // Lock today's date + recipe at commit time so a session crossing
+  // Both daily entry points accept an optional dateISO so the archive
+  // can replay past dates the same way LandingScreen launches today's
+  // daily. When omitted we fall back to today.
+  const startDaily = (dateISO?: string) => {
+    const targetDate = dateISO ?? daily.todayISO;
+    // Lock the date + recipe at commit time so a session crossing
     // UTC midnight submits under the start date and a recipe-config
     // change can't reshape the run mid-play.
     setPlayContext({
       mode: 'daily',
-      dateISO: daily.todayISO,
-      recipe: daily.todayRecipe,
+      dateISO: targetDate,
+      recipe: recipeFor(targetDate),
     });
     setNonce(n => n + 1);
     setScreen('game');
   };
-  const openTodayDailyResult = () => {
+  const openDailyResult = (dateISO?: string) => {
     // Re-entry path for a completed daily. The daily-result screen
     // reads the stored GameState from DailyProvider's plays map.
+    const targetDate = dateISO ?? daily.todayISO;
     setPlayContext({
       mode: 'daily',
-      dateISO: daily.todayISO,
-      recipe: daily.todayRecipe,
+      dateISO: targetDate,
+      recipe: recipeFor(targetDate),
     });
     setScreen('daily-result');
   };
@@ -196,9 +203,10 @@ const AppShell = () => {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
       {screen === 'landing' && (
         <LandingScreen
-          onStartDaily={startDaily}
+          onStartDaily={() => startDaily()}
           onOpenFreePlay={() => setScreen('home')}
-          onOpenDailyResult={openTodayDailyResult}
+          onOpenDailyResult={() => openDailyResult()}
+          onOpenDailyArchive={() => setScreen('daily-archive')}
           onOpenRules={() => {
             setRulesReturn('landing');
             setScreen('rules');
@@ -207,6 +215,13 @@ const AppShell = () => {
             setSettingsReturn('landing');
             setScreen('settings');
           }}
+        />
+      )}
+      {screen === 'daily-archive' && (
+        <DailyArchiveScreen
+          onBack={() => setScreen('landing')}
+          onStartDaily={(dateISO) => startDaily(dateISO)}
+          onOpenResult={(dateISO) => openDailyResult(dateISO)}
         />
       )}
       {screen === 'home' && (
@@ -393,10 +408,14 @@ const contextTarget = (ctx: PlayContext): number => {
     case 'free': return 0; // useGame defaults via difficulty
     case 'targets-up': return targetForLevel(ctx.level);
     case 'challenge': return findChallenge(ctx.id).scoreTarget;
-    // Daily uses the standard per-difficulty target. Future twists may
-    // override (e.g. Poker Purist drops the bar to 350); for Phase 1
-    // recipe.twist is always undefined so this is the plain target.
-    case 'daily': return TARGET_BY_DIFFICULTY[ctx.recipe.difficulty];
+    // Daily uses the standard per-difficulty target. When a twist is
+    // rolled, the twist's challenge target REPLACES the difficulty
+    // target — so a Daily Easy · Poker Purist run has the same 350
+    // target as the Poker Purist Challenge. (Players see this in the
+    // rules modal before committing.)
+    case 'daily':
+      if (ctx.recipe.twist) return findChallenge(ctx.recipe.twist).scoreTarget;
+      return TARGET_BY_DIFFICULTY[ctx.recipe.difficulty];
   }
 };
 
@@ -409,6 +428,17 @@ const contextDifficulty = (ctx: PlayContext): Difficulty => {
   }
 };
 
+// Returns the active twist / challenge id when one applies. Daily
+// runs with a twist behave structurally identical to the same-named
+// Challenge — same flag plumbing for noDiscards / randomPerks /
+// noBonusCards / slotCategories / randomGridFill — so every per-id
+// check below routes through this helper.
+const effectiveTwist = (ctx: PlayContext): ChallengeId | null => {
+  if (ctx.mode === 'challenge') return ctx.id;
+  if (ctx.mode === 'daily' && ctx.recipe.twist) return ctx.recipe.twist;
+  return null;
+};
+
 const contextKicker = (ctx: PlayContext): string | undefined => {
   switch (ctx.mode) {
     case 'free': return ctx.difficulty.toUpperCase();
@@ -417,7 +447,13 @@ const contextKicker = (ctx: PlayContext): string | undefined => {
       const c = findChallenge(ctx.id);
       return `CHALLENGE · ${c.name.toUpperCase()}`;
     }
-    case 'daily': return `DAILY · ${ctx.dateISO}`;
+    case 'daily': {
+      if (ctx.recipe.twist) {
+        const c = findChallenge(ctx.recipe.twist);
+        return `DAILY · ${c.name.toUpperCase()}`;
+      }
+      return `DAILY · ${ctx.dateISO}`;
+    }
   }
 };
 
@@ -440,9 +476,7 @@ const contextMaxUndos = (ctx: PlayContext): number => {
 
 const contextDeckLimit = (ctx: PlayContext): number | undefined => {
   if (ctx.mode === 'challenge') return findChallenge(ctx.id).deckLimit;
-  // Daily twists may eventually swap in the short-deck deckLimit; for
-  // Phase 1 (no twists) this stays undefined.
-  if (ctx.mode === 'daily' && ctx.recipe.twist === 'short-deck') return 45;
+  if (effectiveTwist(ctx) === 'short-deck') return 45;
   return undefined;
 };
 
@@ -452,39 +486,40 @@ const contextDeckLimit = (ctx: PlayContext): number | undefined => {
 // the achievement just checks whether the player swapped or not.
 const contextNoSwap = (_ctx: PlayContext): boolean => false;
 
-// No Discards remains a playable challenge — when active it hides
-// the Discard button and the reducer rejects DISCARD_NONE. Extreme
-// difficulty also forces noDiscards on inside newGame.
+// No Discards: hide the Discard button and reject DISCARD_NONE in
+// the reducer. Extreme difficulty also forces noDiscards on inside
+// newGame so a Daily Extreme is no-discards regardless of twist.
 const contextNoDiscards = (ctx: PlayContext): boolean =>
-  ctx.mode === 'challenge' && ctx.id === 'no-discards';
+  effectiveTwist(ctx) === 'no-discards';
 
 // Short Circuit: the suit perk that fires is randomized. Set the
 // state flag here; GameScreen renders a generic perk button and
 // handleBeginSuitAction picks a random available perk at fire time.
 const contextRandomPerks = (ctx: PlayContext): boolean =>
-  ctx.mode === 'challenge' && ctx.id === 'short-circuit';
+  effectiveTwist(ctx) === 'short-circuit';
 
 // Poker Purist + Three Tricks: zero bonus cards in the regular draw
 // deck. newGame uses this to empty both the starter hand and the bonus
 // deck; GameScreen hides the bonus card strip when this flag is on AND
 // the hand is empty. Three Tricks reuses noBonusCards but seeds the
 // hand with the three specials via initialBonusCards (below).
-const contextNoBonusCards = (ctx: PlayContext): boolean =>
-  ctx.mode === 'challenge' &&
-  (ctx.id === 'poker-purist' || ctx.id === 'three-tricks');
+const contextNoBonusCards = (ctx: PlayContext): boolean => {
+  const t = effectiveTwist(ctx);
+  return t === 'poker-purist' || t === 'three-tricks';
+};
 
 // Three Tricks: seed the bonus hand with three random one-time action
 // cards sampled (no replacement) from SPECIAL_DECK_POOL. newGame uses
 // these instead of the normal starter draw when noBonusCards is true.
 const contextInitialBonusCards = (ctx: PlayContext): BonusCard[] => {
-  if (ctx.mode !== 'challenge' || ctx.id !== 'three-tricks') return [];
+  if (effectiveTwist(ctx) !== 'three-tricks') return [];
   return shuffle(SPECIAL_DECK_POOL, Math.random).slice(0, 3);
 };
 
 // Mixed Bag: lock the 3 bonus slots to categories — slot 0 green
 // (specials), slot 1 yellow (in-game scoring), slot 2 purple (end-game).
 const contextSlotCategories = (ctx: PlayContext): SlotKind[] | undefined => {
-  if (ctx.mode !== 'challenge' || ctx.id !== 'mixed-bag') return undefined;
+  if (effectiveTwist(ctx) !== 'mixed-bag') return undefined;
   return ['special', 'in-game', 'end-game'];
 };
 
@@ -492,7 +527,7 @@ const contextSlotCategories = (ctx: PlayContext): SlotKind[] | undefined => {
 // play begins. The remaining 10 slots fill in via the normal spiral
 // during the run.
 const contextRandomGridFill = (ctx: PlayContext): number => {
-  if (ctx.mode !== 'challenge' || ctx.id !== 'gridlock') return 0;
+  if (effectiveTwist(ctx) !== 'gridlock') return 0;
   return 15;
 };
 
