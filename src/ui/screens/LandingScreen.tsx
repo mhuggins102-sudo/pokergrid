@@ -14,6 +14,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { DailyRulesModal } from '../components/DailyRulesModal';
+import { NeonButton } from '../components/NeonButton';
 import { useDaily } from '../daily/DailyProvider';
 import { useSettings } from '../settings';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -28,6 +29,11 @@ interface Props {
   // Called when the player taps an already-completed daily — opens the
   // result screen for that play.
   onOpenDailyResult: () => void;
+  // Sub-screens reachable from landing AND from Free Play home. The
+  // parent owns the return-to-source bookkeeping so Back lands the
+  // player where they came from regardless of entry point.
+  onOpenRules: () => void;
+  onOpenSettings: () => void;
 }
 
 const NeonBrand = () => {
@@ -60,6 +66,8 @@ export const LandingScreen = ({
   onStartDaily,
   onOpenFreePlay,
   onOpenDailyResult,
+  onOpenRules,
+  onOpenSettings,
 }: Props) => {
   const { plays, todayISO, todayRecipe } = useDaily();
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -113,11 +121,17 @@ export const LandingScreen = ({
             <Text style={styles.modeTitle}>Free Play</Text>
           </View>
           <Text style={styles.modeBody}>
-            Pick your difficulty. Targets Up ladder. Challenges with
-            unique twists. Stats, achievements, settings.
+            Unlimited practice at your chosen difficulty. Play
+            Challenges with unique twists and the Targets Up
+            multi-round game.
           </Text>
           <Text style={styles.modeCta}>Open Free Play →</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.navRow}>
+        <NeonButton label="How to Play" variant="primary" size="md" onPress={onOpenRules} />
+        <NeonButton label="Settings" variant="secondary" size="md" onPress={onOpenSettings} />
       </View>
 
       <DailyRulesModal
@@ -225,5 +239,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textShadowColor: colors.accent,
     textShadowRadius: 3,
+  },
+  // Mirrors HomeScreen's secondary nav row — How to Play + Settings are
+  // reachable from both entry points (landing and Free Play home) so
+  // the player doesn't have to back out to find them.
+  navRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.xl,
+    flexWrap: 'wrap',
   },
 });

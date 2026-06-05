@@ -91,13 +91,6 @@ export const DailyRulesModal = ({
             </Text>
           </View>
 
-          <View style={styles.recipeRow}>
-            <Text style={styles.recipeLabel}>Undos</Text>
-            <Text style={styles.recipeValueNeutral}>
-              1 (free for Daily Grid)
-            </Text>
-          </View>
-
           {/*
             Twist row is intentionally hidden in Phase 1 — RECIPE_CONFIG
             has twistProbability: 0 so recipe.twist is always undefined.
@@ -110,10 +103,6 @@ export const DailyRulesModal = ({
               <Text style={styles.recipeValueTwist}>{recipe.twist}</Text>
             </View>
           )}
-
-          <Text style={styles.commitNote}>
-            One play per day. Your first finished game is your score.
-          </Text>
 
           <View style={styles.btnRow}>
             <NeonButton
@@ -238,18 +227,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.outlineSoft,
     borderBottomWidth: 1,
   },
-  commitNote: {
-    color: colors.warn,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
-  },
   btnRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    marginTop: spacing.lg,
   },
 });
