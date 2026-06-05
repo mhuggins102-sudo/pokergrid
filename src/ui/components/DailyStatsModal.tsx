@@ -44,11 +44,17 @@ export const DailyStatsModal = ({ visible, dateISO, onClose }: Props) => {
   const { rank: ownRank } = useDailyRank(dateISO);
   const [status, setStatus] = useState<FetchStatus>('idle');
   const [stats, setStats] = useState<DailyStatsSnapshot | null>(null);
+  // Surface the actual error message so playtest issues (RPC missing
+  // a grant, schema cache stale, parameter mismatch) don't hide
+  // behind a generic "couldn't reach the server". Cleared when the
+  // modal closes or a fresh fetch starts.
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) {
       setStatus('idle');
       setStats(null);
+      setErrorDetail(null);
       return;
     }
     if (!isBackendConfigured()) {
@@ -59,15 +65,28 @@ export const DailyStatsModal = ({ visible, dateISO, onClose }: Props) => {
 
     let cancelled = false;
     setStatus('loading');
+    setErrorDetail(null);
     fetchDailyStats(deviceId, dateISO)
       .then(s => {
         if (cancelled) return;
         setStats(s);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (cancelled) return;
+        // Pull whatever signal we can off the error object — supabase-js
+        // wraps Postgres errors with { message, code, details, hint }.
+        const err = e as { message?: string; code?: string; hint?: string; details?: string };
+        const parts = [
+          err.code ? `[${err.code}]` : null,
+          err.message ?? String(e),
+          err.hint,
+          err.details,
+        ].filter((p): p is string => !!p);
+        setErrorDetail(parts.join(' · '));
         setStatus('error');
+        // Also log so DevTools picks it up for deeper inspection.
+        console.error('[DailyStatsModal] fetchDailyStats failed', e);
       });
     return () => {
       cancelled = true;
@@ -98,7 +117,14 @@ export const DailyStatsModal = ({ visible, dateISO, onClose }: Props) => {
             <Text style={styles.statusLine}>Loading stats…</Text>
           )}
           {status === 'error' && (
-            <Text style={styles.errorLine}>Couldn't reach the server.</Text>
+            <>
+              <Text style={styles.errorLine}>Couldn't reach the server.</Text>
+              {errorDetail && (
+                <Text style={styles.errorDetail} selectable>
+                  {errorDetail}
+                </Text>
+              )}
+            </>
           )}
           {status === 'unavailable' && (
             <Text style={styles.statusLine}>
@@ -367,6 +393,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1,
     textAlign: 'center',
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  errorDetail: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
   },
 });
