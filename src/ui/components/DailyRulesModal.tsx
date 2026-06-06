@@ -40,8 +40,8 @@ const DIFFICULTY_LABEL: Record<DailyRecipe['difficulty'], string> = {
 const DIFFICULTY_TAGLINE: Record<DailyRecipe['difficulty'], string> = {
   easy: '2 jokers, full toolkit.',
   medium: '1 joker, full toolkit.',
-  hard: '1 joker, no undo, no deck peek.',
-  extreme: 'No jokers, no discards, no undo.',
+  hard: '1 joker, no deck peek.',
+  extreme: 'No jokers, no discards.',
 };
 
 export const DailyRulesModal = ({

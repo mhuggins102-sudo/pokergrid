@@ -7,8 +7,11 @@
 // Data is fetched lazily on open — keeps the result-screen-first
 // paint cheap for players who never tap through.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { findChallenge } from '../../game/challenges';
+import { recipeFor } from '../../game/daily/recipe';
+import { TARGET_BY_DIFFICULTY } from '../../game/rules';
 import {
   DailyStatsSnapshot,
   fetchDailyStats,
@@ -17,6 +20,13 @@ import {
 import { useDaily } from '../daily/DailyProvider';
 import { useDailyRank } from '../hooks/useDailyRank';
 import { colors, fonts, glow, radius, spacing } from '../theme';
+
+const DIFFICULTY_LABEL: Record<'easy' | 'medium' | 'hard' | 'extreme', string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+  extreme: 'Extreme',
+};
 
 interface Props {
   visible: boolean;
@@ -93,6 +103,20 @@ export const DailyStatsModal = ({ visible, dateISO, onClose }: Props) => {
     };
   }, [visible, deviceId, dateISO]);
 
+  // Recipe summary for the header — "Hard · 500" or "Hard · Three
+  // Tricks · 500". Computed from the dateISO so callers don't need
+  // to pass it in. Same recipe-to-target logic as App.tsx's
+  // contextTarget helper.
+  const recipeSummary = useMemo(() => {
+    const r = recipeFor(dateISO);
+    const diff = DIFFICULTY_LABEL[r.difficulty];
+    if (r.twist) {
+      const c = findChallenge(r.twist);
+      return `${diff} · ${c.name} · ${c.scoreTarget}`;
+    }
+    return `${diff} · ${TARGET_BY_DIFFICULTY[r.difficulty]}`;
+  }, [dateISO]);
+
   const playerInTop10 = !!stats?.topScores.some(r => r.isOwn);
   const showOwnRow =
     status === 'ready' &&
@@ -104,8 +128,9 @@ export const DailyStatsModal = ({ visible, dateISO, onClose }: Props) => {
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.headerRow}>
-            <View>
+            <View style={styles.headerCol}>
               <Text style={styles.kicker}>DAILY · {formatDate(dateISO)}</Text>
+              <Text style={styles.recipeLine}>{recipeSummary}</Text>
               <Text style={styles.title}>Leaderboard</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={12}>
@@ -234,13 +259,24 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: spacing.md,
   },
+  headerCol: { flex: 1 },
   kicker: {
     color: colors.accent,
     fontFamily: fonts.mono,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.5,
-    marginBottom: 4,
+  },
+  // Recipe summary line — "Hard · Three Tricks · 500". Sits under the
+  // DAILY kicker so a player viewing a stored result can see at a
+  // glance what the rules were that day without having to remember.
+  recipeLine: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    letterSpacing: 1,
+    marginTop: 2,
+    marginBottom: 6,
   },
   title: {
     color: colors.textHi,
