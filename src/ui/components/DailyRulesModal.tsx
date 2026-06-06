@@ -38,10 +38,10 @@ const DIFFICULTY_LABEL: Record<DailyRecipe['difficulty'], string> = {
 };
 
 const DIFFICULTY_TAGLINE: Record<DailyRecipe['difficulty'], string> = {
-  easy: 'Gentle warm-up. 2 jokers, full toolkit.',
-  medium: 'Steady challenge. 1 joker, full toolkit.',
-  hard: 'Tough. 1 joker, no undo, no deck peek.',
-  extreme: 'Brutal. No jokers, no discards, no undo.',
+  easy: '2 jokers, full toolkit.',
+  medium: '1 joker, full toolkit.',
+  hard: '1 joker, no undo, no deck peek.',
+  extreme: 'No jokers, no discards, no undo.',
 };
 
 export const DailyRulesModal = ({
@@ -93,8 +93,12 @@ export const DailyRulesModal = ({
                   {findChallenge(recipe.twist).name}
                 </Text>
               </View>
-              <Text style={styles.twistSynopsis}>
-                {findChallenge(recipe.twist).synopsis}
+              <Text style={styles.recipeTagline}>
+                {/* Synopsis strings in challenges.ts start with
+                    "Twist: " for the Challenges page. Strip that
+                    prefix here since the row label above already
+                    says "Twist". */}
+                {findChallenge(recipe.twist).synopsis.replace(/^Twist:\s*/, '')}
               </Text>
               <View style={styles.recipeRow}>
                 <Text style={styles.recipeLabel}>Target</Text>
@@ -219,17 +223,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
-  },
-  twistSynopsis: {
-    color: colors.textMid,
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    fontStyle: 'italic',
-    lineHeight: 15,
-    marginBottom: spacing.sm,
-    paddingBottom: spacing.xs,
-    borderBottomColor: colors.outlineSoft,
-    borderBottomWidth: 1,
   },
   recipeTagline: {
     color: colors.textLow,
