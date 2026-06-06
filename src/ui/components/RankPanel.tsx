@@ -47,13 +47,6 @@ const formatDate = (iso: string): string => {
   return `${MONTHS[Number(mo) - 1] ?? mo} ${Number(d)}, ${y}`;
 };
 
-const RankLine = ({ rank }: { rank: RankSnapshot }) => (
-  <Text style={styles.rankLine}>
-    <Text style={styles.rankNum}>#{rank.rank}</Text>
-    <Text style={styles.rankOf}> of {rank.total}</Text>
-  </Text>
-);
-
 export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
   const { status, rank, refresh } = useDailyRank(dateISO);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -61,8 +54,6 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
   // Recipe summary above the score so the player can see at a glance
   // what the rules were on this date — important when revisiting an
   // older daily where they no longer remember the difficulty + twist.
-  // Replaces the handle line that used to live here; the handle still
-  // surfaces on the LandingScreen pill and in the Stats modal.
   const recipeSummary = useMemo(() => {
     const r = recipeFor(dateISO);
     const diff = DIFFICULTY_LABEL[r.difficulty];
@@ -75,6 +66,10 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
 
   return (
     <View style={styles.root}>
+      {/* Vertical rhythm mirrors BannerHero's: small kicker → medium
+          centerpiece line → huge score → pill badge. Sizes / letter
+          spacings are intentionally aligned so the daily result and
+          the free-play result feel like siblings. */}
       <Text style={styles.kicker}>DAILY · {formatDate(dateISO)}</Text>
       <Text style={styles.recipeLine}>{recipeSummary}</Text>
       <Text style={styles.score}>{score}</Text>
@@ -85,11 +80,15 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
       <View style={styles.rankSlot}>
         {status === 'ready' && rank ? (
           <>
-            <RankLine rank={rank} />
+            <View style={styles.rankBadge}>
+              <Text style={styles.rankBadgeText}>
+                #{rank.rank} of {rank.total}
+              </Text>
+            </View>
             <Pressable
-              style={styles.statsBtn}
               onPress={() => setStatsOpen(true)}
               hitSlop={8}
+              style={styles.statsBtn}
             >
               <Text style={styles.statsBtnText}>Stats →</Text>
             </Pressable>
@@ -128,87 +127,98 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
 };
 
 const styles = StyleSheet.create({
+  // Mirrors ResultScreen's `banner` style (the free-play / TU /
+  // challenge hero card): 2px border, same outer / inner spacing,
+  // accent-tinted border + glow, alignSelf center with the same
+  // 320px max width as the bonus chips + breakdown below.
   root: {
     alignSelf: 'center',
     width: '100%',
     maxWidth: 320,
     backgroundColor: colors.bgPanel,
     borderColor: colors.accent,
-    borderWidth: 1,
+    borderWidth: 2,
     borderRadius: radius.lg,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    ...glow(colors.accent, 14, 0.4),
+    ...glow(colors.accent, 18, 0.55),
   },
+  // Matches ResultScreen.bannerMode — small textLow kicker line just
+  // tinted accent here since the daily IS the celebratory tone.
   kicker: {
     color: colors.accent,
     fontFamily: fonts.mono,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 3,
+    marginBottom: 2,
   },
+  // Matches ResultScreen.bannerKicker — the "what kind of run was
+  // this" line. For free play it's "· WIN ·" / "· DEFEAT ·"; for
+  // daily it's the recipe summary. Same font + letterSpacing 4 so
+  // the two read as the same visual element.
+  recipeLine: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  // Matches ResultScreen.bannerScore: 36pt mono 900, accent shadow.
   score: {
     color: colors.textHi,
     fontFamily: fonts.mono,
-    fontSize: 40,
+    fontSize: 36,
     fontWeight: '900',
     letterSpacing: 2,
-    marginTop: spacing.xs,
     textShadowColor: colors.accent,
     textShadowRadius: 3,
   },
-  recipeLine: {
-    color: colors.textMid,
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-  // Reserves vertical space for the ready-state rank line + Stats
+  // Reserves vertical space for the ready-state rank pill + Stats
   // button (or whichever status content is rendering). Sized to match
   // the tallest state so the panel doesn't reflow as data arrives.
   rankSlot: {
     width: '100%',
-    minHeight: 78,
+    minHeight: 64,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: spacing.xs,
   },
-  rankLine: {
-    marginTop: spacing.md,
-    fontFamily: fonts.mono,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  rankNum: {
-    color: colors.success,
-    textShadowColor: colors.success,
-    textShadowRadius: 3,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  rankOf: {
-    color: colors.textMid,
-    fontWeight: '700',
-  },
-  statsBtn: {
-    marginTop: spacing.md,
-    paddingVertical: 6,
+  // Mirrors ResultScreen.tierBadge — same pill shape, padding, border
+  // width. Success-green to telegraph "you made the leaderboard"
+  // instead of the per-tier color the free-play badge uses.
+  rankBadge: {
     paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: colors.accent,
-    backgroundColor: 'rgba(107, 214, 255, 0.08)',
-    ...glow(colors.accent, 4, 0.3),
+    borderRadius: radius.pill,
+    borderColor: colors.success,
+    backgroundColor: colors.bgBase,
+  },
+  rankBadgeText: {
+    color: colors.success,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  // Small ghost-style text button under the rank badge. Matches the
+  // result-screen "Per-line scores" disclosure read — minimal weight,
+  // no border, accent color.
+  statsBtn: {
+    marginTop: spacing.xs,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
   },
   statsBtnText: {
     color: colors.accent,
     fontFamily: fonts.mono,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
