@@ -51,21 +51,33 @@ export const RECIPE_CONFIG: RecipeConfig = {
   },
 };
 
-// Two independent 16-bit channels from a single hash: the high half
-// drives difficulty selection, the low half drives twist roll +
-// twist-pool index. Splitting like this keeps "difficulty random" and
-// "twist random" uncorrelated so a Hard day isn't systematically more
-// twist-prone than a Medium day.
+// Mulberry32-style integer scramble. FNV-1a is fast but its avalanche
+// behavior for inputs that differ by only their final byte (which is
+// exactly the case here — only the day-of-month character changes
+// across a month) is poor enough that sequential dates clustered on
+// the same difficulty outcome (29 straight Easy days in May 2026,
+// observed during playtest). Running each FNV output through this
+// scrambler before bucketing fixes the within-month uniformity
+// without breaking the long-run distribution the tests verify.
+const scramble32 = (h: number): number => {
+  let t = h >>> 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return (t ^ (t >>> 14)) >>> 0;
+};
+
+// Three independent channels — separate FNV-1a hashes per channel
+// (different salt prefixes) so difficulty / twist-probability /
+// twist-index don't share entropy. Each gets a scramble32 pass on
+// top to fix FNV-1a's weak avalanche for similar consecutive inputs.
 const channelsFor = (dateISO: string): { difficultyRoll: number; twistRoll: number; twistIndexRoll: number } => {
-  const h = fnv1a(`pokergrid-recipe::${dateISO}`);
-  const high = (h >>> 16) & 0xffff;
-  const low = h & 0xffff;
-  // Split the low half again for twist probability vs. twist index so
-  // they don't share the same source.
+  const hDiff      = scramble32(fnv1a(`pokergrid-recipe-difficulty::${dateISO}`));
+  const hTwist     = scramble32(fnv1a(`pokergrid-recipe-twist::${dateISO}`));
+  const hTwistIdx  = scramble32(fnv1a(`pokergrid-recipe-twist-index::${dateISO}`));
   return {
-    difficultyRoll: high / 0x10000,        // [0, 1)
-    twistRoll: (low >>> 8) / 0x100,        // [0, 1) (8 bits)
-    twistIndexRoll: low & 0xff,            // 0..255
+    difficultyRoll: hDiff / 0x100000000,    // [0, 1) using all 32 bits
+    twistRoll: hTwist / 0x100000000,        // [0, 1)
+    twistIndexRoll: hTwistIdx & 0xff,       // 0..255
   };
 };
 
