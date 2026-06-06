@@ -33,7 +33,7 @@ interface Props {
 // Earliest date the player can navigate to / play in the archive.
 // Pre-launch dates aren't surfaced because no one was around to play
 // them — they'd just be empty leaderboards.
-const LAUNCH_DATE_ISO = '2026-06-01';
+const LAUNCH_DATE_ISO = '2026-05-01';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
