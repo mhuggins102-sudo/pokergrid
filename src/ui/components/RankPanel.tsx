@@ -10,13 +10,22 @@
 //   - 'ready'                → real rank line + Stats button
 //   - 'error'                → retry CTA
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { displayNameFor, useDaily } from '../daily/DailyProvider';
+import { findChallenge } from '../../game/challenges';
+import { recipeFor } from '../../game/daily/recipe';
+import { TARGET_BY_DIFFICULTY } from '../../game/rules';
 import { RankSnapshot } from '../daily/supabase';
 import { useDailyRank } from '../hooks/useDailyRank';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 import { DailyStatsModal } from './DailyStatsModal';
+
+const DIFFICULTY_LABEL: Record<'easy' | 'medium' | 'hard' | 'extreme', string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+  extreme: 'Extreme',
+};
 
 interface Props {
   dateISO: string;
@@ -46,15 +55,29 @@ const RankLine = ({ rank }: { rank: RankSnapshot }) => (
 );
 
 export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
-  const { deviceId, handle } = useDaily();
   const { status, rank, refresh } = useDailyRank(dateISO);
   const [statsOpen, setStatsOpen] = useState(false);
+
+  // Recipe summary above the score so the player can see at a glance
+  // what the rules were on this date — important when revisiting an
+  // older daily where they no longer remember the difficulty + twist.
+  // Replaces the handle line that used to live here; the handle still
+  // surfaces on the LandingScreen pill and in the Stats modal.
+  const recipeSummary = useMemo(() => {
+    const r = recipeFor(dateISO);
+    const diff = DIFFICULTY_LABEL[r.difficulty];
+    if (r.twist) {
+      const c = findChallenge(r.twist);
+      return `${diff} · ${c.name} · ${c.scoreTarget}`;
+    }
+    return `${diff} · ${TARGET_BY_DIFFICULTY[r.difficulty]}`;
+  }, [dateISO]);
 
   return (
     <View style={styles.root}>
       <Text style={styles.kicker}>DAILY · {formatDate(dateISO)}</Text>
+      <Text style={styles.recipeLine}>{recipeSummary}</Text>
       <Text style={styles.score}>{score}</Text>
-      <Text style={styles.handle}>{displayNameFor(deviceId, handle)}</Text>
 
       {/* Fixed-height reservation so the panel doesn't grow when
           rank + Stats button mount, and doesn't shrink when the
@@ -137,11 +160,11 @@ const styles = StyleSheet.create({
     textShadowColor: colors.accent,
     textShadowRadius: 3,
   },
-  handle: {
+  recipeLine: {
     color: colors.textMid,
     fontFamily: fonts.mono,
     fontSize: 11,
-    letterSpacing: 1.5,
+    letterSpacing: 1,
     marginTop: 2,
   },
   // Reserves vertical space for the ready-state rank line + Stats

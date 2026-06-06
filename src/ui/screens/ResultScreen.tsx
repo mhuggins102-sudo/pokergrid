@@ -821,7 +821,12 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           )}
           {(gridMultiplier !== 1 || gridFlat !== 0) && (
             <View style={styles.subtotalRow}>
-              <Text style={styles.totalLabel}>Grid achievements</Text>
+              {/* Purple cards: Grid Achievements + Deck Management.
+                  Labeling this row "Grid multipliers" matches the
+                  user-facing "Grid Multipliers" tone on the Bonus
+                  Cards reference, rather than collapsing both
+                  categories into "Grid achievements". */}
+              <Text style={styles.totalLabel}>Grid multipliers</Text>
               <Text style={styles.subtotalValue}>
                 {gridMultiplier !== 1 ? `× ${gridMultiplier.toFixed(2)}` : ''}
                 {gridFlat !== 0 ? ` + ${gridFlat}` : ''}
