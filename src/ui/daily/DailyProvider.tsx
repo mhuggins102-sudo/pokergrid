@@ -256,7 +256,10 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
         }
         // Anything else: queue for later drain. The local write above
         // already happened, so the player keeps their score record
-        // regardless of the network outcome.
+        // regardless of the network outcome. Log the underlying error
+        // so post-mortem debugging via DevTools doesn't have to fish
+        // it out of the network tab.
+        console.error('[daily] submitDailyPlay failed; queued for retry', e);
         await enqueuePendingSubmit(args);
       }
       return next;
