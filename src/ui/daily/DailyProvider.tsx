@@ -239,14 +239,25 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
 
   const recordCompletion = useCallback(
     async (play: DailyPlay): Promise<DailyPlaysMap> => {
+      console.log('[daily] recordCompletion start', {
+        dateISO: play.dateISO,
+        score: play.score,
+        won: play.won,
+      });
       // Local-first write so the result screen has something to render
       // even if the network roundtrip is in flight.
       const next = await savePlay(play);
       setPlays(next);
+      console.log('[daily] local savePlay done');
 
-      if (!deviceId || !isBackendConfigured()) return next;
+      if (!deviceId || !isBackendConfigured()) {
+        console.log('[daily] backend not configured or no deviceId; skipping submit');
+        return next;
+      }
 
       const args = submitArgsFor(deviceId, play);
+      const submitStart = Date.now();
+      console.log('[daily] calling submitDailyPlay');
       try {
         await submitDailyPlay({
           deviceId,
@@ -255,6 +266,9 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
           won: play.won,
           recipe: play.recipe,
           usedUndo: play.state.undoCount > 0,
+        });
+        console.log('[daily] submitDailyPlay succeeded', {
+          elapsedMs: Date.now() - submitStart,
         });
         // Server now has the row. Bump the token so useDailyRank
         // refires its fetch — without this nudge the panel stays
@@ -267,6 +281,9 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
         bumpSubmitToken();
       } catch (e) {
         if (e instanceof AlreadySubmittedError) {
+          console.log('[daily] submitDailyPlay: AlreadySubmittedError — server has it', {
+            elapsedMs: Date.now() - submitStart,
+          });
           // Server already has this play — treat as success and
           // bump so the panel refreshes against the existing row.
           setLastSubmitError(prev =>
@@ -289,7 +306,11 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
           err.details,
         ].filter((p): p is string => !!p).join(' · ');
         setLastSubmitError({ dateISO: play.dateISO, detail });
-        console.error('[daily] submitDailyPlay failed; queued for retry', e);
+        console.error('[daily] submitDailyPlay failed; queued for retry', {
+          elapsedMs: Date.now() - submitStart,
+          error: e,
+          formatted: detail,
+        });
         await enqueuePendingSubmit(args);
       }
       return next;
