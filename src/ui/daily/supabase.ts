@@ -109,7 +109,11 @@ export interface PlayerRow {
 
 export const submitDailyPlay = async (args: SubmitPlayArgs): Promise<void> => {
   const c = requireClient();
-  const { error } = await c.rpc('submit_daily_play', {
+  // Race the RPC against a 20-second timeout so a hanging request
+  // (intermittent edge / connection-pool issue) surfaces as a real
+  // error instead of leaving the result-screen rank slot stuck on
+  // "Submitting your score…" indefinitely.
+  const rpcCall = c.rpc('submit_daily_play', {
     p_device_id: args.deviceId,
     p_date: args.dateISO,
     p_score: args.score,
@@ -117,6 +121,10 @@ export const submitDailyPlay = async (args: SubmitPlayArgs): Promise<void> => {
     p_recipe: args.recipe,
     p_used_undo: args.usedUndo,
   });
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new SubmitTimeoutError()), 20_000)
+  );
+  const { error } = (await Promise.race([rpcCall, timeout])) as Awaited<typeof rpcCall>;
   if (error) {
     // Postgres unique_violation = 23505. The (device_id, date) unique
     // constraint enforces one-play-per-date; if the client retried a
@@ -129,6 +137,13 @@ export const submitDailyPlay = async (args: SubmitPlayArgs): Promise<void> => {
     throw error;
   }
 };
+
+export class SubmitTimeoutError extends Error {
+  constructor() {
+    super('Submit RPC did not respond within 20s');
+    this.name = 'SubmitTimeoutError';
+  }
+}
 
 export class AlreadySubmittedError extends Error {
   constructor() {
