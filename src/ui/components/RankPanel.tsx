@@ -16,6 +16,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { findChallenge } from '../../game/challenges';
 import { recipeFor } from '../../game/daily/recipe';
 import { TARGET_BY_DIFFICULTY } from '../../game/rules';
+import { useDaily } from '../daily/DailyProvider';
 import { useDailyRank } from '../hooks/useDailyRank';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 import { DailyStatsModal } from './DailyStatsModal';
@@ -38,7 +39,14 @@ interface Props {
 
 export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
   const { status, rank, refresh } = useDailyRank(dateISO);
+  const { lastSubmitError } = useDaily();
   const [statsOpen, setStatsOpen] = useState(false);
+  // A submit error for THIS dateISO outranks the generic
+  // "Submitting…" copy — the player should see the real reason it's
+  // not on the board rather than thinking the network's still in
+  // flight.
+  const submitErrorForThisDate =
+    lastSubmitError?.dateISO === dateISO ? lastSubmitError.detail : null;
 
   const modeLine = useMemo(() => {
     const r = recipeFor(dateISO);
@@ -67,6 +75,13 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
           <Text style={styles.rankLine}>
             #{rank.rank} of {rank.total}
           </Text>
+        ) : submitErrorForThisDate ? (
+          <>
+            <Text style={styles.errorLine}>Submit failed</Text>
+            <Text style={styles.errorDetail} selectable>
+              {submitErrorForThisDate}
+            </Text>
+          </>
         ) : status === 'loading' || status === 'pending' ? (
           <Text style={styles.statusLine}>Fetching leaderboard…</Text>
         ) : status === 'rank-pending' ? (
@@ -140,11 +155,14 @@ const styles = StyleSheet.create({
   },
   // Slot for the rank line + status placeholders. Reserves 22px so
   // the panel height stays constant across loading / error / ready.
+  // Submit-failed state allows the slot to grow vertically to fit
+  // the diagnostic detail line below the error header.
   rankSlot: {
     minHeight: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   // Matches ResultScreen.bannerKicker shape (12pt mono 800 letter
   // spacing 4 uppercase), tinted success-green to celebrate making
@@ -174,6 +192,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  // Diagnostic detail under "Submit failed". Selectable so playtesters
+  // can copy + paste the actual Postgres error back during debugging.
+  errorDetail: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    lineHeight: 13,
+    textAlign: 'center',
+    marginTop: 2,
+    paddingHorizontal: spacing.xs,
   },
   // Matches ResultScreen.bannerScore: 36pt mono 900, accent shadow.
   score: {

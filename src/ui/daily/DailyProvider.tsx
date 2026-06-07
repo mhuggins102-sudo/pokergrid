@@ -76,6 +76,11 @@ interface DailyContextValue {
   // completes, which would otherwise leave the panel stuck on the
   // initial "rank-pending" read.
   submitToken: number;
+  // Last submit error captured per dateISO. RankPanel surfaces it in
+  // the rank slot so a stuck "Submitting your score…" state turns into
+  // a real error message instead of a misleading "still in flight".
+  // null when no error is pending for the given date.
+  lastSubmitError: { dateISO: string; detail: string } | null;
 }
 
 const DailyContext = createContext<DailyContextValue | null>(null);
@@ -102,6 +107,9 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
   const [drainingPendingSubmits, setDraining] = useState(false);
   const [submitToken, setSubmitToken] = useState(0);
   const bumpSubmitToken = useCallback(() => setSubmitToken(t => t + 1), []);
+  const [lastSubmitError, setLastSubmitError] = useState<
+    { dateISO: string; detail: string } | null
+  >(null);
 
   const todayISO = useMemo(() => currentDateISO(), []);
   const todayRecipe = useMemo(() => recipeFor(todayISO), [todayISO]);
@@ -142,6 +150,9 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             usedUndo: p.usedUndo,
           });
           await removePendingSubmit(p.deviceId, p.dateISO);
+          setLastSubmitError(prev =>
+            prev?.dateISO === p.dateISO ? null : prev
+          );
           anySubmitted = true;
         } catch (e) {
           if (e instanceof AlreadySubmittedError) {
@@ -150,6 +161,9 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             // back to the client; the local write happened and the
             // queue retry collides. Drop the queue entry.
             await removePendingSubmit(p.deviceId, p.dateISO);
+            setLastSubmitError(prev =>
+              prev?.dateISO === p.dateISO ? null : prev
+            );
             anySubmitted = true;
             continue;
           }
@@ -245,20 +259,36 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
         // Server now has the row. Bump the token so useDailyRank
         // refires its fetch — without this nudge the panel stays
         // stuck on the rank-pending read that fired the moment
-        // setPlays(next) updated the local map.
+        // setPlays(next) updated the local map. Also clear any
+        // prior submit error for this date.
+        setLastSubmitError(prev =>
+          prev?.dateISO === play.dateISO ? null : prev
+        );
         bumpSubmitToken();
       } catch (e) {
         if (e instanceof AlreadySubmittedError) {
           // Server already has this play — treat as success and
           // bump so the panel refreshes against the existing row.
+          setLastSubmitError(prev =>
+            prev?.dateISO === play.dateISO ? null : prev
+          );
           bumpSubmitToken();
           return next;
         }
         // Anything else: queue for later drain. The local write above
         // already happened, so the player keeps their score record
-        // regardless of the network outcome. Log the underlying error
-        // so post-mortem debugging via DevTools doesn't have to fish
-        // it out of the network tab.
+        // regardless of the network outcome. Capture a compact error
+        // detail (code + message + hint, joined) so RankPanel can
+        // surface it instead of dangling on "Submitting…", and also
+        // log the raw error for DevTools.
+        const err = e as { code?: string; message?: string; hint?: string; details?: string };
+        const detail = [
+          err.code ? `[${err.code}]` : null,
+          err.message ?? String(e),
+          err.hint,
+          err.details,
+        ].filter((p): p is string => !!p).join(' · ');
+        setLastSubmitError({ dateISO: play.dateISO, detail });
         console.error('[daily] submitDailyPlay failed; queued for retry', e);
         await enqueuePendingSubmit(args);
       }
@@ -278,6 +308,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       recordCompletion,
       drainingPendingSubmits,
       submitToken,
+      lastSubmitError,
     }),
     [
       deviceId,
@@ -289,6 +320,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       recordCompletion,
       drainingPendingSubmits,
       submitToken,
+      lastSubmitError,
     ]
   );
 
