@@ -1,0 +1,8 @@
+# Cloudflare Pages reads this file from the build output and applies
+# the rules to matching paths.
+
+# build-version.json must never be cached — otherwise stale PWAs would
+# never detect that a newer build has landed.
+/build-version.json
+  Cache-Control: no-store, no-cache, must-revalidate
+  Pragma: no-cache
