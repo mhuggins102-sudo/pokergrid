@@ -32,6 +32,7 @@ import { SettingsScreen } from './src/ui/screens/SettingsScreen';
 import { AchievementsScreen } from './src/ui/screens/AchievementsScreen';
 import { StatsScreen } from './src/ui/screens/StatsScreen';
 import { markTutorialSeen, TutorialScreen, tutorialSeen } from './src/ui/screens/TutorialScreen';
+import { StaleVersionBanner } from './src/ui/components/StaleVersionBanner';
 import { DailyProvider, useDaily } from './src/ui/daily/DailyProvider';
 import { SettingsProvider } from './src/ui/settings';
 import { StatsProvider } from './src/ui/stats';
@@ -201,6 +202,7 @@ const AppShell = () => {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
+      <StaleVersionBanner />
       {screen === 'landing' && (
         <LandingScreen
           onStartDaily={() => startDaily()}
