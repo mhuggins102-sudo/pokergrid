@@ -11,7 +11,7 @@
 // The DAILY · date kicker moved into the DailyStatsModal — the panel
 // itself doesn't repeat it.
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { findChallenge } from '../../game/challenges';
 import { dailyTargetFor, recipeFor } from '../../game/daily/recipe';
@@ -19,6 +19,12 @@ import { useDaily } from '../daily/DailyProvider';
 import { useDailyRank } from '../hooks/useDailyRank';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 import { DailyStatsModal } from './DailyStatsModal';
+
+// Delay (ms) before the freshly-submitted "Submitting your score…"
+// state offers a manual retry tap. Matches the 20s submit RPC timeout
+// loosely — by 10s the player has waited long enough that the spinner
+// reading "still working" feels like a hang.
+const FRESH_SUBMIT_RETRY_DELAY_MS = 10_000;
 
 const DIFFICULTY_LABEL: Record<'easy' | 'medium' | 'hard' | 'extreme', string> = {
   easy: 'EASY',
@@ -38,8 +44,33 @@ interface Props {
 
 export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
   const { status, rank, refresh } = useDailyRank(dateISO);
-  const { lastSubmitError } = useDaily();
+  const { lastSubmitError, drainQueue } = useDaily();
   const [statsOpen, setStatsOpen] = useState(false);
+  // After a delay, freshly-submitted runs that are still stuck on
+  // rank-pending become tappable — gives the player agency when the
+  // submit hangs (PWA tab stays focused so the AppState foreground
+  // drain never fires, intermittent backend, etc.). Re-opened
+  // historical plays skip the delay entirely.
+  const [slowFreshSubmit, setSlowFreshSubmit] = useState(false);
+  useEffect(() => {
+    if (!freshlySubmitted) return;
+    const t = setTimeout(
+      () => setSlowFreshSubmit(true),
+      FRESH_SUBMIT_RETRY_DELAY_MS
+    );
+    return () => clearTimeout(t);
+  }, [freshlySubmitted]);
+
+  // Manual retry: drain whatever's in the pending-submit queue (the
+  // failed submission lives there) and re-fetch the rank. drainQueue
+  // succeeding bumps submitToken, which retriggers useDailyRank
+  // independently — refresh() is a belt-and-braces nudge for the
+  // queue-was-empty / refetch-only case.
+  const onRetry = useCallback(() => {
+    drainQueue();
+    refresh();
+  }, [drainQueue, refresh]);
+
   // A submit error for THIS dateISO outranks the generic
   // "Submitting…" copy — the player should see the real reason it's
   // not on the board rather than thinking the network's still in
@@ -83,13 +114,28 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
         ) : status === 'loading' || status === 'pending' ? (
           <Text style={styles.statusLine}>Fetching leaderboard…</Text>
         ) : status === 'rank-pending' ? (
-          <Text style={styles.statusLine}>
-            {freshlySubmitted
-              ? 'Submitting your score…'
-              : 'Score not yet on leaderboard.'}
-          </Text>
+          // Three sub-states share the rank-pending slot:
+          //  1. Freshly submitted, < 10s elapsed: show the spinner
+          //     copy; no retry yet (would be premature).
+          //  2. Freshly submitted, ≥ 10s elapsed: the submit is
+          //     taking too long — surface a retry tap.
+          //  3. Re-opened play that the server doesn't have: retry
+          //     immediately. Most likely cause is a previous submit
+          //     that errored into the queue but the queue never
+          //     drained (PWA stayed focused).
+          freshlySubmitted && !slowFreshSubmit ? (
+            <Text style={styles.statusLine}>Submitting your score…</Text>
+          ) : (
+            <Pressable onPress={onRetry} hitSlop={6}>
+              <Text style={styles.statusLine}>
+                {freshlySubmitted
+                  ? 'Submit slow · tap to retry'
+                  : 'Not on leaderboard · tap to retry'}
+              </Text>
+            </Pressable>
+          )
         ) : status === 'error' ? (
-          <Pressable onPress={refresh} hitSlop={6}>
+          <Pressable onPress={onRetry} hitSlop={6}>
             <Text style={styles.errorLine}>Couldn't reach · tap to retry</Text>
           </Pressable>
         ) : (
