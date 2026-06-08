@@ -138,7 +138,10 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Drain the offline-submit queue. Called once after the bootstrap
   // finishes, and again on every app-foreground event. Best-effort:
-  // entries that still fail are left in the queue for the next drain.
+  // entries that still fail are left in the queue for the next drain,
+  // but the most recent failure is surfaced via lastSubmitError so
+  // the user can see WHY the retry didn't go through instead of
+  // staring at a hung spinner.
   const drainQueue = useCallback(async () => {
     if (!isBackendConfigured()) return;
     setDraining(true);
@@ -177,8 +180,20 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             // Misconfiguration; nothing to drain.
             break;
           }
-          // Likely a transient network failure. Leave entry; next
-          // drain will retry.
+          // Transient (network / timeout / unknown). Leave the queue
+          // entry for the next drain, but capture the failure so the
+          // UI can show what's happening — without this the user
+          // sees a brief "Fetching…" flicker after every retry tap
+          // and no indication of why it isn't sticking.
+          const err = e as { code?: string; message?: string; hint?: string; details?: string };
+          const detail = [
+            err.code ? `[${err.code}]` : null,
+            err.message ?? String(e),
+            err.hint,
+            err.details,
+          ].filter((p): p is string => !!p).join(' · ');
+          setLastSubmitError({ dateISO: p.dateISO, detail });
+          console.error('[daily] drainQueue retry failed', { dateISO: p.dateISO, error: e, formatted: detail });
         }
       }
       if (anySubmitted) bumpSubmitToken();

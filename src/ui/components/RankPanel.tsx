@@ -105,12 +105,16 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
             #{rank.rank} of {rank.total}
           </Text>
         ) : submitErrorForThisDate ? (
-          <>
-            <Text style={styles.errorLine}>Submit failed</Text>
+          // Whole error block is a Pressable — taps trigger the same
+          // drainQueue + refresh retry as the other states. The detail
+          // line is `selectable` too so DevTools-equipped surfaces can
+          // still copy the error text for debugging.
+          <Pressable onPress={onRetry} hitSlop={6}>
+            <Text style={styles.errorLine}>Submit failed · tap to retry</Text>
             <Text style={styles.errorDetail} selectable>
               {submitErrorForThisDate}
             </Text>
-          </>
+          </Pressable>
         ) : status === 'loading' || status === 'pending' ? (
           <Text style={styles.statusLine}>Fetching leaderboard…</Text>
         ) : status === 'rank-pending' ? (
