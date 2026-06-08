@@ -348,15 +348,37 @@ export const DailyArchiveScreen = ({
           const status = cellStatusFor(dateISO, todayISO, plays?.[dateISO]);
           const isToday = dateISO === todayISO;
           const dayNum = Number(dateISO.slice(-2));
-          // When a specific difficulty is selected, played cells that
-          // don't match it render as unplayed-styled (gray panel) so
-          // the matching days pop. The cell is still tappable — the
-          // play data is still there, just visually de-emphasised.
+          // Does this date match the active difficulty filter? Played
+          // cells use the stored recipe; unplayable (pre-launch /
+          // future) cells never match; everything else falls through
+          // to recipeFor() which deterministically computes the
+          // recipe for that date. This lets an "Easy" filter
+          // highlight both completed easy days AND untouched past
+          // easy puzzles the player might want to attempt.
           const play = plays?.[dateISO];
-          const matchesDifficulty =
-            difficulty === 'all'
-            || (play && play.recipe.difficulty === difficulty);
+          const matchesDifficulty = (() => {
+            if (difficulty === 'all') return true;
+            if (status.kind === 'pre-launch' || status.kind === 'future') return false;
+            const recipeDiff = play
+              ? play.recipe.difficulty
+              : recipeFor(dateISO).difficulty;
+            return recipeDiff === difficulty;
+          })();
           const showAsPlayed = status.kind === 'played' && matchesDifficulty;
+          // Unplayed past dates that match the active filter get a
+          // muted accent border (no glow — glow stays reserved for
+          // today). Only triggers when a specific difficulty is
+          // selected; with filter=All every unplayed cell is a
+          // potential target so the highlight would be noise.
+          const showAsMatchUnplayed =
+            status.kind === 'unplayed'
+            && matchesDifficulty
+            && difficulty !== 'all';
+          // Today's cyan glow only fires when today's recipe matches
+          // the filter — otherwise today gets the same muted gray
+          // treatment as any other non-matching cell.
+          const showAsToday =
+            status.kind === 'today-unplayed' && matchesDifficulty;
           const tierColor =
             showAsPlayed && status.kind === 'played'
               ? TIER_COLOR[status.tier]
@@ -381,10 +403,12 @@ export const DailyArchiveScreen = ({
                 // Played-but-filtered-out cells fall through to the
                 // same gray panel styling as truly unplayed dates.
                 status.kind === 'played' && !showAsPlayed && styles.cellUnplayed,
-                status.kind === 'unplayed' && styles.cellUnplayed,
-                status.kind === 'today-unplayed' && styles.cellTodayUnplayed,
+                showAsMatchUnplayed && styles.cellUnplayedMatch,
+                status.kind === 'unplayed' && !showAsMatchUnplayed && styles.cellUnplayed,
+                showAsToday && styles.cellTodayUnplayed,
+                status.kind === 'today-unplayed' && !showAsToday && styles.cellUnplayed,
                 (status.kind === 'pre-launch' || status.kind === 'future') && styles.cellDisabled,
-                isToday && styles.cellToday,
+                isToday && showAsToday && styles.cellToday,
               ]}
             >
               <Text
@@ -392,7 +416,7 @@ export const DailyArchiveScreen = ({
                   styles.cellNum,
                   showAsPlayed && status.kind === 'played' && { color: tierColor! },
                   (status.kind === 'pre-launch' || status.kind === 'future') && styles.cellNumDisabled,
-                  isToday && styles.cellNumToday,
+                  isToday && showAsToday && styles.cellNumToday,
                 ]}
               >
                 {dayNum}
@@ -442,56 +466,59 @@ export const DailyArchiveScreen = ({
         })}
       </View>
 
-      {/* ---- Summary stats ---- */}
-      <View style={styles.summaryBlock}>
-        <SummaryRow label="W / L" value={wlText} active={hasPlays} />
-        <SummaryRow label="Best" value={bestText} active={summary.best !== null} />
-        <SummaryRow label="Average" value={avgText} active={hasPlays} />
-        <SummaryRow
-          label="Streak"
-          value={streakText}
-          active={summary.longestStreak > 0}
-        />
-      </View>
-
-      {/* ---- Score distribution histogram ---- */}
-      <Text style={styles.sectionLabel}>Score distribution</Text>
-      <View style={styles.histogramBlock}>
-        {summary.played === 0 ? (
-          <Text style={styles.empty}>No runs in this filter yet.</Text>
-        ) : (
-          <View style={styles.histogram}>
-            {TIER_ORDER.map(t => {
-              const count = summary.tierCounts[t];
-              const max = Math.max(
-                1,
-                ...TIER_ORDER.map(k => summary.tierCounts[k])
-              );
-              const pct = count / max;
-              const color = TIER_COLOR[t];
-              return (
-                <View key={t} style={styles.histRow}>
-                  <Text style={[styles.histTier, { color }]}>{t}</Text>
-                  <View style={styles.histBarTrack}>
-                    <View
-                      style={[
-                        styles.histBar,
-                        {
-                          width: `${Math.max(2, pct * 100)}%`,
-                          backgroundColor: color,
-                          shadowColor: color,
-                          shadowOpacity: 0.5,
-                          shadowRadius: 3,
-                        },
-                      ]}
-                    />
+      {/* Summary stats + score-distribution histogram, side-by-side
+          to keep the panel condensed. The summary takes the left
+          column; the histogram fills the right. Both share top-edge
+          alignment — the histogram block runs a bit shorter than
+          the four summary rows, which is fine. */}
+      <View style={styles.statsRow}>
+        <View style={styles.summaryCol}>
+          <SummaryRow label="W / L" value={wlText} active={hasPlays} />
+          <SummaryRow label="Best" value={bestText} active={summary.best !== null} />
+          <SummaryRow label="Average" value={avgText} active={hasPlays} />
+          <SummaryRow
+            label="Streak"
+            value={streakText}
+            active={summary.longestStreak > 0}
+          />
+        </View>
+        <View style={styles.histogramBlock}>
+          {summary.played === 0 ? (
+            <Text style={styles.empty}>No runs in this filter yet.</Text>
+          ) : (
+            <View style={styles.histogram}>
+              {TIER_ORDER.map(t => {
+                const count = summary.tierCounts[t];
+                const max = Math.max(
+                  1,
+                  ...TIER_ORDER.map(k => summary.tierCounts[k])
+                );
+                const pct = count / max;
+                const color = TIER_COLOR[t];
+                return (
+                  <View key={t} style={styles.histRow}>
+                    <Text style={[styles.histTier, { color }]}>{t}</Text>
+                    <View style={styles.histBarTrack}>
+                      <View
+                        style={[
+                          styles.histBar,
+                          {
+                            width: `${Math.max(2, pct * 100)}%`,
+                            backgroundColor: color,
+                            shadowColor: color,
+                            shadowOpacity: 0.5,
+                            shadowRadius: 3,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.histCount}>{count}</Text>
                   </View>
-                  <Text style={styles.histCount}>{count}</Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
+                );
+              })}
+            </View>
+          )}
+        </View>
       </View>
 
       {pendingStart && (
@@ -630,6 +657,15 @@ const styles = StyleSheet.create({
     borderColor: colors.outlineSoft,
     borderWidth: 1,
   },
+  // Untouched past date that matches the active difficulty filter.
+  // Same panel + border-width as today-unplayed but no glow, so the
+  // player can spot playable puzzles of this difficulty without
+  // those matches competing visually with today's "play me now" cue.
+  cellUnplayedMatch: {
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.accent,
+    borderWidth: 1,
+  },
   cellTodayUnplayed: {
     backgroundColor: colors.bgPanel,
     borderColor: colors.accent,
@@ -656,13 +692,14 @@ const styles = StyleSheet.create({
   cellNumToday: {
     color: colors.accent,
   },
-  // Tier letter pinned to the bottom of the cell so the day number
-  // stays vertically centered in the cell (cell layout is
-  // justifyContent: 'center'; an in-flow tier letter would shift the
-  // day number up to make room).
+  // Tier letter pinned to the top-right corner of the cell so the
+  // day number stays vertically centered. Top-right is the standard
+  // badge slot (status pips, app-icon counters) and reads as
+  // metadata about the cell rather than as a second equal element.
   cellTier: {
     position: 'absolute',
-    bottom: 2,
+    top: 2,
+    right: 4,
     fontFamily: fonts.mono,
     fontSize: 8,
     fontWeight: '900',
@@ -716,13 +753,26 @@ const styles = StyleSheet.create({
     color: colors.accent,
   },
 
-  summaryBlock: { gap: 4, marginTop: spacing.md },
+  // Side-by-side container for summary + histogram. Each column flexes
+  // to half the available width so the panel reads as one condensed
+  // stats block instead of two stacked full-width sections.
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    alignItems: 'flex-start',
+  },
+  summaryCol: { flex: 1, gap: 4 },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    // Tightened from StatsScreen's spacing.md horizontal padding —
+    // the column is roughly half the width of the Free Play stats
+    // page, so the rows need less inner gutter to keep the label +
+    // value comfortably spaced.
+    paddingHorizontal: spacing.sm,
     backgroundColor: colors.bgPanel,
     borderRadius: radius.sm,
     borderWidth: 1,
@@ -741,7 +791,9 @@ const styles = StyleSheet.create({
     color: colors.textLow,
     fontSize: 18,
     fontWeight: '800',
-    minWidth: 64,
+    // Right-aligned; minWidth dropped from StatsScreen's 64 since the
+    // narrow column can't spare the fixed reserve. Daily values are
+    // short ("3-2", "500", "—") so content sizing is sufficient.
     textAlign: 'right',
   },
   summaryValueActive: {
@@ -749,8 +801,9 @@ const styles = StyleSheet.create({
   },
 
   histogramBlock: {
+    flex: 1,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     backgroundColor: colors.bgPanel,
     borderRadius: radius.sm,
     borderWidth: 1,
