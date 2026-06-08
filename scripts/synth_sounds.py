@@ -239,6 +239,31 @@ def make_minus() -> list:
     return buf
 
 
+def make_revive() -> list:
+    """Revive — rising C-major arpeggio (C4 → E4 → G4 → C5) with a
+    soft triangle bloom on the top octave. Warm and uplifting — "the
+    card comes back" — in about half a second."""
+    buf = make_buffer(0.55)
+    add_note(buf, freq=261.63, dur=0.12, kind='sine', vol=0.18)          # C4
+    add_note(buf, freq=329.63, dur=0.12, delay=0.08, kind='sine', vol=0.18)   # E4
+    add_note(buf, freq=392.00, dur=0.12, delay=0.16, kind='sine', vol=0.18)   # G4
+    add_note(buf, freq=523.25, dur=0.22, delay=0.24, kind='sine', vol=0.20)   # C5
+    add_note(buf, freq=1046.50, dur=0.18, delay=0.26, kind='triangle', vol=0.08)  # C6 bloom
+    return buf
+
+
+def make_stall() -> list:
+    """Stall — soft noise wash (cards stacking back into the deck)
+    that leads into a descending two-tone resolution. The held low C
+    conveys "paused / held" rather than "done"."""
+    buf = make_buffer(0.55)
+    add_noise(buf, duration=0.18, vol=0.16, hz=1200)
+    add_note(buf, freq=523.25, dur=0.14, delay=0.08, kind='sine', vol=0.16)   # C5
+    add_note(buf, freq=392.00, dur=0.20, delay=0.20, kind='sine', vol=0.16)   # G4
+    add_note(buf, freq=261.63, dur=0.18, delay=0.32, kind='sine', vol=0.12)   # C4 hold
+    return buf
+
+
 RECIPES = {
     'whoosh': make_whoosh,
     'boing': make_boing,
@@ -247,6 +272,8 @@ RECIPES = {
     'sparkle': make_sparkle,
     'plus': make_plus,
     'minus': make_minus,
+    'revive': make_revive,
+    'stall': make_stall,
 }
 
 

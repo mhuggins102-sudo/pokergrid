@@ -88,7 +88,9 @@ export interface BonusCard {
     | 'side-slide'
     | 'jump'
     | 'shuffle'
-    | 'plus-minus';
+    | 'plus-minus'
+    | 'revive'
+    | 'stall';
   // True after a one-time-use card has been activated. The card stays
   // in the hand (occupying its slot) but is rendered dimmed and no
   // longer accepts activation. Keeping the spent card around — rather
@@ -192,6 +194,26 @@ export const PLUS_MINUS_CARD: BonusCard = {
   specialKind: 'plus-minus',
 };
 
+export const REVIVE_CARD: BonusCard = {
+  id: 'special-revive',
+  name: 'Revive',
+  title: 'Revive',
+  mult: 'one-time',
+  description:
+    'Pick any card from the discard pile and place it on the grid. The card lands in the next spiral slot. Consumed on use.',
+  specialKind: 'revive',
+};
+
+export const STALL_CARD: BonusCard = {
+  id: 'special-stall',
+  name: 'Stall',
+  title: 'Stall',
+  mult: 'one-time',
+  description:
+    'Pick 3 to 5 cards from the grid. They are removed and shuffled back into the playing deck for later. The currently drawn card is unaffected and still must be placed. Consumed on use.',
+  specialKind: 'stall',
+};
+
 // Pool of every one-time action card. Used by the Three Tricks challenge
 // (samples 3 at random) and by any future variant that wants to roll
 // against the special deck.
@@ -204,6 +226,8 @@ export const SPECIAL_DECK_POOL: BonusCard[] = [
   JUMP_JUMP_CARD,
   SHUFFLE_CARD,
   PLUS_MINUS_CARD,
+  REVIVE_CARD,
+  STALL_CARD,
 ];
 
 export const isSpecialCard = (c: BonusCard): boolean =>
