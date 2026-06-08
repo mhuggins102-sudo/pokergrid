@@ -42,8 +42,17 @@ export const fnv1a = (s: string): number => {
 };
 
 // Seed for the Mulberry32 deck RNG. Salted so different daily channels
-// (deck vs. future hypothetical bonus-deck-only) can't accidentally
-// share the same stream.
+// (deck vs. initial-specials below vs. future hypothetical bonus-deck)
+// can't accidentally share the same stream.
 export const seedForDate = (dateISO: string): number => {
   return fnv1a(`pokergrid-deck::${dateISO}`);
+};
+
+// Separate seed for the Three Tricks initial-hand sample. Daily mode
+// needs every player to start with the same 3 green cards; without
+// its own seed we'd either reuse the deck stream (and the sample
+// would steal random calls that newGame expects) or fall back to
+// Math.random (and players would all see different starting hands).
+export const seedForInitialSpecials = (dateISO: string): number => {
+  return fnv1a(`pokergrid-initial-specials::${dateISO}`);
 };

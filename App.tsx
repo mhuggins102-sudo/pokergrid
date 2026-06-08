@@ -17,7 +17,7 @@ import {
   targetForLevel,
 } from './src/game/challenges';
 import { DailyRecipe, recipeFor } from './src/game/daily/recipe';
-import { seedForDate } from './src/game/daily/seed';
+import { seedForDate, seedForInitialSpecials } from './src/game/daily/seed';
 import { Difficulty, TARGET_BY_DIFFICULTY, UNDOS_BY_DIFFICULTY } from './src/game/rules';
 import { useGame } from './src/ui/hooks/useGame';
 import { BonusCardsScreen } from './src/ui/screens/BonusCardsScreen';
@@ -515,7 +515,16 @@ const contextNoBonusCards = (ctx: PlayContext): boolean => {
 // these instead of the normal starter draw when noBonusCards is true.
 const contextInitialBonusCards = (ctx: PlayContext): BonusCard[] => {
   if (effectiveTwist(ctx) !== 'three-tricks') return [];
-  return shuffle(SPECIAL_DECK_POOL, Math.random).slice(0, 3);
+  // Daily mode: every player worldwide must start Three Tricks with the
+  // same three specials, so we seed the sample off the dateISO (with a
+  // distinct salt so it doesn't share the deck stream). Free-play /
+  // Challenge runs keep using Math.random — each playthrough draws a
+  // different trio there by design.
+  const rng =
+    ctx.mode === 'daily'
+      ? seededRng(seedForInitialSpecials(ctx.dateISO))
+      : Math.random;
+  return shuffle(SPECIAL_DECK_POOL, rng).slice(0, 3);
 };
 
 // Mixed Bag: lock the 3 bonus slots to categories — slot 0 green
