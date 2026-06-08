@@ -16,7 +16,7 @@ import {
   findChallenge,
   targetForLevel,
 } from './src/game/challenges';
-import { DailyRecipe, recipeFor } from './src/game/daily/recipe';
+import { DailyRecipe, dailyTargetFor, recipeFor } from './src/game/daily/recipe';
 import { seedForDate, seedForInitialSpecials } from './src/game/daily/seed';
 import { Difficulty, TARGET_BY_DIFFICULTY, UNDOS_BY_DIFFICULTY } from './src/game/rules';
 import { useGame } from './src/ui/hooks/useGame';
@@ -410,14 +410,17 @@ const contextTarget = (ctx: PlayContext): number => {
     case 'free': return 0; // useGame defaults via difficulty
     case 'targets-up': return targetForLevel(ctx.level);
     case 'challenge': return findChallenge(ctx.id).scoreTarget;
-    // Daily uses the standard per-difficulty target. When a twist is
-    // rolled, the twist's challenge target REPLACES the difficulty
-    // target — so a Daily Easy · Poker Purist run has the same 350
-    // target as the Poker Purist Challenge. (Players see this in the
-    // rules modal before committing.)
+    // Daily uses a dedicated formula in recipe.ts:
+    //   - no twist          → difficulty's plain target
+    //   - "scoring-active"  → difficulty base − 50 (Short Circuit /
+    //                          No Discards / Gridlock / Short Deck /
+    //                          Mixed Bag)
+    //   - Poker Purist      → fixed 350 (multipliers off, jokers
+    //                          modulate feel)
+    //   - Three Tricks      → fixed 400 (same — 3 special action
+    //                          cards compensate for no bonus deck)
     case 'daily':
-      if (ctx.recipe.twist) return findChallenge(ctx.recipe.twist).scoreTarget;
-      return TARGET_BY_DIFFICULTY[ctx.recipe.difficulty];
+      return dailyTargetFor(ctx.recipe.difficulty, ctx.recipe.twist);
   }
 };
 

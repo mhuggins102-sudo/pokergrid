@@ -6,6 +6,7 @@
 // per the implementation plan — Phase 3 turns it on.
 
 import type { Difficulty } from '../rules';
+import { TARGET_BY_DIFFICULTY } from '../rules';
 import type { ChallengeId } from '../challenges';
 import { fnv1a } from './seed';
 
@@ -111,4 +112,35 @@ export const recipeFor = (
   }
   const twist = eligibleTwists[twistIndexRoll % eligibleTwists.length];
   return { difficulty, twist };
+};
+
+// Twists that ignore the per-difficulty target and use a fixed value.
+// Both Poker Purist and Three Tricks strip the bonus deck entirely, so
+// scoring is multiplier-free and a flat ceiling makes more sense than
+// scaling. The difficulty's toolkit (jokers / undos / discards) still
+// modifies how hard it FEELS within the mode.
+const FIXED_TWIST_TARGET: Partial<Record<ChallengeId, number>> = {
+  'poker-purist': 350,
+  'three-tricks': 400,
+};
+
+// Per-twist delta applied to the difficulty's base target for every
+// other twist. The user-locked value: every "scoring-still-active"
+// twist drops the bar by 50 from the base difficulty target so the
+// twisted day feels comparable in challenge to the plain day.
+const TWIST_TARGET_DELTA = -50;
+
+// Daily target = base difficulty target, optionally adjusted by the
+// active twist. Twists with a fixed entry override the delta path.
+// Defensive against Extreme + twist (recipe never produces that
+// combination, but if a caller hands one in, the formula still
+// returns a sane number).
+export const dailyTargetFor = (
+  difficulty: Difficulty,
+  twist?: ChallengeId
+): number => {
+  if (!twist) return TARGET_BY_DIFFICULTY[difficulty];
+  const fixed = FIXED_TWIST_TARGET[twist];
+  if (fixed !== undefined) return fixed;
+  return TARGET_BY_DIFFICULTY[difficulty] + TWIST_TARGET_DELTA;
 };
