@@ -30,7 +30,9 @@ export type SoundKey =
   | 'thud'       // The Doubler (mallet hit on the picked card)
   | 'sparkle'    // Wildcard (magical twinkle)
   | 'plus'       // Plus/Minus +1 (ascending 3-tone tick)
-  | 'minus';     // Plus/Minus −1 (descending 3-tone tick — reverse of 'plus')
+  | 'minus'      // Plus/Minus −1 (descending 3-tone tick — reverse of 'plus')
+  | 'revive'     // Revive (rising C-major arpeggio with soft bloom)
+  | 'stall';     // Stall (descending sines + noise wash — "cards stack back")
 
 // ---------- Native (expo-audio + bundled WAVs) ----------
 
@@ -57,6 +59,8 @@ const ASSETS: Partial<Record<SoundKey, number>> = {
   sparkle: require('../../assets/sounds/sparkle.wav'),
   plus: require('../../assets/sounds/plus.wav'),
   minus: require('../../assets/sounds/minus.wav'),
+  revive: require('../../assets/sounds/revive.wav'),
+  stall: require('../../assets/sounds/stall.wav'),
 };
 
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
@@ -291,6 +295,27 @@ const playWeb = (k: SoundKey) => {
         { freq: 784, dur: 0.07, type: 'sine', vol: 0.18 },
         { freq: 659, dur: 0.07, delay: 0.06, type: 'sine', vol: 0.18 },
         { freq: 523, dur: 0.10, delay: 0.12, type: 'sine', vol: 0.18 },
+      ]);
+    case 'revive':
+      // Revive — rising C-major arpeggio (C-E-G-C) over warm sine
+      // tones with a soft triangle bloom on the top note. Reads as
+      // "bringing the card back" — uplifting but quick.
+      return playNotes([
+        { freq: 261.63, dur: 0.12, type: 'sine', vol: 0.18 },
+        { freq: 329.63, dur: 0.12, delay: 0.08, type: 'sine', vol: 0.18 },
+        { freq: 392.00, dur: 0.12, delay: 0.16, type: 'sine', vol: 0.18 },
+        { freq: 523.25, dur: 0.22, delay: 0.24, type: 'sine', vol: 0.20 },
+        { freq: 1046.50, dur: 0.18, delay: 0.26, type: 'triangle', vol: 0.08 },
+      ]);
+    case 'stall':
+      // Stall — soft noise wash (cards being placed back into the
+      // deck) leading into a descending two-tone resolution. The
+      // final low tone holds longer to convey "settled / paused".
+      playNoise(0.18, { vol: 0.16, hz: 1200 });
+      return playNotes([
+        { freq: 523.25, dur: 0.14, delay: 0.08, type: 'sine', vol: 0.16 },
+        { freq: 392.00, dur: 0.20, delay: 0.20, type: 'sine', vol: 0.16 },
+        { freq: 261.63, dur: 0.18, delay: 0.32, type: 'sine', vol: 0.12 },
       ]);
   }
 };
