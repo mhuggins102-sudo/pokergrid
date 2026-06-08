@@ -252,8 +252,8 @@ def make_revive() -> list:
     return buf
 
 
-def make_stall() -> list:
-    """Stall — soft noise wash (cards stacking back into the deck)
+def make_rewind() -> list:
+    """Rewind — soft noise wash (cards stacking back into the deck)
     that leads into a descending two-tone resolution. The held low C
     conveys "paused / held" rather than "done"."""
     buf = make_buffer(0.55)
@@ -273,7 +273,7 @@ RECIPES = {
     'plus': make_plus,
     'minus': make_minus,
     'revive': make_revive,
-    'stall': make_stall,
+    'rewind': make_rewind,
 }
 
 

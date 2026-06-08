@@ -40,6 +40,7 @@ import {
 import { categoryOf, styleFor as bonusStyleFor } from '../bonusCardCategory';
 import { BonusCardDetailModal } from '../components/BonusCardDetailModal';
 import { BonusCardStrip } from '../components/BonusCardStrip';
+import { DiscardPickerModal } from '../components/DiscardPickerModal';
 import { RemainingDeckModal } from '../components/RemainingDeckModal';
 import { CardTile } from '../components/CardTile';
 import { GridView } from '../components/GridView';
@@ -1142,6 +1143,12 @@ export const GameScreen = ({
         playSound('tap');
         dispatch({ type: 'TOGGLE_SHUFFLE_TARGET', slot: idx });
       }
+    } else if (p.kind === 'awaiting-special-rewind') {
+      if (p.slots.includes(idx)) {
+        haptic('light');
+        playSound('tap');
+        dispatch({ type: 'TOGGLE_REWIND_TARGET', slot: idx });
+      }
     } else if (p.kind === 'awaiting-special-plus-minus-target') {
       if (p.slots.includes(idx)) {
         haptic('light');
@@ -1221,6 +1228,10 @@ export const GameScreen = ({
       // Highlight every legal target (any occupied slot); pickedSlots
       // below tints the currently-chosen 5 in green so the player can
       // see their pending set.
+      for (const s of p.slots) out.add(s);
+    } else if (p.kind === 'awaiting-special-rewind') {
+      // Same shape as shuffle — every occupied slot is selectable,
+      // picked set tints separately below.
       for (const s of p.slots) out.add(s);
     } else if (p.kind === 'awaiting-special-plus-minus-target') {
       for (const s of p.slots) out.add(s);
@@ -1660,6 +1671,8 @@ export const GameScreen = ({
                   ? new Set(state.phase.chain)
                   : state.phase.kind === 'awaiting-special-shuffle'
                   ? new Set(state.phase.selected)
+                  : state.phase.kind === 'awaiting-special-rewind'
+                  ? new Set(state.phase.selected)
                   : undefined
               }
               ghostCards={slipSlidePreviewCards}
@@ -1745,6 +1758,16 @@ export const GameScreen = ({
         grid={state.grid}
         discards={state.discards}
         perkSpent={state.perkSpent}
+      />
+      <DiscardPickerModal
+        visible={state.phase.kind === 'awaiting-special-revive-pick'}
+        discards={state.discards}
+        onPick={(discardIdx) => {
+          haptic('bonus');
+          playSound('revive');
+          dispatch({ type: 'RESOLVE_REVIVE', discardIdx });
+        }}
+        onCancel={() => dispatch({ type: 'CANCEL_ACTION' })}
       />
       <HintModal
         hint={activeHint}
@@ -2223,6 +2246,8 @@ const renderBottom = (
       | 'sparkle'
       | 'plus'
       | 'minus'
+      | 'revive'
+      | 'rewind'
   ) => void,
   suitOK: boolean,
   drawnKey: string,
@@ -2713,6 +2738,79 @@ const renderBottom = (
               dispatch({ type: 'RESOLVE_SHUFFLE' });
             }}
           />
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-special-rewind') {
+    const n = p.selected.length;
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-rewind'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Rewind</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Pick 3 to 5 cards to send back to the deck. {n} selected.
+            Tap a card again to drop it.
+          </Text>
+          <NeonButton
+            label={n >= 3 ? `Rewind ${n}` : `${3 - n} more`}
+            variant="primary"
+            size="sm"
+            disabled={n < 3}
+            onPress={() => {
+              haptic('bonus');
+              playSound('rewind');
+              dispatch({ type: 'RESOLVE_REWIND' });
+            }}
+          />
+          <NeonButton
+            label="Cancel"
+            variant="secondary"
+            size="sm"
+            onPress={() => dispatch({ type: 'CANCEL_ACTION' })}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (p.kind === 'awaiting-special-revive-pick') {
+    return (
+      <View style={styles.actionRow}>
+        <DrawnArea
+          drawnKey={drawnKey + '-revive'}
+          deckCount={state.deck.length}
+          perkCount={state.perkSpent.length}
+          onDeckPress={onDeckPress}
+        >
+          <Text style={[styles.drawnLabel, { color: colors.success }]}>★ Revive</Text>
+          <CardTile card={state.drawn} size="lg" />
+        </DrawnArea>
+        <View style={styles.btnCol}>
+          <Text style={styles.hint}>
+            Pick a card from the discard pile to bring back. It lands
+            in the next spiral slot.
+          </Text>
+          {/*
+            The actual picker is the DiscardPickerModal, opened by
+            the GameScreen body when the phase matches. The action
+            bar just shows the hint + Cancel.
+          */}
           <NeonButton
             label="Cancel"
             variant="secondary"

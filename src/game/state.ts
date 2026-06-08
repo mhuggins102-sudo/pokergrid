@@ -41,11 +41,14 @@ import {
   executeHop,
   executeJump,
   executeMegaDestroy,
+  executeRewind,
   executeShuffle,
   executeSideSlide,
   executeSlide,
   MEGA_DESTROY_MAX,
   occupiedSlots,
+  REWIND_PICK_MAX,
+  REWIND_PICK_MIN,
   SHUFFLE_PICK_MAX,
   SHUFFLE_PICK_MIN,
   sideSlideChainExtensions,
@@ -204,6 +207,25 @@ export type Phase =
       target: number;
       returnTo: TargetReturnTo;
     }
+  // Revive: the picker is the discard pile (a list rendered in a
+  // modal). The player taps a discarded card; the reducer pulls it
+  // out of discards and places it at the next spiral slot.
+  | {
+      kind: 'awaiting-special-revive-pick';
+      cardIdx: number;
+      returnTo: TargetReturnTo;
+    }
+  // Rewind: multi-select 3-5 grid cards. Structurally mirrors
+  // 'awaiting-special-shuffle'; the difference is in the commit
+  // handler — Rewind removes the cards from the grid and mixes them
+  // back into the playing deck rather than permuting in place.
+  | {
+      kind: 'awaiting-special-rewind';
+      cardIdx: number;
+      slots: number[];
+      selected: number[];
+      returnTo: TargetReturnTo;
+    }
   | { kind: 'game-over' };
 
 export interface GameState {
@@ -301,6 +323,9 @@ export type Action =
   | { type: 'RESOLVE_SHUFFLE' }
   | { type: 'RESOLVE_PLUS_MINUS_TARGET'; slot: number }
   | { type: 'RESOLVE_PLUS_MINUS'; delta: 1 | -1 }
+  | { type: 'RESOLVE_REVIVE'; discardIdx: number }
+  | { type: 'TOGGLE_REWIND_TARGET'; slot: number }
+  | { type: 'RESOLVE_REWIND' }
   | { type: 'UNDO' };
 
 const log = (s: GameState, msg: string): GameState => ({
@@ -843,6 +868,36 @@ const handleActivateSpecial = (s: GameState, idx: number): GameState => {
         },
       };
     }
+    case 'revive': {
+      // Nothing to revive if the discard pile is empty. The grid
+      // also needs to have room — if the grid is full (very late in
+      // the run) the revived card has nowhere to land.
+      if (s.discards.length === 0) return s;
+      if (isFull(s.grid)) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-revive-pick',
+          cardIdx: idx,
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
+    case 'rewind': {
+      const slots = occupiedSlots(s.grid);
+      // Need at least REWIND_PICK_MIN cards on the grid to fire.
+      if (slots.length < REWIND_PICK_MIN) return s;
+      return {
+        ...s,
+        phase: {
+          kind: 'awaiting-special-rewind',
+          cardIdx: idx,
+          slots,
+          selected: [],
+          returnTo: 'awaiting-action',
+        },
+      };
+    }
   }
   return s;
 };
@@ -1080,6 +1135,63 @@ const handleResolveShuffle = (
   return log(
     { ...s, grid, bonusCards: newHand, phase: { kind: 'awaiting-action' } },
     `Shuffle on ${phase.selected.length} slots`
+  );
+};
+
+const handleResolveRevive = (s: GameState, discardIdx: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-revive-pick') return s;
+  if (discardIdx < 0 || discardIdx >= s.discards.length) return s;
+  if (isFull(s.grid)) return s;
+  const card = s.discards[discardIdx];
+  const grid = placeAtSpiralNext(s.grid, card);
+  const discards = s.discards.filter((_, i) => i !== discardIdx);
+  const newHand = consumeSpecial(s, s.phase.cardIdx);
+  return log(
+    {
+      ...s,
+      grid,
+      discards,
+      bonusCards: newHand,
+      phase: { kind: 'awaiting-action' },
+    },
+    `Revive discard #${discardIdx}`
+  );
+};
+
+const handleToggleRewindTarget = (s: GameState, slot: number): GameState => {
+  if (s.phase.kind !== 'awaiting-special-rewind') return s;
+  if (!s.phase.slots.includes(slot)) return s;
+  const phase = s.phase;
+  const already = phase.selected.indexOf(slot);
+  let selected: number[];
+  if (already >= 0) {
+    selected = phase.selected.filter(i => i !== slot);
+  } else {
+    if (phase.selected.length >= REWIND_PICK_MAX) return s;
+    selected = [...phase.selected, slot];
+  }
+  return { ...s, phase: { ...phase, selected } };
+};
+
+const handleResolveRewind = (
+  s: GameState,
+  rng: () => number
+): GameState => {
+  if (s.phase.kind !== 'awaiting-special-rewind') return s;
+  const phase = s.phase;
+  if (phase.selected.length < REWIND_PICK_MIN) return s;
+  if (phase.selected.length > REWIND_PICK_MAX) return s;
+  const { grid, deck } = executeRewind(s.grid, phase.selected, s.deck, rng);
+  const newHand = consumeSpecial(s, phase.cardIdx);
+  return log(
+    {
+      ...s,
+      grid,
+      deck,
+      bonusCards: newHand,
+      phase: { kind: 'awaiting-action' },
+    },
+    `Rewind on ${phase.selected.length} slots`
   );
 };
 
@@ -1391,6 +1503,8 @@ const handleCancelAction = (s: GameState): GameState => {
     case 'awaiting-special-jump-source':
     case 'awaiting-special-shuffle':
     case 'awaiting-special-plus-minus-target':
+    case 'awaiting-special-revive-pick':
+    case 'awaiting-special-rewind':
       return { ...s, phase: { kind: s.phase.returnTo } };
     case 'awaiting-special-plus-minus-direction':
       // Step back to target selection so the player can pick a
@@ -1431,6 +1545,8 @@ const SNAP_ACTIONS = new Set<Action['type']>([
   'RESOLVE_JUMP',
   'RESOLVE_SHUFFLE',
   'RESOLVE_PLUS_MINUS',
+  'RESOLVE_REVIVE',
+  'RESOLVE_REWIND',
 ]);
 
 const handleUndo = (s: GameState): GameState => {
@@ -1541,6 +1657,15 @@ export const step = (
       break;
     case 'RESOLVE_PLUS_MINUS':
       next = handleResolvePlusMinus(state, action.delta);
+      break;
+    case 'RESOLVE_REVIVE':
+      next = handleResolveRevive(state, action.discardIdx);
+      break;
+    case 'TOGGLE_REWIND_TARGET':
+      next = handleToggleRewindTarget(state, action.slot);
+      break;
+    case 'RESOLVE_REWIND':
+      next = handleResolveRewind(state, rng);
       break;
   }
   if (next === state) return state;
