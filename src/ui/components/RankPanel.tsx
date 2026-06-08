@@ -14,8 +14,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { findChallenge } from '../../game/challenges';
-import { recipeFor } from '../../game/daily/recipe';
-import { TARGET_BY_DIFFICULTY } from '../../game/rules';
+import { dailyTargetFor, recipeFor } from '../../game/daily/recipe';
 import { useDaily } from '../daily/DailyProvider';
 import { useDailyRank } from '../hooks/useDailyRank';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -59,8 +58,7 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
 
   const target = useMemo(() => {
     const r = recipeFor(dateISO);
-    if (r.twist) return findChallenge(r.twist).scoreTarget;
-    return TARGET_BY_DIFFICULTY[r.difficulty];
+    return dailyTargetFor(r.difficulty, r.twist);
   }, [dateISO]);
 
   return (

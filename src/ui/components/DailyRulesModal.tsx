@@ -7,7 +7,7 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DailyRecipe } from '../../game/daily/recipe';
 import { findChallenge } from '../../game/challenges';
-import { TARGET_BY_DIFFICULTY } from '../../game/rules';
+import { dailyTargetFor } from '../../game/daily/recipe';
 import { NeonButton } from './NeonButton';
 import { colors, difficultyColor, fonts, glow, radius, spacing } from '../theme';
 
@@ -100,21 +100,15 @@ export const DailyRulesModal = ({
                     says "Twist". */}
                 {findChallenge(recipe.twist).synopsis.replace(/^Twist:\s*/, '')}
               </Text>
-              <View style={styles.recipeRow}>
-                <Text style={styles.recipeLabel}>Target</Text>
-                <Text style={styles.recipeValueNeutral}>
-                  {findChallenge(recipe.twist).scoreTarget}
-                </Text>
-              </View>
             </>
-          ) : (
-            <View style={styles.recipeRow}>
-              <Text style={styles.recipeLabel}>Target</Text>
-              <Text style={styles.recipeValueNeutral}>
-                {TARGET_BY_DIFFICULTY[recipe.difficulty]}
-              </Text>
-            </View>
-          )}
+          ) : null}
+
+          <View style={styles.recipeRow}>
+            <Text style={styles.recipeLabel}>Target</Text>
+            <Text style={styles.recipeValueNeutral}>
+              {dailyTargetFor(recipe.difficulty, recipe.twist)}
+            </Text>
+          </View>
 
           <View style={styles.btnRow}>
             <NeonButton
