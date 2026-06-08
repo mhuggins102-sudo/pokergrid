@@ -1,15 +1,22 @@
-// Daily Grid archive — month calendar of past dailies.
+// Daily Grid archive — month calendar of past dailies + condensed
+// stats panel.
 //
-// Cells are tone-coded:
-//   - green : played and beat the target on that date
-//   - amber : played but didn't beat the target
-//   - gray  : past date the player hasn't tried yet (tappable to play)
-//   - faint : future date or before-launch (disabled)
-//   - cyan  : today (highlighted regardless of played status)
+// Calendar cells are tone-coded by tier (SS / S / A / B / C / D)
+// using the same TIER_COLOR palette the result screen + stats screen
+// use, so the visual language is consistent across the app:
+//   - SS : purple (joker)
+//   - S  : green (success) — labeled with the letter
+//   - A  : green (success)
+//   - B  : cyan  (accent)
+//   - C  : amber (warn)
+//   - D  : red   (danger)
+//   - unplayed past   : gray panel (tappable)
+//   - today unplayed  : cyan border + glow
+//   - future / pre-launch : faint, disabled
 //
-// Tapping a played cell opens that date's stored ResultScreen.
-// Tapping an unplayed past cell launches a fresh game seeded by that
-// date. Late entries count fully toward the leaderboard for that date.
+// Below the calendar: a scope toggle (This Month / All Time), three
+// stat boxes (Played / Wins / Best tier), and a tier distribution
+// histogram. Mirrors StatsScreen's tier chart at a smaller scale.
 
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -19,20 +26,15 @@ import { DailyRulesModal } from '../components/DailyRulesModal';
 import { NeonButton } from '../components/NeonButton';
 import { useDaily } from '../daily/DailyProvider';
 import { DailyPlay } from '../daily/localStore';
+import { Tier, TIER_ORDER, tierForRun } from '../stats';
 import { colors, fonts, glow, radius, spacing } from '../theme';
 
 interface Props {
   onBack: () => void;
-  // Start playing a specific past daily. App.tsx handles the
-  // playContext + screen transition. omit = today's daily.
   onStartDaily: (dateISO: string) => void;
-  // View the result screen for an already-played daily.
   onOpenResult: (dateISO: string) => void;
 }
 
-// Earliest date the player can navigate to / play in the archive.
-// Pre-launch dates aren't surfaced because no one was around to play
-// them — they'd just be empty leaderboards.
 const LAUNCH_DATE_ISO = '2026-05-01';
 
 const MONTH_NAMES = [
@@ -40,30 +42,43 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// Day-of-week header. Sunday-first matches the most common US-locale
-// calendar convention. Localization is a Phase 4 nicety.
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
+// Per-tier color. Same palette as ResultScreen's TIER_COLOR map so
+// "what does green mean" reads consistently across the app.
+const TIER_COLOR: Record<Tier, string> = {
+  SS: colors.joker,
+  S: colors.success,
+  A: colors.success,
+  B: colors.accent,
+  C: colors.warn,
+  D: colors.danger,
+};
+
+// Background tints (12-22% alpha of the tier color) so the cell
+// reads "filled with tier color" without overwhelming the day
+// number.
+const TIER_BG: Record<Tier, string> = {
+  SS: 'rgba(184, 130, 255, 0.22)',
+  S: 'rgba(92, 255, 154, 0.22)',
+  A: 'rgba(92, 255, 154, 0.18)',
+  B: 'rgba(107, 214, 255, 0.18)',
+  C: 'rgba(255, 183, 74, 0.18)',
+  D: 'rgba(255, 100, 100, 0.18)',
+};
+
 interface CellMonthMeta {
-  // Year + month identify the visible page.
   year: number;
-  // 0..11
   month: number;
 }
 
-// Generate the 7×6 grid of dateISOs for a given month. Cells outside
-// the month proper return null (rendered as blanks). Cells before
-// LAUNCH_DATE_ISO and after today are still returned but the consumer
-// renders them disabled.
 const buildMonthGrid = (meta: CellMonthMeta): (string | null)[] => {
   const firstOfMonth = new Date(Date.UTC(meta.year, meta.month, 1));
-  const startDow = firstOfMonth.getUTCDay(); // 0..6, Sun-first
+  const startDow = firstOfMonth.getUTCDay();
   const daysInMonth = new Date(
     Date.UTC(meta.year, meta.month + 1, 0)
   ).getUTCDate();
   const cells: (string | null)[] = [];
-  // Leading blanks so the first-of-month lands under the right day of
-  // week.
   for (let i = 0; i < startDow; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const y = meta.year;
@@ -71,8 +86,6 @@ const buildMonthGrid = (meta: CellMonthMeta): (string | null)[] => {
     const dd = String(d).padStart(2, '0');
     cells.push(`${y}-${m}-${dd}`);
   }
-  // Pad trailing cells to fill the last week (so the grid is always
-  // a multiple of 7).
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
 };
@@ -90,8 +103,6 @@ const nextMonth = (m: CellMonthMeta): CellMonthMeta =>
     ? { year: m.year + 1, month: 0 }
     : { year: m.year, month: m.month + 1 };
 
-// "Is this month earlier than the launch month?" used to gate the
-// prev-month arrow.
 const monthIsBeforeLaunch = (m: CellMonthMeta): boolean => {
   const launch = parseDateISO(LAUNCH_DATE_ISO);
   if (!launch) return false;
@@ -100,8 +111,6 @@ const monthIsBeforeLaunch = (m: CellMonthMeta): boolean => {
   return m.year < launchY || (m.year === launchY && m.month < launchM);
 };
 
-// "Is this month later than the current month?" used to gate the
-// next-month arrow. The current month is the latest valid view.
 const monthIsAfterCurrent = (m: CellMonthMeta, todayISO: string): boolean => {
   const today = parseDateISO(todayISO);
   if (!today) return false;
@@ -110,8 +119,24 @@ const monthIsAfterCurrent = (m: CellMonthMeta, todayISO: string): boolean => {
   return m.year > ty || (m.year === ty && m.month > tm);
 };
 
-// Per-cell status drives both the visual style and the tap handler.
-type CellStatus = 'won' | 'lost' | 'unplayed' | 'today-unplayed' | 'future' | 'pre-launch';
+// Tier computed from the stored play. Uses the run's recorded
+// difficulty + target (snapshotted on the GameState at game-over)
+// so a recipe-config change later won't retroactively shift tiers.
+const tierForPlay = (play: DailyPlay): Tier =>
+  tierForRun({
+    ts: play.completedAt,
+    difficulty: play.state.difficulty,
+    score: play.score,
+    target: play.state.target,
+    won: play.won,
+  });
+
+type CellStatus =
+  | { kind: 'played'; tier: Tier }
+  | { kind: 'unplayed' }
+  | { kind: 'today-unplayed' }
+  | { kind: 'future' }
+  | { kind: 'pre-launch' };
 
 const cellStatusFor = (
   dateISO: string,
@@ -119,11 +144,41 @@ const cellStatusFor = (
   play: DailyPlay | undefined
 ): CellStatus => {
   const isToday = dateISO === todayISO;
-  if (dateISO < LAUNCH_DATE_ISO) return 'pre-launch';
-  if (dateISO > todayISO) return 'future';
-  if (play) return play.won ? 'won' : 'lost';
-  if (isToday) return 'today-unplayed';
-  return 'unplayed';
+  if (dateISO < LAUNCH_DATE_ISO) return { kind: 'pre-launch' };
+  if (dateISO > todayISO) return { kind: 'future' };
+  if (play) return { kind: 'played', tier: tierForPlay(play) };
+  if (isToday) return { kind: 'today-unplayed' };
+  return { kind: 'unplayed' };
+};
+
+// Stats panel state — scope toggle between the visible month and the
+// player's entire daily history.
+type Scope = 'month' | 'all';
+
+interface StatsSummary {
+  played: number;
+  wins: number;        // A / S / SS
+  best: Tier | null;   // highest tier achieved
+  tierCounts: Record<Tier, number>;
+}
+
+const emptyTierCounts = (): Record<Tier, number> => ({
+  SS: 0, S: 0, A: 0, B: 0, C: 0, D: 0,
+});
+
+const TIER_RANK: Record<Tier, number> = { SS: 5, S: 4, A: 3, B: 2, C: 1, D: 0 };
+
+const summarize = (plays: DailyPlay[]): StatsSummary => {
+  const tierCounts = emptyTierCounts();
+  let best: Tier | null = null;
+  let wins = 0;
+  for (const p of plays) {
+    const t = tierForPlay(p);
+    tierCounts[t] += 1;
+    if (t === 'A' || t === 'S' || t === 'SS') wins += 1;
+    if (best === null || TIER_RANK[t] > TIER_RANK[best]) best = t;
+  }
+  return { played: plays.length, wins, best, tierCounts };
 };
 
 export const DailyArchiveScreen = ({
@@ -134,36 +189,31 @@ export const DailyArchiveScreen = ({
   const { plays, todayISO } = useDaily();
   const today = parseDateISO(todayISO)!;
 
-  // The visible month — defaults to whatever today is in. Tracks
-  // independently of todayISO so a session crossing midnight doesn't
-  // jump the view.
   const [month, setMonth] = useState<CellMonthMeta>({
     year: today.getUTCFullYear(),
     month: today.getUTCMonth(),
   });
-
-  // Pending "start this date" intent — surfaced as a rules-modal
-  // confirmation so the player commits intentionally (same flow as
-  // today's daily on landing).
   const [pendingStart, setPendingStart] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>('month');
 
   const cells = useMemo(() => buildMonthGrid(month), [month]);
 
-  // Cumulative stats for the visible month — small "X / Y played"
-  // and "N won" summary above the grid.
-  const monthStats = useMemo(() => {
-    if (!plays) return { played: 0, won: 0 };
-    let played = 0;
-    let won = 0;
+  // Plays filtered to the current scope. "month" walks the visible
+  // calendar cells; "all" walks every recorded play regardless of
+  // which month it was played in.
+  const scopedPlays = useMemo(() => {
+    if (!plays) return [];
+    if (scope === 'all') return Object.values(plays);
+    const out: DailyPlay[] = [];
     for (const dateISO of cells) {
       if (!dateISO) continue;
       const p = plays[dateISO];
-      if (!p) continue;
-      played += 1;
-      if (p.won) won += 1;
+      if (p) out.push(p);
     }
-    return { played, won };
-  }, [cells, plays]);
+    return out;
+  }, [cells, plays, scope]);
+
+  const summary = useMemo(() => summarize(scopedPlays), [scopedPlays]);
 
   const canGoBack = !monthIsBeforeLaunch(prevMonth(month));
   const canGoForward = !monthIsAfterCurrent(nextMonth(month), todayISO);
@@ -171,12 +221,11 @@ export const DailyArchiveScreen = ({
   const onCellPress = (dateISO: string | null) => {
     if (!dateISO || !plays) return;
     const status = cellStatusFor(dateISO, todayISO, plays[dateISO]);
-    if (status === 'pre-launch' || status === 'future') return;
-    if (status === 'won' || status === 'lost') {
+    if (status.kind === 'pre-launch' || status.kind === 'future') return;
+    if (status.kind === 'played') {
       onOpenResult(dateISO);
       return;
     }
-    // unplayed or today-unplayed → confirm before committing.
     setPendingStart(dateISO);
   };
 
@@ -220,61 +269,139 @@ export const DailyArchiveScreen = ({
           }
           const status = cellStatusFor(dateISO, todayISO, plays?.[dateISO]);
           const isToday = dateISO === todayISO;
-          const play = plays?.[dateISO];
           const dayNum = Number(dateISO.slice(-2));
+          // Color resolved from the cell status — played cells use the
+          // tier palette, others use the existing gray/cyan/faint.
+          const tierColor =
+            status.kind === 'played' ? TIER_COLOR[status.tier] : null;
+          const tierBg =
+            status.kind === 'played' ? TIER_BG[status.tier] : null;
           return (
             <Pressable
               key={i}
               onPress={() => onCellPress(dateISO)}
-              disabled={status === 'pre-launch' || status === 'future'}
+              disabled={status.kind === 'pre-launch' || status.kind === 'future'}
               style={[
                 styles.cell,
                 styles.cellActive,
-                status === 'won' && styles.cellWon,
-                status === 'lost' && styles.cellLost,
-                status === 'unplayed' && styles.cellUnplayed,
-                status === 'today-unplayed' && styles.cellTodayUnplayed,
-                (status === 'pre-launch' || status === 'future') && styles.cellDisabled,
+                status.kind === 'played' && {
+                  backgroundColor: tierBg!,
+                  borderColor: tierColor!,
+                  borderWidth: 1,
+                },
+                status.kind === 'unplayed' && styles.cellUnplayed,
+                status.kind === 'today-unplayed' && styles.cellTodayUnplayed,
+                (status.kind === 'pre-launch' || status.kind === 'future') && styles.cellDisabled,
                 isToday && styles.cellToday,
               ]}
             >
               <Text
                 style={[
                   styles.cellNum,
-                  status === 'won' && styles.cellNumWon,
-                  status === 'lost' && styles.cellNumLost,
-                  (status === 'pre-launch' || status === 'future') && styles.cellNumDisabled,
+                  status.kind === 'played' && { color: tierColor! },
+                  (status.kind === 'pre-launch' || status.kind === 'future') && styles.cellNumDisabled,
                   isToday && styles.cellNumToday,
                 ]}
               >
                 {dayNum}
               </Text>
-              {play && (
-                <Text style={styles.cellScore}>{play.score}</Text>
+              {status.kind === 'played' && (
+                <Text style={[styles.cellTier, { color: tierColor! }]}>
+                  {status.tier}
+                </Text>
               )}
             </Pressable>
           );
         })}
       </View>
 
-      <View style={styles.legendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, styles.cellWon]} />
-          <Text style={styles.legendLabel}>Beat target</Text>
+      {/* ---- Stats panel ---- */}
+      <View style={styles.scopeToggleRow}>
+        <Pressable
+          onPress={() => setScope('month')}
+          style={[
+            styles.scopePill,
+            scope === 'month' && styles.scopePillActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.scopePillText,
+              scope === 'month' && styles.scopePillTextActive,
+            ]}
+          >
+            This Month
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setScope('all')}
+          style={[
+            styles.scopePill,
+            scope === 'all' && styles.scopePillActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.scopePillText,
+              scope === 'all' && styles.scopePillTextActive,
+            ]}
+          >
+            All Time
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.statRow}>
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>PLAYED</Text>
+          <Text style={styles.statValue}>{summary.played}</Text>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, styles.cellLost]} />
-          <Text style={styles.legendLabel}>Missed</Text>
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>WINS</Text>
+          <Text style={[styles.statValue, styles.statValueWins]}>
+            {summary.wins}
+          </Text>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, styles.cellUnplayed]} />
-          <Text style={styles.legendLabel}>Unplayed</Text>
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>BEST</Text>
+          <Text
+            style={[
+              styles.statValue,
+              summary.best ? { color: TIER_COLOR[summary.best] } : null,
+            ]}
+          >
+            {summary.best ?? '—'}
+          </Text>
         </View>
       </View>
 
-      <Text style={styles.monthStats}>
-        {monthLabel(month)} · {monthStats.won} won / {monthStats.played} played
-      </Text>
+      <View style={styles.histBlock}>
+        <Text style={styles.histTitle}>Tier Distribution</Text>
+        {TIER_ORDER.map(t => {
+          const count = summary.tierCounts[t];
+          const max = Math.max(1, ...Object.values(summary.tierCounts));
+          const pct = count / max;
+          const color = TIER_COLOR[t];
+          return (
+            <View key={t} style={styles.histRow}>
+              <Text style={[styles.histTier, { color }]}>{t}</Text>
+              <View style={styles.histBarTrack}>
+                <View
+                  style={[
+                    styles.histBar,
+                    {
+                      width: `${Math.max(2, pct * 100)}%`,
+                      backgroundColor: count > 0 ? color : colors.outlineSoft,
+                      opacity: count > 0 ? 1 : 0.3,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.histCount}>{count}</Text>
+            </View>
+          );
+        })}
+      </View>
 
       {pendingStart && (
         <DailyRulesModal
@@ -378,9 +505,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   cell: {
-    // Each row holds 7 cells, so width is computed as ~14.28% per cell
-    // with a small gap. flexBasis keeps spacing consistent on different
-    // viewport widths.
     flexBasis: '14.28%',
     aspectRatio: 1,
     alignItems: 'center',
@@ -389,16 +513,6 @@ const styles = StyleSheet.create({
   },
   cellActive: {
     borderRadius: radius.sm,
-  },
-  cellWon: {
-    backgroundColor: 'rgba(92, 255, 154, 0.22)',
-    borderColor: colors.success,
-    borderWidth: 1,
-  },
-  cellLost: {
-    backgroundColor: 'rgba(255, 183, 74, 0.18)',
-    borderColor: colors.warn,
-    borderWidth: 1,
   },
   cellUnplayed: {
     backgroundColor: colors.bgPanel,
@@ -416,7 +530,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   cellToday: {
-    // Stronger glow on top of the per-status border.
     ...glow(colors.accent, 6, 0.5),
   },
   cellNum: {
@@ -425,12 +538,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  cellNumWon: {
-    color: colors.success,
-  },
-  cellNumLost: {
-    color: colors.warn,
-  },
   cellNumDisabled: {
     color: colors.textLow,
     opacity: 0.4,
@@ -438,42 +545,126 @@ const styles = StyleSheet.create({
   cellNumToday: {
     color: colors.accent,
   },
-  cellScore: {
-    color: colors.textMid,
+  // Tiny tier badge in the bottom of the cell — visible only on
+  // played cells. SS shows "SS"; everything else single-letter.
+  cellTier: {
     fontFamily: fonts.mono,
     fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
     marginTop: 1,
   },
-  legendRow: {
+
+  // ---------------- stats panel ----------------
+  scopeToggleRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
     marginTop: spacing.lg,
-    flexWrap: 'wrap',
+    marginBottom: spacing.md,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  legendSwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
+  scopePill: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
     borderWidth: 1,
+    borderColor: colors.outlineSoft,
+    backgroundColor: colors.bgPanel,
   },
-  legendLabel: {
-    color: colors.textMid,
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    letterSpacing: 1,
+  scopePillActive: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(107, 214, 255, 0.08)',
   },
-  monthStats: {
+  scopePillText: {
     color: colors.textMid,
     fontFamily: fonts.mono,
     fontSize: 11,
+    fontWeight: '800',
     letterSpacing: 1.5,
-    textAlign: 'center',
-    marginTop: spacing.md,
+    textTransform: 'uppercase',
+  },
+  scopePillTextActive: {
+    color: colors.accent,
+  },
+  statRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.outlineSoft,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  statLabel: {
+    color: colors.textLow,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 2,
+  },
+  statValue: {
+    color: colors.textHi,
+    fontFamily: fonts.mono,
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  statValueWins: {
+    color: colors.success,
+  },
+  histBlock: {
+    backgroundColor: colors.bgPanel,
+    borderColor: colors.outlineSoft,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: 4,
+  },
+  histTitle: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  histRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  histTier: {
+    width: 22,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  histBarTrack: {
+    flex: 1,
+    height: 10,
+    backgroundColor: colors.bgBase,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  histBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  histCount: {
+    width: 28,
+    textAlign: 'right',
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
