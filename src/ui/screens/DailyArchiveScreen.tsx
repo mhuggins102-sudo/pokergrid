@@ -259,9 +259,12 @@ export const DailyArchiveScreen = ({
     month: today.getUTCMonth(),
   });
   const [pendingStart, setPendingStart] = useState<string | null>(null);
-  // Default to All Time / All so the page opens with the most complete
-  // summary, mirroring how StatsScreen defaults to "All".
-  const [dateScope, setDateScope] = useState<DateScope>('all');
+  // Date scope defaults to "This Month" — the calendar above is
+  // already framed by month, so the stats panel reads as "stats for
+  // what I'm currently looking at" by default. The difficulty axis
+  // still defaults to "All" so the player sees their full mix until
+  // they explicitly narrow it.
+  const [dateScope, setDateScope] = useState<DateScope>('month');
   const [difficulty, setDifficulty] = useState<DifficultyFilter>('all');
 
   const cells = useMemo(() => buildMonthGrid(month), [month]);
@@ -755,14 +758,23 @@ const styles = StyleSheet.create({
 
   // Side-by-side container for summary + histogram. Each column flexes
   // to half the available width so the panel reads as one condensed
-  // stats block instead of two stacked full-width sections.
+  // stats block instead of two stacked full-width sections. No
+  // alignItems override — the default 'stretch' makes both columns
+  // share the same height, which aligns their bottom edges.
   statsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.md,
-    alignItems: 'flex-start',
   },
-  summaryCol: { flex: 1, gap: 4 },
+  // Rows distribute themselves vertically (space-between) so when the
+  // summary column stretches to match the histogram's height the
+  // extra breathing room is shared evenly across the four rows rather
+  // than collected at the bottom as dead space.
+  summaryCol: {
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 4,
+  },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -778,10 +790,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineSoft,
   },
+  // Label + value sizes are smaller than StatsScreen's (12 / 18) —
+  // the narrower column makes the original sizes feel oversized next
+  // to the histogram, and the daily values are always short so the
+  // smaller numerals still read at a glance.
   summaryLabel: {
     fontFamily: fonts.mono,
     color: colors.textMid,
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: 1.5,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -789,11 +805,8 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontFamily: fonts.mono,
     color: colors.textLow,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    // Right-aligned; minWidth dropped from StatsScreen's 64 since the
-    // narrow column can't spare the fixed reserve. Daily values are
-    // short ("3-2", "500", "—") so content sizing is sufficient.
     textAlign: 'right',
   },
   summaryValueActive: {
