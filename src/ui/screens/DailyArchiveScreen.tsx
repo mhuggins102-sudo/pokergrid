@@ -348,10 +348,23 @@ export const DailyArchiveScreen = ({
           const status = cellStatusFor(dateISO, todayISO, plays?.[dateISO]);
           const isToday = dateISO === todayISO;
           const dayNum = Number(dateISO.slice(-2));
+          // When a specific difficulty is selected, played cells that
+          // don't match it render as unplayed-styled (gray panel) so
+          // the matching days pop. The cell is still tappable — the
+          // play data is still there, just visually de-emphasised.
+          const play = plays?.[dateISO];
+          const matchesDifficulty =
+            difficulty === 'all'
+            || (play && play.recipe.difficulty === difficulty);
+          const showAsPlayed = status.kind === 'played' && matchesDifficulty;
           const tierColor =
-            status.kind === 'played' ? TIER_COLOR[status.tier] : null;
+            showAsPlayed && status.kind === 'played'
+              ? TIER_COLOR[status.tier]
+              : null;
           const tierBg =
-            status.kind === 'played' ? TIER_BG[status.tier] : null;
+            showAsPlayed && status.kind === 'played'
+              ? TIER_BG[status.tier]
+              : null;
           return (
             <Pressable
               key={i}
@@ -360,11 +373,14 @@ export const DailyArchiveScreen = ({
               style={[
                 styles.cell,
                 styles.cellActive,
-                status.kind === 'played' && {
+                showAsPlayed && status.kind === 'played' && {
                   backgroundColor: tierBg!,
                   borderColor: tierColor!,
                   borderWidth: 1,
                 },
+                // Played-but-filtered-out cells fall through to the
+                // same gray panel styling as truly unplayed dates.
+                status.kind === 'played' && !showAsPlayed && styles.cellUnplayed,
                 status.kind === 'unplayed' && styles.cellUnplayed,
                 status.kind === 'today-unplayed' && styles.cellTodayUnplayed,
                 (status.kind === 'pre-launch' || status.kind === 'future') && styles.cellDisabled,
@@ -374,14 +390,14 @@ export const DailyArchiveScreen = ({
               <Text
                 style={[
                   styles.cellNum,
-                  status.kind === 'played' && { color: tierColor! },
+                  showAsPlayed && status.kind === 'played' && { color: tierColor! },
                   (status.kind === 'pre-launch' || status.kind === 'future') && styles.cellNumDisabled,
                   isToday && styles.cellNumToday,
                 ]}
               >
                 {dayNum}
               </Text>
-              {status.kind === 'played' && (
+              {showAsPlayed && status.kind === 'played' && (
                 <Text style={[styles.cellTier, { color: tierColor! }]}>
                   {status.tier}
                 </Text>
@@ -462,8 +478,10 @@ export const DailyArchiveScreen = ({
                         styles.histBar,
                         {
                           width: `${Math.max(2, pct * 100)}%`,
-                          backgroundColor: count > 0 ? color : colors.outlineSoft,
-                          opacity: count > 0 ? 1 : 0.3,
+                          backgroundColor: color,
+                          shadowColor: color,
+                          shadowOpacity: 0.5,
+                          shadowRadius: 3,
                         },
                       ]}
                     />
@@ -638,12 +656,17 @@ const styles = StyleSheet.create({
   cellNumToday: {
     color: colors.accent,
   },
+  // Tier letter pinned to the bottom of the cell so the day number
+  // stays vertically centered in the cell (cell layout is
+  // justifyContent: 'center'; an in-flow tier letter would shift the
+  // day number up to make room).
   cellTier: {
+    position: 'absolute',
+    bottom: 2,
     fontFamily: fonts.mono,
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 0.5,
-    marginTop: 1,
   },
 
   // ---------------- filter + stats panel ----------------
