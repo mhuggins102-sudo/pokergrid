@@ -1,11 +1,13 @@
 // Daily Grid archive — month calendar of past dailies + condensed
-// stats panel.
+// stats panel that mirrors the Free Play Stats screen's structure
+// (filter pills on top → W/L · Best · Average · Streak summary →
+// Score distribution histogram).
 //
 // Calendar cells are tone-coded by tier (SS / S / A / B / C / D)
-// using the same TIER_COLOR palette the result screen + stats screen
-// use, so the visual language is consistent across the app:
+// using the same TIER_COLOR palette the result screen uses, so the
+// visual language is consistent across the app:
 //   - SS : purple (joker)
-//   - S  : green (success) — labeled with the letter
+//   - S  : green (success)
 //   - A  : green (success)
 //   - B  : cyan  (accent)
 //   - C  : amber (warn)
@@ -14,14 +16,15 @@
 //   - today unplayed  : cyan border + glow
 //   - future / pre-launch : faint, disabled
 //
-// Below the calendar: a scope toggle (This Month / All Time), three
-// stat boxes (Played / Wins / Best tier), and a tier distribution
-// histogram. Mirrors StatsScreen's tier chart at a smaller scale.
+// The calendar always shows all plays — only the panel below responds
+// to the difficulty filter. The "This Month" date scope follows the
+// currently navigated month in the calendar.
 
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { recipeFor } from '../../game/daily/recipe';
 import { parseDateISO } from '../../game/daily/seed';
+import { Difficulty } from '../../game/rules';
 import { DailyRulesModal } from '../components/DailyRulesModal';
 import { NeonButton } from '../components/NeonButton';
 import { useDaily } from '../daily/DailyProvider';
@@ -44,8 +47,9 @@ const MONTH_NAMES = [
 
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-// Per-tier color. Same palette as ResultScreen's TIER_COLOR map so
-// "what does green mean" reads consistently across the app.
+// Per-tier color. SS and the win bands (S / A) share the success-green
+// palette; B / C / D step down through cyan / amber / red. Matches the
+// result-screen ribbon so "what does green mean" reads consistently.
 const TIER_COLOR: Record<Tier, string> = {
   SS: colors.joker,
   S: colors.success,
@@ -151,14 +155,33 @@ const cellStatusFor = (
   return { kind: 'unplayed' };
 };
 
-// Stats panel state — scope toggle between the visible month and the
-// player's entire daily history.
-type Scope = 'month' | 'all';
+// ----------- filter pills -----------
+type DateScope = 'all' | 'month';
+type DifficultyFilter = 'all' | Difficulty;
 
-interface StatsSummary {
+const DATE_SCOPE_ORDER: DateScope[] = ['all', 'month'];
+const DATE_SCOPE_LABEL: Record<DateScope, string> = {
+  all: 'All Time',
+  month: 'This Month',
+};
+
+const DIFFICULTY_ORDER: DifficultyFilter[] = ['all', 'easy', 'medium', 'hard', 'extreme'];
+const DIFFICULTY_LABEL: Record<DifficultyFilter, string> = {
+  all: 'All',
+  easy: 'Easy',
+  medium: 'Med',
+  hard: 'Hard',
+  extreme: 'Extr',
+};
+
+// ----------- summary computation -----------
+interface SummaryStats {
   played: number;
-  wins: number;        // A / S / SS
-  best: Tier | null;   // highest tier achieved
+  wins: number;
+  losses: number;
+  best: number | null;        // best score
+  totalScore: number;
+  longestStreak: number;      // longest run of consecutive winning days
   tierCounts: Record<Tier, number>;
 }
 
@@ -166,19 +189,61 @@ const emptyTierCounts = (): Record<Tier, number> => ({
   SS: 0, S: 0, A: 0, B: 0, C: 0, D: 0,
 });
 
-const TIER_RANK: Record<Tier, number> = { SS: 5, S: 4, A: 3, B: 2, C: 1, D: 0 };
-
-const summarize = (plays: DailyPlay[]): StatsSummary => {
-  const tierCounts = emptyTierCounts();
-  let best: Tier | null = null;
-  let wins = 0;
-  for (const p of plays) {
-    const t = tierForPlay(p);
-    tierCounts[t] += 1;
-    if (t === 'A' || t === 'S' || t === 'SS') wins += 1;
-    if (best === null || TIER_RANK[t] > TIER_RANK[best]) best = t;
+// Longest run of consecutive winning DAYS in the scoped play set. A
+// non-winning day (loss) or a gap (no play on a date that would have
+// extended the chain) breaks the streak. This matches the Wordle-style
+// "daily streak" intuition rather than the free-play "consecutive
+// wins ignoring time" definition.
+const longestStreakInPlays = (plays: DailyPlay[]): number => {
+  if (plays.length === 0) return 0;
+  const sorted = [...plays].sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  let best = 0;
+  let current = 0;
+  let prevDateISO: string | null = null;
+  for (const p of sorted) {
+    if (!p.won) {
+      current = 0;
+      prevDateISO = p.dateISO;
+      continue;
+    }
+    let consecutive = false;
+    if (prevDateISO !== null) {
+      const prev = parseDateISO(prevDateISO);
+      const cur = parseDateISO(p.dateISO);
+      if (prev && cur) {
+        const diffDays = Math.round(
+          (cur.getTime() - prev.getTime()) / 86_400_000
+        );
+        if (diffDays === 1) consecutive = true;
+      }
+    }
+    current = consecutive ? current + 1 : 1;
+    if (current > best) best = current;
+    prevDateISO = p.dateISO;
   }
-  return { played: plays.length, wins, best, tierCounts };
+  return best;
+};
+
+const summarize = (plays: DailyPlay[]): SummaryStats => {
+  const tierCounts = emptyTierCounts();
+  let wins = 0;
+  let best: number | null = null;
+  let totalScore = 0;
+  for (const p of plays) {
+    tierCounts[tierForPlay(p)] += 1;
+    if (p.won) wins += 1;
+    if (best === null || p.score > best) best = p.score;
+    totalScore += p.score;
+  }
+  return {
+    played: plays.length,
+    wins,
+    losses: plays.length - wins,
+    best,
+    totalScore,
+    longestStreak: longestStreakInPlays(plays),
+    tierCounts,
+  };
 };
 
 export const DailyArchiveScreen = ({
@@ -194,24 +259,28 @@ export const DailyArchiveScreen = ({
     month: today.getUTCMonth(),
   });
   const [pendingStart, setPendingStart] = useState<string | null>(null);
-  const [scope, setScope] = useState<Scope>('month');
+  // Default to All Time / All so the page opens with the most complete
+  // summary, mirroring how StatsScreen defaults to "All".
+  const [dateScope, setDateScope] = useState<DateScope>('all');
+  const [difficulty, setDifficulty] = useState<DifficultyFilter>('all');
 
   const cells = useMemo(() => buildMonthGrid(month), [month]);
 
-  // Plays filtered to the current scope. "month" walks the visible
-  // calendar cells; "all" walks every recorded play regardless of
-  // which month it was played in.
+  // Plays filtered to the active scope + difficulty.
   const scopedPlays = useMemo(() => {
     if (!plays) return [];
-    if (scope === 'all') return Object.values(plays);
-    const out: DailyPlay[] = [];
-    for (const dateISO of cells) {
-      if (!dateISO) continue;
-      const p = plays[dateISO];
-      if (p) out.push(p);
-    }
-    return out;
-  }, [cells, plays, scope]);
+    const all = Object.values(plays);
+    const inScope = dateScope === 'all'
+      ? all
+      : all.filter(p => {
+          const d = parseDateISO(p.dateISO);
+          if (!d) return false;
+          return d.getUTCFullYear() === month.year
+            && d.getUTCMonth() === month.month;
+        });
+    if (difficulty === 'all') return inScope;
+    return inScope.filter(p => p.recipe.difficulty === difficulty);
+  }, [plays, dateScope, difficulty, month]);
 
   const summary = useMemo(() => summarize(scopedPlays), [scopedPlays]);
 
@@ -228,6 +297,15 @@ export const DailyArchiveScreen = ({
     }
     setPendingStart(dateISO);
   };
+
+  // Pre-format the summary stats so the JSX stays readable.
+  const hasPlays = summary.played > 0;
+  const wlText = hasPlays ? `${summary.wins}-${summary.losses}` : '—';
+  const bestText = summary.best === null ? '—' : `${summary.best}`;
+  const avgText = hasPlays
+    ? `${Math.round(summary.totalScore / summary.played)}`
+    : '—';
+  const streakText = summary.longestStreak === 0 ? '—' : `${summary.longestStreak}`;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -270,8 +348,6 @@ export const DailyArchiveScreen = ({
           const status = cellStatusFor(dateISO, todayISO, plays?.[dateISO]);
           const isToday = dateISO === todayISO;
           const dayNum = Number(dateISO.slice(-2));
-          // Color resolved from the cell status — played cells use the
-          // tier palette, others use the existing gray/cyan/faint.
           const tierColor =
             status.kind === 'played' ? TIER_COLOR[status.tier] : null;
           const tierBg =
@@ -315,92 +391,89 @@ export const DailyArchiveScreen = ({
         })}
       </View>
 
-      {/* ---- Stats panel ---- */}
-      <View style={styles.scopeToggleRow}>
-        <Pressable
-          onPress={() => setScope('month')}
-          style={[
-            styles.scopePill,
-            scope === 'month' && styles.scopePillActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.scopePillText,
-              scope === 'month' && styles.scopePillTextActive,
-            ]}
-          >
-            This Month
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setScope('all')}
-          style={[
-            styles.scopePill,
-            scope === 'all' && styles.scopePillActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.scopePillText,
-              scope === 'all' && styles.scopePillTextActive,
-            ]}
-          >
-            All Time
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.statRow}>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>PLAYED</Text>
-          <Text style={styles.statValue}>{summary.played}</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>WINS</Text>
-          <Text style={[styles.statValue, styles.statValueWins]}>
-            {summary.wins}
-          </Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>BEST</Text>
-          <Text
-            style={[
-              styles.statValue,
-              summary.best ? { color: TIER_COLOR[summary.best] } : null,
-            ]}
-          >
-            {summary.best ?? '—'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.histBlock}>
-        <Text style={styles.histTitle}>Tier Distribution</Text>
-        {TIER_ORDER.map(t => {
-          const count = summary.tierCounts[t];
-          const max = Math.max(1, ...Object.values(summary.tierCounts));
-          const pct = count / max;
-          const color = TIER_COLOR[t];
+      {/* ---- Filter pills ---- */}
+      <Text style={styles.sectionLabel}>Filter by date & difficulty</Text>
+      <View style={styles.toggle}>
+        {DATE_SCOPE_ORDER.map(s => {
+          const active = dateScope === s;
           return (
-            <View key={t} style={styles.histRow}>
-              <Text style={[styles.histTier, { color }]}>{t}</Text>
-              <View style={styles.histBarTrack}>
-                <View
-                  style={[
-                    styles.histBar,
-                    {
-                      width: `${Math.max(2, pct * 100)}%`,
-                      backgroundColor: count > 0 ? color : colors.outlineSoft,
-                      opacity: count > 0 ? 1 : 0.3,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={styles.histCount}>{count}</Text>
-            </View>
+            <Pressable
+              key={s}
+              onPress={() => setDateScope(s)}
+              style={[styles.toggleBtn, active && styles.toggleBtnActive]}
+            >
+              <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
+                {DATE_SCOPE_LABEL[s]}
+              </Text>
+            </Pressable>
           );
         })}
+      </View>
+      <View style={[styles.toggle, styles.toggleSecondRow]}>
+        {DIFFICULTY_ORDER.map(d => {
+          const active = difficulty === d;
+          return (
+            <Pressable
+              key={d}
+              onPress={() => setDifficulty(d)}
+              style={[styles.toggleBtn, active && styles.toggleBtnActive]}
+            >
+              <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
+                {DIFFICULTY_LABEL[d]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* ---- Summary stats ---- */}
+      <View style={styles.summaryBlock}>
+        <SummaryRow label="W / L" value={wlText} active={hasPlays} />
+        <SummaryRow label="Best" value={bestText} active={summary.best !== null} />
+        <SummaryRow label="Average" value={avgText} active={hasPlays} />
+        <SummaryRow
+          label="Streak"
+          value={streakText}
+          active={summary.longestStreak > 0}
+        />
+      </View>
+
+      {/* ---- Score distribution histogram ---- */}
+      <Text style={styles.sectionLabel}>Score distribution</Text>
+      <View style={styles.histogramBlock}>
+        {summary.played === 0 ? (
+          <Text style={styles.empty}>No runs in this filter yet.</Text>
+        ) : (
+          <View style={styles.histogram}>
+            {TIER_ORDER.map(t => {
+              const count = summary.tierCounts[t];
+              const max = Math.max(
+                1,
+                ...TIER_ORDER.map(k => summary.tierCounts[k])
+              );
+              const pct = count / max;
+              const color = TIER_COLOR[t];
+              return (
+                <View key={t} style={styles.histRow}>
+                  <Text style={[styles.histTier, { color }]}>{t}</Text>
+                  <View style={styles.histBarTrack}>
+                    <View
+                      style={[
+                        styles.histBar,
+                        {
+                          width: `${Math.max(2, pct * 100)}%`,
+                          backgroundColor: count > 0 ? color : colors.outlineSoft,
+                          opacity: count > 0 ? 1 : 0.3,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.histCount}>{count}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       {pendingStart && (
@@ -419,6 +492,26 @@ export const DailyArchiveScreen = ({
     </ScrollView>
   );
 };
+
+// SummaryRow mirrors the same component in StatsScreen — kept inline
+// here rather than extracted so the two screens can evolve their row
+// shape independently if they diverge.
+const SummaryRow = ({
+  label,
+  value,
+  active,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+}) => (
+  <View style={styles.summaryRow}>
+    <Text style={styles.summaryLabel}>{label}</Text>
+    <Text style={[styles.summaryValue, active && styles.summaryValueActive]}>
+      {value}
+    </Text>
+  </View>
+);
 
 // Sanity check at import time: the launch date must be a valid ISO
 // string. Catches typos in the constant above before they ship.
@@ -545,8 +638,6 @@ const styles = StyleSheet.create({
   cellNumToday: {
     color: colors.accent,
   },
-  // Tiny tier badge in the bottom of the cell — visible only on
-  // played cells. SS shows "SS"; everything else single-letter.
   cellTier: {
     fontFamily: fonts.mono,
     fontSize: 8,
@@ -555,102 +646,109 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // ---------------- stats panel ----------------
-  scopeToggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  scopePill: {
-    paddingVertical: 6,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.outlineSoft,
-    backgroundColor: colors.bgPanel,
-  },
-  scopePillActive: {
-    borderColor: colors.accent,
-    backgroundColor: 'rgba(107, 214, 255, 0.08)',
-  },
-  scopePillText: {
+  // ---------------- filter + stats panel ----------------
+  sectionLabel: {
     color: colors.textMid,
     fontFamily: fonts.mono,
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
     textTransform: 'uppercase',
+    letterSpacing: 2,
+    fontWeight: '800',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  scopePillTextActive: {
-    color: colors.accent,
-  },
-  statRow: {
+  // Pill-bar styling matches StatsScreen.toggle so the two screens
+  // read as siblings.
+  toggle: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  statBox: {
-    flex: 1,
     backgroundColor: colors.bgPanel,
-    borderColor: colors.outlineSoft,
+    borderRadius: radius.md,
     borderWidth: 1,
+    borderColor: colors.outline,
+    padding: 2,
+    gap: 2,
+  },
+  toggleSecondRow: {
+    marginTop: spacing.xs,
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 6,
     borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  statLabel: {
+  toggleBtnActive: {
+    backgroundColor: 'rgba(107, 214, 255, 0.15)',
+    ...glow(colors.accent, 4, 0.4),
+  },
+  toggleLabel: {
     color: colors.textLow,
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    marginBottom: 2,
-  },
-  statValue: {
-    color: colors.textHi,
-    fontFamily: fonts.mono,
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  statValueWins: {
-    color: colors.success,
-  },
-  histBlock: {
-    backgroundColor: colors.bgPanel,
-    borderColor: colors.outlineSoft,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    gap: 4,
-  },
-  histTitle: {
-    color: colors.textMid,
     fontFamily: fonts.mono,
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: spacing.xs,
   },
+  toggleLabelActive: {
+    color: colors.accent,
+  },
+
+  summaryBlock: { gap: 4, marginTop: spacing.md },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+  },
+  summaryLabel: {
+    fontFamily: fonts.mono,
+    color: colors.textMid,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontFamily: fonts.mono,
+    color: colors.textLow,
+    fontSize: 18,
+    fontWeight: '800',
+    minWidth: 64,
+    textAlign: 'right',
+  },
+  summaryValueActive: {
+    color: colors.success,
+  },
+
+  histogramBlock: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineSoft,
+  },
+  histogram: { gap: 6 },
   histRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
   histTier: {
-    width: 22,
+    width: 26,
     fontFamily: fonts.mono,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
   histBarTrack: {
     flex: 1,
-    height: 10,
+    height: 14,
     backgroundColor: colors.bgBase,
     borderRadius: 2,
     overflow: 'hidden',
@@ -660,11 +758,19 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   histCount: {
-    width: 28,
+    width: 32,
     textAlign: 'right',
     color: colors.textMid,
     fontFamily: fonts.mono,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
+  },
+  empty: {
+    color: colors.textLow,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: spacing.md,
   },
 });
