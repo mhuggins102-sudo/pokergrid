@@ -120,6 +120,40 @@ export const executeShuffle = (
   return next;
 };
 
+// ---------- Rewind (special: ★ one-time pull-back to deck) ----------
+
+// Same pick range as Shuffle: 3 to 5 cards.
+export const REWIND_PICK_MIN = 3;
+export const REWIND_PICK_MAX = 5;
+
+// Pull the cards at `slots` off the grid and mix them back into the
+// playing deck. Returns the new grid (those slots become null) and
+// the new deck (Fisher-Yates shuffled with the recovered cards mixed
+// in). The drawn card (`state.drawn`) is untouched by this — it
+// stays face-up and still has to be placed/discarded/perked.
+export const executeRewind = (
+  grid: Grid,
+  slots: readonly number[],
+  deck: readonly Card[],
+  rng: () => number = Math.random
+): { grid: Grid; deck: Card[] } => {
+  if (slots.length === 0) throw new Error('Rewind: no slots');
+  const recovered = slots.map(s => grid[s]);
+  if (recovered.some(c => c === null)) {
+    throw new Error('Rewind: every picked slot must be occupied');
+  }
+  const nextGrid = grid.slice();
+  for (const s of slots) nextGrid[s] = null;
+  // Combine and Fisher-Yates the merged pile so the recovered cards
+  // could resurface anywhere in the remaining draw order.
+  const combined: Card[] = [...deck, ...(recovered as Card[])];
+  for (let i = combined.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [combined[i], combined[j]] = [combined[j], combined[i]];
+  }
+  return { grid: nextGrid, deck: combined };
+};
+
 // ---------- Side Slide (special: ★ one-time perpendicular slide) ----------
 
 // Side Slide is interactive: the player picks a starting card, then taps

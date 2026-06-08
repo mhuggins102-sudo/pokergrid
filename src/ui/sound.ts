@@ -32,7 +32,7 @@ export type SoundKey =
   | 'plus'       // Plus/Minus +1 (ascending 3-tone tick)
   | 'minus'      // Plus/Minus −1 (descending 3-tone tick — reverse of 'plus')
   | 'revive'     // Revive (rising C-major arpeggio with soft bloom)
-  | 'stall';     // Stall (descending sines + noise wash — "cards stack back")
+  | 'rewind';    // Rewind (descending sines + noise wash — "cards stack back")
 
 // ---------- Native (expo-audio + bundled WAVs) ----------
 
@@ -60,7 +60,7 @@ const ASSETS: Partial<Record<SoundKey, number>> = {
   plus: require('../../assets/sounds/plus.wav'),
   minus: require('../../assets/sounds/minus.wav'),
   revive: require('../../assets/sounds/revive.wav'),
-  stall: require('../../assets/sounds/stall.wav'),
+  rewind: require('../../assets/sounds/rewind.wav'),
 };
 
 const nativePlayers: Partial<Record<SoundKey, AudioPlayer>> = {};
@@ -307,7 +307,7 @@ const playWeb = (k: SoundKey) => {
         { freq: 523.25, dur: 0.22, delay: 0.24, type: 'sine', vol: 0.20 },
         { freq: 1046.50, dur: 0.18, delay: 0.26, type: 'triangle', vol: 0.08 },
       ]);
-    case 'stall':
+    case 'rewind':
       // Stall — soft noise wash (cards being placed back into the
       // deck) leading into a descending two-tone resolution. The
       // final low tone holds longer to convey "settled / paused".
