@@ -81,6 +81,12 @@ interface DailyContextValue {
   // a real error message instead of a misleading "still in flight".
   // null when no error is pending for the given date.
   lastSubmitError: { dateISO: string; detail: string } | null;
+  // Force a drain of the offline submit queue. Wired into the rank
+  // panel's manual retry — when the AppState 'active' transition
+  // doesn't fire (e.g. PWA tab stays focused the whole time) the
+  // queue otherwise sits indefinitely. Resolves when the drain
+  // attempt finishes regardless of outcome.
+  drainQueue: () => Promise<void>;
 }
 
 const DailyContext = createContext<DailyContextValue | null>(null);
@@ -330,6 +336,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       drainingPendingSubmits,
       submitToken,
       lastSubmitError,
+      drainQueue,
     }),
     [
       deviceId,
@@ -342,6 +349,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
       drainingPendingSubmits,
       submitToken,
       lastSubmitError,
+      drainQueue,
     ]
   );
 

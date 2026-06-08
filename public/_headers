@@ -6,3 +6,14 @@
 /build-version.json
   Cache-Control: no-store, no-cache, must-revalidate
   Pragma: no-cache
+
+# index.html must revalidate on every navigation. Without this, an
+# installed PWA can be pinned to a months-old HTML that references
+# months-old JS bundles, and the only escape is a manual
+# clear-site-data. The HTML payload is tiny (~2KB) so revalidating
+# every load costs nothing while making fresh deploys land on
+# next refresh.
+/
+  Cache-Control: no-cache, must-revalidate
+/index.html
+  Cache-Control: no-cache, must-revalidate
