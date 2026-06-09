@@ -350,11 +350,11 @@ const BonusVisual: React.FC<TutorialVisualProps> = ({
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Row / Column</Text> — multiplies a specific line
-        (Row N, Col N, Spiral Core, Outer Edge).
+        (Row N, Col N, Crossroads, Outer Edge).
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Per-line conditional</Text> — Rainbow (4+ suits),
-        Joker line, Royal Touch (Ace in line), Highball, Lowball, Blackjack.
+        Joker line, Royal Touch (Ace in line), Highball, Lowball, Blackjack, Lowhand, High Kicker.
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.warn }}>Per-suit density</Text> — ×1.1 per card of a
@@ -363,7 +363,8 @@ const BonusVisual: React.FC<TutorialVisualProps> = ({
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.joker }}>Grid achievement</Text> — multiplies the FINAL
         total based on the board's shape: Clean Border, Monochrome Border, Rainbow Corners,
-        Diagonal, Symmetric Frame, Cozy Joker, Trash Joker, No Flushes, No Straights, Patience.
+        Diagonal, Symmetric Frame, Cozy Joker, Trash Joker, No Flushes, No Straights, Balance,
+        Diversity, Patience.
       </Text>
       <Text style={demoStyles.kindLine}>
         · <Text style={{ color: colors.joker }}>Deck management</Text> — multiplies the FINAL

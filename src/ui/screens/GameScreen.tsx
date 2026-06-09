@@ -1731,6 +1731,7 @@ export const GameScreen = ({
         index={stableInspectLine?.index ?? 0}
         cards={inspectCards}
         bonusCards={state.bonusCards}
+        grid={state.grid}
       />
       <BonusCardDetailModal
         visible={bonusDetailIdx !== null}

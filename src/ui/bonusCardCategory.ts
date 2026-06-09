@@ -43,6 +43,8 @@ const CONDITIONAL_IDS = new Set([
   'highball-x1_5',
   'lowball-x1_5',
   'blackjack-x2',
+  'lowhand-x3',
+  'high-kicker-x1_5',
 ]);
 
 // End-game multipliers that key off "how did the run unfold" rather than
