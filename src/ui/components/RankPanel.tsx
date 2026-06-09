@@ -106,15 +106,33 @@ export const RankPanel = ({ dateISO, score, freshlySubmitted }: Props) => {
           </Text>
         ) : submitErrorForThisDate ? (
           // Whole error block is a Pressable — taps trigger the same
-          // drainQueue + refresh retry as the other states. The detail
-          // line is `selectable` too so DevTools-equipped surfaces can
-          // still copy the error text for debugging.
-          <Pressable onPress={onRetry} hitSlop={6}>
-            <Text style={styles.errorLine}>Submit failed · tap to retry</Text>
-            <Text style={styles.errorDetail} selectable>
-              {submitErrorForThisDate}
-            </Text>
-          </Pressable>
+          // drainQueue + refresh retry as the other states. The
+          // bracketed token (Postgres code or synthetic class name) is
+          // peeled off the front of the detail string and rendered on
+          // its own line in a bigger / brighter style so the player
+          // can read it at a glance on mobile.
+          (() => {
+            const codeMatch = /^\[([^\]]+)\]\s*·?\s*/.exec(submitErrorForThisDate);
+            const code = codeMatch?.[1] ?? null;
+            const rest = codeMatch
+              ? submitErrorForThisDate.slice(codeMatch[0].length)
+              : submitErrorForThisDate;
+            return (
+              <Pressable onPress={onRetry} hitSlop={6}>
+                <Text style={styles.errorLine}>Submit failed · tap to retry</Text>
+                {code && (
+                  <Text style={styles.errorCode} selectable>
+                    [{code}]
+                  </Text>
+                )}
+                {!!rest && (
+                  <Text style={styles.errorDetail} selectable>
+                    {rest}
+                  </Text>
+                )}
+              </Pressable>
+            );
+          })()
         ) : status === 'loading' || status === 'pending' ? (
           <Text style={styles.statusLine}>Fetching leaderboard…</Text>
         ) : status === 'rank-pending' ? (
@@ -241,13 +259,27 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  // Diagnostic detail under "Submit failed". Selectable so playtesters
-  // can copy + paste the actual Postgres error back during debugging.
-  errorDetail: {
-    color: colors.textLow,
+  // The bracketed error token rendered on its own line so the player
+  // can read it without parsing a comma-separated string. Bigger and
+  // brighter than the diagnostic detail below — this is the line they
+  // were asking to see at a glance on mobile.
+  errorCode: {
+    color: colors.warn,
     fontFamily: fonts.mono,
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  // Diagnostic detail under the bracketed code. Selectable so any
+  // copy-capable surface (web, desktop) can grab the full Postgres
+  // error message for debugging.
+  errorDetail: {
+    color: colors.textMid,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 14,
     textAlign: 'center',
     marginTop: 2,
     paddingHorizontal: spacing.xs,

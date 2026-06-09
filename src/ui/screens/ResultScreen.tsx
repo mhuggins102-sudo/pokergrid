@@ -44,6 +44,10 @@ interface Props {
   context: PlayContext;
   onReplay: () => void;
   onHome: () => void;
+  // Display label for the dismissal button. Defaults to "Home" — the
+  // archive-revisit flow overrides to "Back" so the player returns to
+  // the calendar they came from rather than landing.
+  homeLabel?: string;
   // For TU mode, the cumulative powered bonus extras + S-tier
   // supercharged deck cards are passed through so the next level
   // starts with the full carry-over state.
@@ -238,7 +242,7 @@ const BannerHero = ({
   );
 };
 
-export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Props) => {
+export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance, homeLabel = 'Home' }: Props) => {
   const [inspectLine, setInspectLine] = useState<{ kind: LineKind; index: number } | null>(null);
   const [bonusDetailIdx, setBonusDetailIdx] = useState<number | null>(null);
   // Score math is hidden behind a single top-level disclosure now. The
@@ -892,7 +896,7 @@ export const ResultScreen = ({ state, context, onReplay, onHome, onAdvance }: Pr
           />
         )}
         <NeonButton
-          label="Home"
+          label={homeLabel}
           variant="secondary"
           size="lg"
           onPress={onHome}

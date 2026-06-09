@@ -100,6 +100,12 @@ export const NeonButton = ({
         ]}
       >
         <Text
+          // numberOfLines: 1 guard — letter-spacing 1.5 + uppercase
+          // can sometimes break a label like "Perk?" across two lines
+          // when the action row is tight (Short Circuit + Discard +
+          // wild draws sharing the row). Forcing single-line keeps
+          // every button at uniform height.
+          numberOfLines={1}
           style={[
             styles.label,
             {
