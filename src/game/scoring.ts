@@ -128,21 +128,27 @@ export const scoreGrid = (
     bonusCards.some(c => c.negatesIncompletePenalty);
   const discards = options.discards ?? [];
   const perkSpent = options.perkSpent ?? [];
-  const scored: ScoredLine[] = lines(grid).map(l => {
-    const filled = l.cards.filter(c => c !== null).length;
+  // First pass — build every LineContext up front (kind / index /
+  // cards / hand) WITHOUT yet applying bonus effects. Cross-line
+  // bonus cards (Lowhand) need to compare the current line against
+  // the rest of the board; supplying allCtxs to applyLineEffects
+  // below gives them that visibility. Single-line cards ignore the
+  // extra argument and behave exactly as before.
+  const allCtxs: LineContext[] = lines(grid).map(l => ({
+    kind: l.kind,
+    index: l.index,
+    cards: l.cards,
+    hand: evaluateLine(l.cards),
+  }));
+  const scored: ScoredLine[] = allCtxs.map(ctx => {
+    const filled = ctx.cards.filter(c => c !== null).length;
     const incomplete = filled < 5;
-    const ctx: LineContext = {
-      kind: l.kind,
-      index: l.index,
-      cards: l.cards,
-      hand: evaluateLine(l.cards),
-    };
     if (!ctx.hand) {
       const total = incomplete && !ignorePenalty ? INCOMPLETE_LINE_PENALTY : 0;
       return { ...ctx, base: 0, multiplier: 1, flat: 0, total, incomplete };
     }
     const base = HAND_BASE_VALUE[ctx.hand];
-    const { multiplier, flat } = applyLineEffects(ctx, bonusCards);
+    const { multiplier, flat } = applyLineEffects(ctx, bonusCards, allCtxs);
     const total = Math.ceil(base * multiplier) + flat;
     return { ...ctx, base, multiplier, flat, total, incomplete: false };
   });

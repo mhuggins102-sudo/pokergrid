@@ -104,16 +104,16 @@ describe('scoring with bonus cards', () => {
     expect(row0.multiplier).toBeCloseTo(1.21);
   });
 
-  test('Rainbow ×1.5 only triggers on lines with 4+ distinct suits', () => {
+  test('Rainbow ×1.25 only triggers on lines with 4+ distinct suits', () => {
     const rainbow = findCard('rainbow-line-x2');
     // 4 distinct suits: H, C, D, S, H (suits: 4)
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(1.5);
+    expect(row0.multiplier).toBe(1.25);
   });
 
-  test('Rainbow ×1.5: a wild card is suit-flex (fills missing suit)', () => {
+  test('Rainbow ×1.25: a wild card is suit-flex (fills missing suit)', () => {
     // Wilds lose their original suit; the wild fills whichever suit
     // is missing from the line. (H, C, D, wildH, H) has 3 distinct
     // standard suits + 1 flex → 4 distinct → trigger.
@@ -122,10 +122,10 @@ describe('scoring with bonus cards', () => {
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), wildH, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(1.5);
+    expect(row0.multiplier).toBe(1.25);
   });
 
-  test('Rainbow ×1.5: a joker is also suit-flex', () => {
+  test('Rainbow ×1.25: a joker is also suit-flex', () => {
     // (H, C, D, joker, H) — 3 distinct standard suits + 1 flex
     // (joker as the missing 4th) → trigger. Mirrors the wild
     // behavior since both are suit-flexible.
@@ -133,10 +133,10 @@ describe('scoring with bonus cards', () => {
     const line = [C('2', 'H'), C('2', 'C'), C('5', 'D'), JOKER, C('K', 'H')];
     const { lines } = scoreGrid(gridWithRow0(line), [rainbow]);
     const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
-    expect(row0.multiplier).toBe(1.5);
+    expect(row0.multiplier).toBe(1.25);
   });
 
-  test('Rainbow ×1.5: needs ≥ 4 distinct (3 standards + 1 flex is enough; 2 + 1 isn\'t)', () => {
+  test('Rainbow ×1.25: needs ≥ 4 distinct (3 standards + 1 flex is enough; 2 + 1 isn\'t)', () => {
     const rainbow = findCard('rainbow-line-x2');
     // 2 distinct standards (H, C) + 1 wild flex = 3 effective. No trigger.
     const wildH = { ...C('A', 'H'), supercharge: 'wild' as const };
@@ -612,5 +612,237 @@ describe('grid-level achievements', () => {
     const noBonus = scoreGrid(g, []).total;
     const withMono = scoreGrid(g, [mono]).total;
     expect(withMono).toBe(noBonus);
+  });
+});
+
+describe('Lowhand ×3 (per-line conditional)', () => {
+  // Helper: build a grid with explicit hand types in row 0 and row 1,
+  // and identity-junk filler everywhere else so the other 8 lines all
+  // resolve to HIGH_CARD (and thus don't enter the "scoring lines"
+  // pool that Lowhand reads).
+  const gridWithRow0and1 = (line0: Card[], line1: Card[]): Grid => {
+    const g = emptyGrid();
+    for (let i = 0; i < 5; i++) g[i] = line0[i];
+    for (let i = 0; i < 5; i++) g[5 + i] = line1[i];
+    const ranks: Rank[] = ['2', '5', '8', '9', 'J'];
+    const suits: Suit[] = ['C', 'D', 'S', 'H'];
+    let v = 0;
+    for (let i = 10; i < GRID_SLOTS; i++) {
+      g[i] = C(ranks[v % ranks.length], suits[v % suits.length]);
+      v++;
+    }
+    return g;
+  };
+
+  test('fires on the line(s) tied for the lowest hand rank above HIGH_CARD', () => {
+    const low = findCard('lowhand-x3');
+    // Row 0 = PAIR (lowest among scoring lines). Row 1 = TWO_PAIR.
+    const pair = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    const twoPair = [C('3', 'H'), C('3', 'C'), C('7', 'D'), C('7', 'S'), C('K', 'H')];
+    const g = gridWithRow0and1(pair, twoPair);
+    const { lines } = scoreGrid(g, [low]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    const row1 = lines.find(l => l.kind === 'row' && l.index === 1)!;
+    expect(row0.multiplier).toBe(3);
+    expect(row1.multiplier).toBe(1);
+  });
+
+  test('ties — multiple lowest-rank lines all fire', () => {
+    const low = findCard('lowhand-x3');
+    const pairA = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    const pairB = [C('3', 'H'), C('3', 'C'), C('6', 'D'), C('9', 'S'), C('Q', 'H')];
+    const g = gridWithRow0and1(pairA, pairB);
+    const { lines } = scoreGrid(g, [low]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    const row1 = lines.find(l => l.kind === 'row' && l.index === 1)!;
+    // Both rows tied at PAIR (the lowest scoring rank in play) → both fire.
+    expect(row0.multiplier).toBe(3);
+    expect(row1.multiplier).toBe(3);
+  });
+
+  test('HIGH_CARD lines do not count as scoring lines for the comparison', () => {
+    const low = findCard('lowhand-x3');
+    // Row 0 = HIGH_CARD (no pair, no flush, no straight).
+    // Row 1 = PAIR. With HIGH_CARD ignored, PAIR is the lowest → triggers row 1.
+    const highCard = [C('2', 'H'), C('5', 'C'), C('8', 'D'), C('J', 'S'), C('K', 'C')];
+    const pair = [C('3', 'H'), C('3', 'C'), C('7', 'D'), C('9', 'S'), C('Q', 'H')];
+    const g = gridWithRow0and1(highCard, pair);
+    const { lines } = scoreGrid(g, [low]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    const row1 = lines.find(l => l.kind === 'row' && l.index === 1)!;
+    expect(row0.multiplier).toBe(1);
+    expect(row1.multiplier).toBe(3);
+  });
+});
+
+describe('High Kicker ×1.5 (per-line conditional)', () => {
+  test('PAIR with an Ace kicker → triggers', () => {
+    const hk = findCard('high-kicker-x1_5');
+    const line = [C('7', 'H'), C('7', 'C'), C('A', 'D'), C('3', 'S'), C('5', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hk]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1.5);
+  });
+
+  test('PAIR with only low kickers → does not trigger', () => {
+    const hk = findCard('high-kicker-x1_5');
+    const line = [C('7', 'H'), C('7', 'C'), C('9', 'D'), C('3', 'S'), C('5', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hk]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1);
+  });
+
+  test('PAIR of Aces with low kickers does NOT trigger (the Aces are the pair, not the kicker)', () => {
+    const hk = findCard('high-kicker-x1_5');
+    const line = [C('A', 'H'), C('A', 'C'), C('7', 'D'), C('5', 'S'), C('2', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hk]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1);
+  });
+
+  test('FULL_HOUSE never qualifies (no kicker by definition)', () => {
+    const hk = findCard('high-kicker-x1_5');
+    // K-K-K-Q-Q full house. Q is high but it's part of the pair, not a kicker.
+    const line = [C('K', 'H'), C('K', 'C'), C('K', 'D'), C('Q', 'S'), C('Q', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(line), [hk]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1);
+  });
+
+  test('Straight / Flush / High Card are not set-type hands and never qualify', () => {
+    const hk = findCard('high-kicker-x1_5');
+    // 10-J-Q-K-A straight (royal). Hand is STRAIGHT (mixed suits).
+    const straight = [C('10', 'H'), C('J', 'C'), C('Q', 'D'), C('K', 'S'), C('A', 'H')];
+    const { lines } = scoreGrid(gridWithRow0(straight), [hk]);
+    const row0 = lines.find(l => l.kind === 'row' && l.index === 0)!;
+    expect(row0.multiplier).toBe(1);
+  });
+});
+
+describe('Balance ×1.25 (grid achievement)', () => {
+  test('fires only when every one of the 10 lines scores Pair or better', () => {
+    const balance = findCard('balance-x1_25');
+    // Construct a board where every row and column resolves to PAIR
+    // or higher. Build pairs along the diagonal: each row gets two
+    // matching ranks and each column does too.
+    const g: Grid = emptyGrid();
+    // Row r / Col c gets rank derived from r+c so that pairs form
+    // both ways. A simple construction: 5×5 where g[r*5+c] has rank
+    // ranks[(r+c) % 5]. Then each row has 5 cards with ranks taken
+    // from a 5-cycle (one of each) → HIGH_CARD only. Try a
+    // different construction: place the same rank twice in each row
+    // AND each column.
+    //
+    // Use a 5×5 Latin-square-ish layout where each rank appears
+    // exactly twice in each row and twice in each col is impossible
+    // — but for the test we just want EVERY line to score PAIR+.
+    //
+    // Brute-force: place a single rank R everywhere on the
+    // diagonal AND a single rank S on the anti-diagonal. Then every
+    // line passes through at least one cell of R or S, giving each
+    // row and col at least one pair when combined with other cells.
+    // Simpler: fill the entire board with two ranks (A and K)
+    // alternating in a pattern that gives each row+col 3+ of one.
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        g[r * 5 + c] = (r + c) % 2 === 0
+          ? C('A', (['H', 'C', 'D', 'S', 'H'] as Suit[])[c])
+          : C('K', (['C', 'D', 'S', 'H', 'C'] as Suit[])[c]);
+      }
+    }
+    // Now every row and column has either 3 Aces / 2 Kings or
+    // 3 Kings / 2 Aces — FULL HOUSE territory.
+    const withBalance = scoreGrid(g, [balance]).total;
+    const withoutBalance = scoreGrid(g, []).total;
+    expect(withBalance).toBe(Math.ceil(withoutBalance * 1.25));
+  });
+
+  test('does not fire when any line is HIGH_CARD', () => {
+    const balance = findCard('balance-x1_25');
+    // Row 0 is HIGH_CARD; everything else also HIGH_CARD.
+    const g: Grid = emptyGrid();
+    const ranks: Rank[] = ['2', '3', '5', '7', 'J'];
+    const suits: Suit[] = ['H', 'C', 'D', 'S'];
+    let v = 0;
+    for (let i = 0; i < GRID_SLOTS; i++) {
+      g[i] = C(ranks[v % ranks.length], suits[v % suits.length]);
+      v++;
+    }
+    const withBalance = scoreGrid(g, [balance]).total;
+    const withoutBalance = scoreGrid(g, []).total;
+    expect(withBalance).toBe(withoutBalance);
+  });
+});
+
+describe('Diversity ×1.25 (grid achievement)', () => {
+  test('does not fire when the board has fewer than 6 distinct scoring hand types', () => {
+    const div = findCard('diversity-x1_25');
+    // Board with 2-3 distinct scoring hand types at most.
+    const g: Grid = emptyGrid();
+    // Row 0 = PAIR. Row 1 = PAIR. Row 2 = PAIR. Rest filled to be HIGH_CARD.
+    const pair = [C('2', 'H'), C('2', 'C'), C('5', 'D'), C('8', 'S'), C('K', 'H')];
+    for (let i = 0; i < 5; i++) g[i] = pair[i];
+    for (let i = 0; i < 5; i++) g[5 + i] = C(pair[i].rank, pair[i].suit);
+    for (let i = 0; i < 5; i++) g[10 + i] = C(pair[i].rank, pair[i].suit);
+    const ranks: Rank[] = ['3', '4', '5', '6', '7'];
+    const suits: Suit[] = ['H', 'C', 'D', 'S'];
+    let v = 0;
+    for (let i = 15; i < GRID_SLOTS; i++) {
+      g[i] = C(ranks[v % ranks.length], suits[v % suits.length]);
+      v++;
+    }
+    const withDiv = scoreGrid(g, [div]).total;
+    const withoutDiv = scoreGrid(g, []).total;
+    expect(withDiv).toBe(withoutDiv);
+  });
+
+  test('fires when the board contains ≥ 6 distinct scoring hand types', () => {
+    const div = findCard('diversity-x1_25');
+    // Confirm via two equivalent paths: build a grid via the lines
+    // helper and synthetically check the achievement. We trust the
+    // contract: when lines produces 6+ scoring hand types, the
+    // multiplier is 1.25.
+    //
+    // Mock the trigger directly by constructing the LineContext
+    // array that gridEffect reads and invoking the bonus card's
+    // gridEffect with a hand-rolled snapshot. This avoids needing
+    // to engineer a 5×5 board with 6 distinct hand types (very hard).
+    const distinctHands: LineContext[] = [
+      { kind: 'row', index: 0, cards: [null, null, null, null, null], hand: 'PAIR' },
+      { kind: 'row', index: 1, cards: [null, null, null, null, null], hand: 'TWO_PAIR' },
+      { kind: 'row', index: 2, cards: [null, null, null, null, null], hand: 'THREE_OF_A_KIND' },
+      { kind: 'row', index: 3, cards: [null, null, null, null, null], hand: 'STRAIGHT' },
+      { kind: 'row', index: 4, cards: [null, null, null, null, null], hand: 'FLUSH' },
+      { kind: 'col', index: 0, cards: [null, null, null, null, null], hand: 'FULL_HOUSE' },
+      { kind: 'col', index: 1, cards: [null, null, null, null, null], hand: 'PAIR' },
+      { kind: 'col', index: 2, cards: [null, null, null, null, null], hand: null },
+      { kind: 'col', index: 3, cards: [null, null, null, null, null], hand: null },
+      { kind: 'col', index: 4, cards: [null, null, null, null, null], hand: null },
+    ];
+    const eff = div.gridEffect!(
+      {
+        grid: emptyGrid(),
+        deckRemaining: 0,
+        discards: [],
+        perkSpent: [],
+        lines: distinctHands,
+      },
+      div
+    );
+    expect(eff.totalMultiplier).toBe(1.25);
+  });
+});
+
+describe('Lowhand universal-effect classification', () => {
+  test('cross-line cards are not classified as universal (Lowhand example)', () => {
+    const low = findCard('lowhand-x3');
+    // Lowhand depends on knowing the other lines. The universal-
+    // effect probe runs lineEffect WITHOUT allLines, so the card
+    // must return empty — which keeps it classified as conditional
+    // (NOT universal) on every hand rank.
+    const hands = ['PAIR', 'TWO_PAIR', 'STRAIGHT'] as const;
+    for (const h of hands) {
+      expect(universalEffectFor(low, h)).toBeNull();
+    }
   });
 });

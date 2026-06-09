@@ -6,7 +6,7 @@ import {
   lineContributors,
   LineContext,
 } from '../../game/bonusCards';
-import { LineKind } from '../../game/grid';
+import { Grid, LineKind, lines as gridLines } from '../../game/grid';
 import { HandRank, evaluateLine } from '../../game/hands';
 import { HAND_BASE_VALUE, INCOMPLETE_LINE_PENALTY } from '../../game/scoring';
 import { colors, fonts, glow, radius, spacing } from '../theme';
@@ -19,6 +19,11 @@ interface Props {
   index: number; // 0-4
   cards: (Card | null)[];
   bonusCards: BonusCard[];
+  // Full grid — used to compute the cross-line LineContexts that
+  // bonus cards like Lowhand need to decide whether they fire on
+  // this line. Optional: when omitted the breakdown silently drops
+  // any cross-line contributors, matching the pre-Lowhand behavior.
+  grid?: Grid;
 }
 
 const HAND_LABEL: Record<HandRank, string> = {
@@ -48,6 +53,7 @@ export const LineDetailModal = ({
   index,
   cards,
   bonusCards,
+  grid,
 }: Props) => {
   const hand = evaluateLine(cards);
   const filledCount = cards.filter(c => c !== null).length;
@@ -58,7 +64,20 @@ export const LineDetailModal = ({
   // displayed total matches the actual line score exactly.
   const ctx: LineContext | null = hand ? { kind, index, cards, hand } : null;
   const base = hand ? HAND_BASE_VALUE[hand] : 0;
-  const contributors = ctx ? lineContributors(ctx, bonusCards) : [];
+  // When a grid is supplied, compute the full LineContext list so
+  // cross-line bonus cards (Lowhand) can see what else scored.
+  // Without it those cards quietly opt out of the breakdown — which
+  // matches the existing behavior for screens that haven't been
+  // updated to pass the grid yet.
+  const allLines: LineContext[] | undefined = grid
+    ? gridLines(grid).map(l => ({
+        kind: l.kind,
+        index: l.index,
+        cards: l.cards,
+        hand: evaluateLine(l.cards),
+      }))
+    : undefined;
+  const contributors = ctx ? lineContributors(ctx, bonusCards, allLines) : [];
   let runningMult = 1;
   let runningFlat = 0;
   const steps = contributors.map(c => {

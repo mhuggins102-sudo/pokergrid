@@ -1,11 +1,11 @@
-import { Card, isJoker, Suit } from './cards';
+import { Card, isJoker, Rank, Suit } from './cards';
 import {
   CORNER_SLOTS,
   Grid,
   INNER_SLOTS,
   LineKind,
 } from './grid';
-import { evaluateLine, HandRank } from './hands';
+import { evaluateLine, HAND_TIER, HandRank } from './hands';
 
 export interface LineContext {
   kind: LineKind;
@@ -54,8 +54,17 @@ export interface BonusCard {
   mult: string;
   // Per-line effect — called once per scored line. Receives the card itself
   // as the second argument so the closure can read `card.multValue` and
-  // therefore pick up power-ups without re-running the constructor.
-  lineEffect?: (line: LineContext, card: BonusCard) => LineEffect;
+  // therefore pick up power-ups without re-running the constructor. The
+  // optional third arg (`allLines`) is the full set of LineContexts for
+  // the grid being scored — provided by applyLineEffects whenever the
+  // caller has it on hand. Cross-line cards (Lowhand) use it to compare
+  // the current line against the rest of the board; single-line cards
+  // (the vast majority) ignore the argument and run as before.
+  lineEffect?: (
+    line: LineContext,
+    card: BonusCard,
+    allLines?: readonly LineContext[]
+  ) => LineEffect;
   // Grid-level effect — called once when computing the final total.
   gridEffect?: (snap: GridSnapshot, card: BonusCard) => GridEffect;
   // When true, scoreGrid skips the -25 incomplete-line penalty entirely.
@@ -432,14 +441,19 @@ const lineCanBlackjack = (line: LineContext): boolean => {
 
 // ---------- Per-line novel ----------
 
+// IDs intentionally keep their legacy "×2 / ×1_5" tags — the values
+// have been retuned over time but the IDs are persisted in save data
+// (run state, daily-play snapshots) and changing them would orphan
+// existing entries on load. Display multipliers are the source of
+// truth for the player; IDs are an internal identifier.
 const rainbowLine: BonusCard = {
   id: 'rainbow-line-x2',
-  name: 'Rainbow ×1.5 (each)',
+  name: 'Rainbow ×1.25 (each)',
   title: 'Rainbow',
-  mult: '×1.5 (each)',
+  mult: '×1.25 (each)',
   description: 'Lines with 4+ distinct suits.',
-  multValue: 1.5,
-  baseMultValue: 1.5,
+  multValue: 1.25,
+  baseMultValue: 1.25,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
     // Jokers and wild-supercharged cards are suit-flexible — each
@@ -460,23 +474,23 @@ const rainbowLine: BonusCard = {
       }
     }
     return distinctSuits.size + flexible >= 4
-      ? { multiplier: card.multValue ?? 1.5 }
+      ? { multiplier: card.multValue ?? 1.25 }
       : {};
   },
 };
 
 const jokerLine: BonusCard = {
   id: 'joker-line-x1_5',
-  name: 'Joker Line ×1.5 (each)',
+  name: 'Joker Line ×1.25 (each)',
   title: 'Joker Line',
-  mult: '×1.5 (each)',
+  mult: '×1.25 (each)',
   description: 'The joker\'s row and column.',
-  multValue: 1.5,
-  baseMultValue: 1.5,
+  multValue: 1.25,
+  baseMultValue: 1.25,
   lineEffect: (line, card) => {
     if (!line.hand) return {};
     const hasJoker = line.cards.some(c => c !== null && isJoker(c));
-    return hasJoker ? { multiplier: card.multValue ?? 1.5 } : {};
+    return hasJoker ? { multiplier: card.multValue ?? 1.25 } : {};
   },
 };
 
@@ -558,10 +572,99 @@ const blackjack: BonusCard = {
   },
 };
 
-const spiralCore: BonusCard = {
+// Lowhand — boosts the line(s) tied for the lowest scoring hand on
+// the board. "Scoring" excludes HIGH_CARD lines (they pay 0 base, so
+// tripling 0 is a no-op and bunching with them would be misleading
+// in the per-line breakdown). Ties all fire — if two lines share the
+// minimum hand rank, both get the ×3 multiplier.
+const lowhand: BonusCard = {
+  id: 'lowhand-x3',
+  name: 'Lowhand ×3 (each)',
+  title: 'Lowhand',
+  mult: '×3 (each)',
+  description: 'Lines tying the lowest hand rank on the board (Pair+).',
+  multValue: 3,
+  baseMultValue: 3,
+  lineEffect: (line, card, allLines) => {
+    if (!line.hand || line.hand === 'HIGH_CARD') return {};
+    // No allLines context → universalEffectFor probe path. Return
+    // empty so the card is correctly classified as conditional
+    // (depends on what else is on the board) rather than universal.
+    if (!allLines) return {};
+    let minTier = Infinity;
+    for (const l of allLines) {
+      if (l.hand && l.hand !== 'HIGH_CARD') {
+        const t = HAND_TIER[l.hand];
+        if (t < minTier) minTier = t;
+      }
+    }
+    if (minTier === Infinity) return {};
+    return HAND_TIER[line.hand] === minTier
+      ? { multiplier: card.multValue ?? 3 }
+      : {};
+  },
+};
+
+// High Kicker — fires on Pair / 2 Pair / 3-of-a-kind / 4-of-a-kind
+// lines whose non-pairing card is J, Q, K, or A. Full House is in
+// the "set type" family per the spec but can never have a kicker (5
+// cards consumed by the 3 + 2 sets), so it's listed but never
+// triggers.
+//
+// Joker handling is approximate: rank counts are computed off the
+// standard cards only, and any standard card whose rank appears once
+// is treated as a kicker candidate. In joker-pairing scenarios this
+// can both miss true kickers (if the joker pairs with what looks
+// like a singleton) and accept them generously. The simpler reading
+// is closer to how a player thinks about the line at a glance.
+const SET_TYPE_HANDS = new Set<HandRank>([
+  'PAIR',
+  'TWO_PAIR',
+  'THREE_OF_A_KIND',
+  'FULL_HOUSE',
+  'FOUR_OF_A_KIND',
+]);
+const HIGH_KICKER_RANKS = new Set<Rank>(['J', 'Q', 'K', 'A']);
+
+const highKicker: BonusCard = {
+  id: 'high-kicker-x1_5',
+  name: 'High Kicker ×1.5 (each)',
+  title: 'High Kicker',
+  mult: '×1.5 (each)',
+  description: 'Pair / 2 Pair / 3 or 4 of a Kind with a J / Q / K / A kicker.',
+  multValue: 1.5,
+  baseMultValue: 1.5,
+  lineEffect: (line, card) => {
+    if (!line.hand) return {};
+    if (!SET_TYPE_HANDS.has(line.hand)) return {};
+    // Full House consumes every slot into the 3+2 — no kicker is
+    // possible, so it never qualifies regardless of the cards
+    // shown.
+    if (line.hand === 'FULL_HOUSE') return {};
+    const std = standardCards(line);
+    const counts = new Map<Rank, number>();
+    for (const c of std) {
+      const inc = c.supercharge === 'double' ? 2 : 1;
+      counts.set(c.rank, (counts.get(c.rank) ?? 0) + inc);
+    }
+    // Any standard card whose rank only appears once is treated as
+    // a kicker candidate. If at least one of them is J / Q / K / A
+    // the card fires.
+    const hasHighKicker = std.some(
+      c => (counts.get(c.rank) ?? 0) === 1 && HIGH_KICKER_RANKS.has(c.rank)
+    );
+    return hasHighKicker ? { multiplier: card.multValue ?? 1.5 } : {};
+  },
+};
+
+// Crossroads — was "Spiral Core". The id stays on the legacy tag so
+// LINE_LOCATION_IDS, daily-play snapshots, and any in-flight saved
+// states keep matching; the player-facing display copy is the only
+// thing that's changed.
+const crossroads: BonusCard = {
   id: 'spiral-core-x1_5',
-  name: 'Spiral Core ×1.5 (each)',
-  title: 'Spiral Core',
+  name: 'Crossroads ×1.5 (each)',
+  title: 'Crossroads',
   mult: '×1.5 (each)',
   description: 'The center row and center column (R3, C3).',
   multValue: 1.5,
@@ -756,6 +859,58 @@ const noStraights: BonusCard = {
   },
 };
 
+// Balance — every line scores Pair or better. Incomplete or HIGH_CARD
+// lines block the achievement.
+const balance: BonusCard = {
+  id: 'balance-x1_25',
+  name: 'Balance ×1.25',
+  title: 'Balance',
+  mult: '×1.25',
+  description: 'Every line scores Pair or better.',
+  multValue: 1.25,
+  baseMultValue: 1.25,
+  gridEffect: ({ lines }, card) => {
+    const everyLineScores = lines.every(
+      l => l.hand !== null && l.hand !== 'HIGH_CARD'
+    );
+    return everyLineScores ? { totalMultiplier: card.multValue ?? 1.25 } : {};
+  },
+};
+
+// Diversity — at least 6 distinct scoring hand types appear across
+// the 10 lines. There are exactly 10 scoring hand types in the game
+// (PAIR through ROYAL_FLUSH), so this is "more than half the catalog
+// in one grid".
+const SCORING_HAND_TYPES = new Set<HandRank>([
+  'PAIR',
+  'TWO_PAIR',
+  'THREE_OF_A_KIND',
+  'STRAIGHT',
+  'FLUSH',
+  'FULL_HOUSE',
+  'FOUR_OF_A_KIND',
+  'STRAIGHT_FLUSH',
+  'FIVE_OF_A_KIND',
+  'ROYAL_FLUSH',
+]);
+
+const diversity: BonusCard = {
+  id: 'diversity-x1_25',
+  name: 'Diversity ×1.25',
+  title: 'Diversity',
+  mult: '×1.25',
+  description: 'Board contains 6+ distinct scoring hand types.',
+  multValue: 1.25,
+  baseMultValue: 1.25,
+  gridEffect: ({ lines }, card) => {
+    const seen = new Set<HandRank>();
+    for (const l of lines) {
+      if (l.hand && SCORING_HAND_TYPES.has(l.hand)) seen.add(l.hand);
+    }
+    return seen.size >= 6 ? { totalMultiplier: card.multValue ?? 1.25 } : {};
+  },
+};
+
 // On Easy (2 jokers) Trash Joker multi-triggers — every joker that
 // ended up in the discard pile compounds the multiplier. Collapses to
 // a single trigger when there's only one joker in the deck.
@@ -937,9 +1092,10 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   handBoost('FOUR_OF_A_KIND', 1.5),
   handBoost('STRAIGHT_FLUSH', 1.5),
 
-  // Rows + Cols (12) — five row boosts, five col boosts, plus Spiral
-  // Core (center row + col) and Outer Edge (R1/R5/C1/C5) which target
-  // specific lines without conditional logic on the cards in them.
+  // Rows + Cols (12) — five row boosts, five col boosts, plus
+  // Crossroads (center row + col) and Outer Edge (R1/R5/C1/C5) which
+  // target specific lines without conditional logic on the cards in
+  // them.
   rowBoost(0, 2),
   rowBoost(1, 2),
   rowBoost(2, 2),
@@ -950,7 +1106,7 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   colBoost(2, 2),
   colBoost(3, 2),
   colBoost(4, 2),
-  spiralCore,
+  crossroads,
   outerEdge,
 
   // Suit-density (4)
@@ -959,15 +1115,17 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   suitDensity('D'),
   suitDensity('C'),
 
-  // Per-line conditional (6) — fire on lines whose CARDS meet a rule
+  // Per-line conditional (8) — fire on lines whose CARDS meet a rule
   rainbowLine,
   jokerLine,
   royalTouch,
   highball,
   lowball,
   blackjack,
+  lowhand,
+  highKicker,
 
-  // Grid-wide (12)
+  // Grid-wide (14)
   cleanBorder,
   monochromeBorder,
   rainbowCorners,
@@ -975,6 +1133,8 @@ export const BONUS_DECK_POOL: BonusCard[] = [
   deckBank,
   noFlushes,
   noStraights,
+  balance,
+  diversity,
   trashJoker,
   diagonalRun,
   symmetricFrame,
@@ -990,13 +1150,14 @@ export const BONUS_HAND_LIMIT = 3;
 
 export const applyLineEffects = (
   line: LineContext,
-  cards: readonly BonusCard[]
+  cards: readonly BonusCard[],
+  allLines?: readonly LineContext[]
 ): { multiplier: number; flat: number } => {
   let mult = 1;
   let flat = 0;
   for (const bc of cards) {
     if (!bc.lineEffect) continue;
-    const e = bc.lineEffect(line, bc);
+    const e = bc.lineEffect(line, bc, allLines);
     if (e.multiplier !== undefined && e.multiplier !== 0) mult *= e.multiplier;
     if (e.flatAdd) flat += e.flatAdd;
   }
@@ -1014,12 +1175,13 @@ export interface LineContributor {
 
 export const lineContributors = (
   line: LineContext,
-  cards: readonly BonusCard[]
+  cards: readonly BonusCard[],
+  allLines?: readonly LineContext[]
 ): LineContributor[] => {
   const out: LineContributor[] = [];
   for (const bc of cards) {
     if (!bc.lineEffect) continue;
-    const e = bc.lineEffect(line, bc);
+    const e = bc.lineEffect(line, bc, allLines);
     const mult = e.multiplier ?? 1;
     const flat = e.flatAdd ?? 0;
     if (mult !== 1 || flat !== 0) out.push({ card: bc, multiplier: mult, flat });
@@ -1133,7 +1295,7 @@ export const universalEffectFor = (
 ): LineEffect | null => {
   if (!bc.lineEffect) return null;
   // Variants cover edge AND non-edge line indices so cards keyed on
-  // outer-edge position (Outer Edge, Spiral core, Row N, Col N) are
+  // outer-edge position (Outer Edge, Crossroads, Row N, Col N) are
   // correctly classified as conditional rather than universal.
   const variants: LineContext[] = [
     { kind: 'row', index: 0, cards: PROBE_CARDS_A, hand },
