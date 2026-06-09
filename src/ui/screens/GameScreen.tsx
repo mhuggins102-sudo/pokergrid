@@ -2316,7 +2316,7 @@ const renderBottom = (
               const drawnIsWild = state.drawn?.kind === 'standard'
                 && state.drawn.supercharge === 'wild';
               const label = state.randomPerks
-                ? 'Perk ?'
+                ? 'Perk?'
                 : drawnIsWild
                   ? 'Perk'
                   : SUIT_PERK_LABEL[suit];

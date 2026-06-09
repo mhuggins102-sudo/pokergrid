@@ -95,6 +95,12 @@ const AppShell = () => {
   // screen the rest of the app revolves around.
   const [rulesReturn, setRulesReturn] = useState<Screen>('landing');
   const [settingsReturn, setSettingsReturn] = useState<Screen>('landing');
+  // Where to return from the daily-result screen. Set when the
+  // screen is opened: landing for "today's just-completed daily",
+  // daily-archive when the player taps a played cell on the
+  // calendar (so the archive's month + scroll position survives
+  // the round-trip).
+  const [dailyResultReturn, setDailyResultReturn] = useState<Screen>('landing');
   const { save: tuSave } = useTUSave();
   const daily = useDaily();
 
@@ -161,15 +167,19 @@ const AppShell = () => {
     setNonce(n => n + 1);
     setScreen('game');
   };
-  const openDailyResult = (dateISO?: string) => {
+  const openDailyResult = (dateISO?: string, returnTo: Screen = 'landing') => {
     // Re-entry path for a completed daily. The daily-result screen
     // reads the stored GameState from DailyProvider's plays map.
+    // `returnTo` controls which screen the dismissal button targets
+    // (and its label): 'landing' for the today's-result flow,
+    // 'daily-archive' for the archive-calendar revisit flow.
     const targetDate = dateISO ?? daily.todayISO;
     setPlayContext({
       mode: 'daily',
       dateISO: targetDate,
       recipe: recipeFor(targetDate),
     });
+    setDailyResultReturn(returnTo);
     setScreen('daily-result');
   };
   const advanceTargetsUp = (
@@ -223,7 +233,7 @@ const AppShell = () => {
         <DailyArchiveScreen
           onBack={() => setScreen('landing')}
           onStartDaily={(dateISO) => startDaily(dateISO)}
-          onOpenResult={(dateISO) => openDailyResult(dateISO)}
+          onOpenResult={(dateISO) => openDailyResult(dateISO, 'daily-archive')}
         />
       )}
       {screen === 'home' && (
@@ -257,7 +267,8 @@ const AppShell = () => {
       {screen === 'daily-result' && playContext?.mode === 'daily' && (
         <DailyResultContainer
           context={playContext}
-          onHome={() => setScreen('landing')}
+          onHome={() => setScreen(dailyResultReturn)}
+          homeLabel={dailyResultReturn === 'daily-archive' ? 'Back' : 'Home'}
         />
       )}
       {screen === 'stats' && <StatsScreen onBack={() => setScreen('home')} />}
@@ -611,9 +622,10 @@ const GameContainer = ({ context, onHome, onReplay, onAdvance }: GameContainerPr
 interface DailyResultContainerProps {
   context: Extract<PlayContext, { mode: 'daily' }>;
   onHome: () => void;
+  homeLabel?: string;
 }
 
-const DailyResultContainer = ({ context, onHome }: DailyResultContainerProps) => {
+const DailyResultContainer = ({ context, onHome, homeLabel }: DailyResultContainerProps) => {
   const { plays } = useDaily();
   const play = plays?.[context.dateISO];
   if (!play) {
@@ -628,6 +640,7 @@ const DailyResultContainer = ({ context, onHome }: DailyResultContainerProps) =>
       state={play.state}
       context={context}
       onHome={onHome}
+      homeLabel={homeLabel}
       onReplay={() => {}}
       onAdvance={() => {}}
     />

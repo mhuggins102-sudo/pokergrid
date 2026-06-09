@@ -106,6 +106,33 @@ const submitArgsFor = (
   enqueuedAt: Date.now(),
 });
 
+// Format any submit failure into a single display string for the rank
+// panel. The leading [bracketed token] is what the player asked to
+// see on mobile: prefer the PG error code when supabase-js gives us
+// one, otherwise fall back to the error class name (SubmitTimeoutError
+// etc.) so a non-coded failure still surfaces SOMETHING readable
+// instead of just a free-form message.
+const formatSubmitError = (e: unknown): string => {
+  const err = e as {
+    code?: string;
+    message?: string;
+    hint?: string;
+    details?: string;
+  };
+  const errName = (e as Error | null | undefined)?.name;
+  const codeToken =
+    err.code ??
+    (errName && errName !== 'Error' ? errName : 'UNKNOWN');
+  return [
+    `[${codeToken}]`,
+    err.message ?? String(e),
+    err.hint,
+    err.details,
+  ]
+    .filter((p): p is string => !!p)
+    .join(' · ');
+};
+
 export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [handle, setHandleState] = useState<string | null>(null);
@@ -159,9 +186,11 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             usedUndo: p.usedUndo,
           });
           await removePendingSubmit(p.deviceId, p.dateISO);
-          setLastSubmitError(prev =>
-            prev?.dateISO === p.dateISO ? null : prev
-          );
+          // Intentionally NOT clearing lastSubmitError on success —
+          // the rank-ready state takes priority in the panel, so the
+          // player sees the rank as soon as the refetch resolves;
+          // the underlying error stays in state for diagnostic
+          // review. Same rationale as recordCompletion.
           anySubmitted = true;
         } catch (e) {
           if (e instanceof AlreadySubmittedError) {
@@ -170,9 +199,6 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
             // back to the client; the local write happened and the
             // queue retry collides. Drop the queue entry.
             await removePendingSubmit(p.deviceId, p.dateISO);
-            setLastSubmitError(prev =>
-              prev?.dateISO === p.dateISO ? null : prev
-            );
             anySubmitted = true;
             continue;
           }
@@ -185,13 +211,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
           // UI can show what's happening — without this the user
           // sees a brief "Fetching…" flicker after every retry tap
           // and no indication of why it isn't sticking.
-          const err = e as { code?: string; message?: string; hint?: string; details?: string };
-          const detail = [
-            err.code ? `[${err.code}]` : null,
-            err.message ?? String(e),
-            err.hint,
-            err.details,
-          ].filter((p): p is string => !!p).join(' · ');
+          const detail = formatSubmitError(e);
           setLastSubmitError({ dateISO: p.dateISO, detail });
           console.error('[daily] drainQueue retry failed', { dateISO: p.dateISO, error: e, formatted: detail });
         }
@@ -294,11 +314,15 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
         // Server now has the row. Bump the token so useDailyRank
         // refires its fetch — without this nudge the panel stays
         // stuck on the rank-pending read that fired the moment
-        // setPlays(next) updated the local map. Also clear any
-        // prior submit error for this date.
-        setLastSubmitError(prev =>
-          prev?.dateISO === play.dateISO ? null : prev
-        );
+        // setPlays(next) updated the local map.
+        //
+        // Deliberately NOT clearing lastSubmitError here. The rank-
+        // ready state takes priority over the error block in the
+        // panel, so the player sees the rank as soon as the fetch
+        // resolves; the underlying error stays in state so they can
+        // still review what failed earlier (e.g. by re-opening the
+        // result screen later). A subsequent failure overwrites the
+        // entry naturally.
         bumpSubmitToken();
       } catch (e) {
         if (e instanceof AlreadySubmittedError) {
@@ -307,9 +331,8 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
           });
           // Server already has this play — treat as success and
           // bump so the panel refreshes against the existing row.
-          setLastSubmitError(prev =>
-            prev?.dateISO === play.dateISO ? null : prev
-          );
+          // Same rationale as the success branch: keep lastSubmitError
+          // in state until something replaces it.
           bumpSubmitToken();
           return next;
         }
@@ -319,13 +342,7 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
         // detail (code + message + hint, joined) so RankPanel can
         // surface it instead of dangling on "Submitting…", and also
         // log the raw error for DevTools.
-        const err = e as { code?: string; message?: string; hint?: string; details?: string };
-        const detail = [
-          err.code ? `[${err.code}]` : null,
-          err.message ?? String(e),
-          err.hint,
-          err.details,
-        ].filter((p): p is string => !!p).join(' · ');
+        const detail = formatSubmitError(e);
         setLastSubmitError({ dateISO: play.dateISO, detail });
         console.error('[daily] submitDailyPlay failed; queued for retry', {
           elapsedMs: Date.now() - submitStart,
