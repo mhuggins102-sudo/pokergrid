@@ -107,6 +107,26 @@ export interface PlayerRow {
 
 // ---------------- RPC wrappers ----------------
 
+// Race a promise against a deadline. The timer is always cleared in
+// finally — without that, the winning RPC leaves a live setTimeout
+// behind for the full deadline (a leak that accumulates across
+// submits). Exported for tests.
+export const withTimeout = async <T>(
+  p: PromiseLike<T>,
+  ms: number,
+  makeErr: () => Error
+): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(makeErr()), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export const submitDailyPlay = async (args: SubmitPlayArgs): Promise<void> => {
   const c = requireClient();
   // Race the RPC against a 20-second timeout so a hanging request
@@ -121,10 +141,11 @@ export const submitDailyPlay = async (args: SubmitPlayArgs): Promise<void> => {
     p_recipe: args.recipe,
     p_used_undo: args.usedUndo,
   });
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new SubmitTimeoutError()), 20_000)
+  const { error } = await withTimeout(
+    rpcCall,
+    20_000,
+    () => new SubmitTimeoutError()
   );
-  const { error } = (await Promise.race([rpcCall, timeout])) as Awaited<typeof rpcCall>;
   if (error) {
     // Postgres unique_violation = 23505. The (device_id, date) unique
     // constraint enforces one-play-per-date; if the client retried a
@@ -152,15 +173,30 @@ export class AlreadySubmittedError extends Error {
   }
 }
 
+export class RankFetchTimeoutError extends Error {
+  constructor() {
+    super('Rank RPC did not respond within 10s');
+    this.name = 'RankFetchTimeoutError';
+  }
+}
+
 export const fetchRank = async (
   deviceId: string,
   dateISO: string
 ): Promise<RankSnapshot | null> => {
   const c = requireClient();
-  const { data, error } = await c.rpc('daily_rank', {
-    p_device_id: deviceId,
-    p_date: dateISO,
-  });
+  // Same hang protection as submitDailyPlay — without a deadline a
+  // stalled connection leaves useDailyRank in 'loading' forever and
+  // the panel stuck on "Fetching leaderboard…". A timeout rejection
+  // maps to status 'error', which is retryable from the panel.
+  const { data, error } = await withTimeout(
+    c.rpc('daily_rank', {
+      p_device_id: deviceId,
+      p_date: dateISO,
+    }),
+    10_000,
+    () => new RankFetchTimeoutError()
+  );
   if (error) throw error;
   // RPC returns an array; empty means "no play submitted for this
   // (device, date)" — caller treats that as "rank pending".

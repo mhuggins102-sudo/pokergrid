@@ -3,9 +3,12 @@
 // daily plays, and a helper to record a fresh completion.
 //
 // Phase 2 wires this through to Supabase:
-//   - recordCompletion writes locally, then tries the remote submit.
-//     Network failure queues the submit in AsyncStorage; the queue
-//     drains on app foreground via the AppState listener below.
+//   - recordCompletion writes locally, enqueues the submit in
+//     AsyncStorage, then kicks a queue drain. Queue-first ordering
+//     makes the submit durable: the entry is only removed once the
+//     server confirms, so a tab/app close mid-submit just leaves it
+//     for the next drain (bootstrap, app foreground, browser online,
+//     or manual retry).
 //   - setHandle pushes to the server first (so uniqueness validation
 //     happens there) and only updates local on success.
 //   - The whole thing degrades gracefully when env vars aren't set —
@@ -21,7 +24,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { currentDateISO } from '../../game/daily/seed';
 import { recipeFor, DailyRecipe } from '../../game/daily/recipe';
 import {
@@ -38,14 +41,13 @@ import {
   setHandle as persistHandle,
 } from './localStore';
 import {
-  AlreadySubmittedError,
-  BackendUnavailableError,
   HandleInvalidError,
   HandleTakenError,
   isBackendConfigured,
   setHandleRemote,
   submitDailyPlay,
 } from './supabase';
+import { drainPendingSubmitsOnce } from './submitQueue';
 
 interface DailyContextValue {
   deviceId: string | null;
@@ -163,64 +165,79 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  // Drain the offline-submit queue. Called once after the bootstrap
-  // finishes, and again on every app-foreground event. Best-effort:
+  // Drain the offline-submit queue. Called after bootstrap, on every
+  // app-foreground / browser-online event, after recordCompletion
+  // enqueues, and from the rank panel's manual retry. Best-effort:
   // entries that still fail are left in the queue for the next drain,
   // but the most recent failure is surfaced via lastSubmitError so
   // the user can see WHY the retry didn't go through instead of
   // staring at a hung spinner.
-  const drainQueue = useCallback(async () => {
-    if (!isBackendConfigured()) return;
-    setDraining(true);
-    try {
-      const pending = await getPendingSubmits();
-      let anySubmitted = false;
-      for (const p of pending) {
-        try {
-          await submitDailyPlay({
-            deviceId: p.deviceId,
-            dateISO: p.dateISO,
-            score: p.score,
-            won: p.won,
-            recipe: p.recipe as DailyRecipe,
-            usedUndo: p.usedUndo,
-          });
-          await removePendingSubmit(p.deviceId, p.dateISO);
-          // Intentionally NOT clearing lastSubmitError on success —
-          // the rank-ready state takes priority in the panel, so the
-          // player sees the rank as soon as the refetch resolves;
-          // the underlying error stays in state for diagnostic
-          // review. Same rationale as recordCompletion.
-          anySubmitted = true;
-        } catch (e) {
-          if (e instanceof AlreadySubmittedError) {
-            // The server already has this play. Most likely cause:
-            // first submission landed before the response made it
-            // back to the client; the local write happened and the
-            // queue retry collides. Drop the queue entry.
-            await removePendingSubmit(p.deviceId, p.dateISO);
-            anySubmitted = true;
-            continue;
-          }
-          if (e instanceof BackendUnavailableError) {
-            // Misconfiguration; nothing to drain.
-            break;
-          }
-          // Transient (network / timeout / unknown). Leave the queue
-          // entry for the next drain, but capture the failure so the
-          // UI can show what's happening — without this the user
-          // sees a brief "Fetching…" flicker after every retry tap
-          // and no indication of why it isn't sticking.
-          const detail = formatSubmitError(e);
-          setLastSubmitError({ dateISO: p.dateISO, detail });
-          console.error('[daily] drainQueue retry failed', { dateISO: p.dateISO, error: e, formatted: detail });
-        }
-      }
-      if (anySubmitted) bumpSubmitToken();
-    } finally {
-      setDraining(false);
+  const drainOnce = useCallback(async () => {
+    const { anySubmitted, lastError } = await drainPendingSubmitsOnce({
+      getPendingSubmits,
+      removePendingSubmit,
+      submit: p =>
+        submitDailyPlay({
+          deviceId: p.deviceId,
+          dateISO: p.dateISO,
+          score: p.score,
+          won: p.won,
+          recipe: p.recipe as DailyRecipe,
+          usedUndo: p.usedUndo,
+        }),
+    });
+    if (lastError) {
+      // Transient (network / timeout / unknown). The entry stays
+      // queued for the next drain; capture the failure so the UI can
+      // show what's happening.
+      const detail = formatSubmitError(lastError.error);
+      setLastSubmitError({ dateISO: lastError.dateISO, detail });
+      console.error('[daily] drainQueue retry failed', {
+        dateISO: lastError.dateISO,
+        error: lastError.error,
+        formatted: detail,
+      });
     }
+    // Intentionally NOT clearing lastSubmitError on success — the
+    // rank-ready state takes priority in the panel, so the player
+    // sees the rank as soon as the refetch resolves; the underlying
+    // error stays in state for diagnostic review.
+    if (anySubmitted) bumpSubmitToken();
   }, [bumpSubmitToken]);
+
+  // Re-entrance guard. The bootstrap drain, the AppState listener,
+  // the browser-online listener, the post-completion drain and manual
+  // retry taps can all fire while a drain is already in flight;
+  // overlapping drains race the queue's read-modify-write storage
+  // cycle (entries can be lost) and double-submit. Concurrent callers
+  // share the in-flight promise; the rerun flag coalesces them into
+  // one extra pass so an entry enqueued mid-drain isn't missed.
+  // Ref-based (not state) so the guard can't go stale across renders.
+  const drainRef = useRef<{ running: Promise<void> | null; rerun: boolean }>({
+    running: null,
+    rerun: false,
+  });
+  const drainQueue = useCallback((): Promise<void> => {
+    if (!isBackendConfigured()) return Promise.resolve();
+    const d = drainRef.current;
+    if (d.running) {
+      d.rerun = true;
+      return d.running;
+    }
+    d.running = (async () => {
+      setDraining(true);
+      try {
+        do {
+          d.rerun = false;
+          await drainOnce();
+        } while (d.rerun);
+      } finally {
+        setDraining(false);
+        d.running = null;
+      }
+    })();
+    return d.running;
+  }, [drainOnce]);
 
   // First drain runs after the deviceId bootstrap finishes (so the
   // queue isn't drained before we have a device-id to compare against).
@@ -241,6 +258,19 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const sub = AppState.addEventListener('change', onChange);
     return () => sub.remove();
+  }, [drainQueue]);
+
+  // Browser connectivity listener. On web, AppState 'active' maps to
+  // visibilitychange — a PWA tab that stays focused while the network
+  // drops and returns never fires it, so queued submits would sit
+  // until a manual retry. The 'online' event covers that gap.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onOnline = () => {
+      void drainQueue();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   }, [drainQueue]);
 
   const setHandle = useCallback(
@@ -296,64 +326,22 @@ export const DailyProvider = ({ children }: { children: React.ReactNode }) => {
         return next;
       }
 
-      const args = submitArgsFor(deviceId, play);
-      const submitStart = Date.now();
-      console.log('[daily] calling submitDailyPlay');
-      try {
-        await submitDailyPlay({
-          deviceId,
-          dateISO: play.dateISO,
-          score: play.score,
-          won: play.won,
-          recipe: play.recipe,
-          usedUndo: play.state.undoCount > 0,
-        });
-        console.log('[daily] submitDailyPlay succeeded', {
-          elapsedMs: Date.now() - submitStart,
-        });
-        // Server now has the row. Bump the token so useDailyRank
-        // refires its fetch — without this nudge the panel stays
-        // stuck on the rank-pending read that fired the moment
-        // setPlays(next) updated the local map.
-        //
-        // Deliberately NOT clearing lastSubmitError here. The rank-
-        // ready state takes priority over the error block in the
-        // panel, so the player sees the rank as soon as the fetch
-        // resolves; the underlying error stays in state so they can
-        // still review what failed earlier (e.g. by re-opening the
-        // result screen later). A subsequent failure overwrites the
-        // entry naturally.
-        bumpSubmitToken();
-      } catch (e) {
-        if (e instanceof AlreadySubmittedError) {
-          console.log('[daily] submitDailyPlay: AlreadySubmittedError — server has it', {
-            elapsedMs: Date.now() - submitStart,
-          });
-          // Server already has this play — treat as success and
-          // bump so the panel refreshes against the existing row.
-          // Same rationale as the success branch: keep lastSubmitError
-          // in state until something replaces it.
-          bumpSubmitToken();
-          return next;
-        }
-        // Anything else: queue for later drain. The local write above
-        // already happened, so the player keeps their score record
-        // regardless of the network outcome. Capture a compact error
-        // detail (code + message + hint, joined) so RankPanel can
-        // surface it instead of dangling on "Submitting…", and also
-        // log the raw error for DevTools.
-        const detail = formatSubmitError(e);
-        setLastSubmitError({ dateISO: play.dateISO, detail });
-        console.error('[daily] submitDailyPlay failed; queued for retry', {
-          elapsedMs: Date.now() - submitStart,
-          error: e,
-          formatted: detail,
-        });
-        await enqueuePendingSubmit(args);
-      }
+      // Queue-first: the pending entry hits disk BEFORE the first
+      // network attempt, and the drain removes it only once the
+      // server confirms. The old order (submit, enqueue on failure)
+      // had an unrecoverable window — close the tab during the 20s
+      // submit and the play was neither on the server nor queued, so
+      // the rank panel's retry (which only drains the queue) could
+      // never get the score onto the leaderboard.
+      await enqueuePendingSubmit(submitArgsFor(deviceId, play));
+      console.log('[daily] pending submit enqueued; draining');
+      // Fire-and-forget so the result screen renders immediately; the
+      // drain reports success via submitToken and failure via
+      // lastSubmitError, both of which RankPanel already watches.
+      void drainQueue();
       return next;
     },
-    [deviceId, bumpSubmitToken]
+    [deviceId, drainQueue]
   );
 
   const value = useMemo<DailyContextValue>(
